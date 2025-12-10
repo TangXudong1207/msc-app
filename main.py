@@ -2,11 +2,13 @@ import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
+import pydeck as pdk  # 🌟 新增：Uber级 3D 绘图引擎
 import json
 import re
 import hashlib
 import time
 import numpy as np
+import pandas as pd # PyDeck 需要 Pandas
 from datetime import datetime
 from sklearn.decomposition import PCA 
 from sklearn.cluster import KMeans    
@@ -16,7 +18,7 @@ from sklearn.cluster import KMeans
 # ==========================================
 
 try:
-    client = OpenAI(
+    client_ai = OpenAI(
         api_key=st.secrets["API_KEY"],
         base_url=st.secrets["BASE_URL"]
     )
@@ -36,18 +38,11 @@ except Exception as e:
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text: return True
-    return False
-
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False
-        default_radar = {
-            "Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0,
-            "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0
-        }
+        default_radar = {"Care":3.0,"Curiosity":3.0,"Reflection":3.0,"Coherence":3.0,"Empathy":3.0,"Agency":3.0,"Aesthetic":3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
         return True
@@ -74,7 +69,27 @@ def get_user_profile(username):
     except: pass
     return {"nickname": username, "radar_profile": None}
 
-# --- 🏆 游戏化：段位计算 ---
+def update_radar_score(username, new_scores):
+    try:
+        user_data = get_user_profile(username)
+        current_radar = user_data.get('radar_profile')
+        if not current_radar:
+            current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str):
+            current_radar = json.loads(current_radar)
+        alpha = 0.08
+        updated_radar = {}
+        for key in new_scores:
+            old_val = float(current_radar.get(key, 3.0))
+            input_val = float(new_scores.get(key, 0))
+            if input_val > 1.0:
+                updated_val = old_val * (1 - alpha) + input_val * alpha
+                updated_radar[key] = round(min(10.0, updated_val), 2)
+            else:
+                updated_radar[key] = old_val
+        supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
+    except: pass
+
 def calculate_rank(radar_data):
     if not radar_data: return "倔强青铜 III", "🥉"
     total_score = sum(radar_data.values())
@@ -111,7 +126,6 @@ def save_node(username, content, data, mode, vector):
         logic = data.get('logic_score')
         if logic is None: logic = 0.5
         keywords = data.get('keywords', [])
-        
         insert_data = {
             "username": username, "content": content,
             "care_point": data.get('care_point', '未命名'),
@@ -147,7 +161,7 @@ def call_ai_api(prompt):
     try:
         response = client.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
+            messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
             temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
@@ -175,32 +189,22 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
+    1. 判断是否生成节点。
+    2. 提取 MSC 结构。
+    3. 【雷达评分】Care,Curiosity,Reflection,Coherence,Empathy,Agency,Aesthetic (0-10)。
     返回 JSON:
     {{
         "valid": true,
-        "care_point": "...",
-        "meaning_layer": "...",
-        "insight": "...",
-        "logic_score": 0.8,
-        "keywords": ["tag1", "tag2"], 
-        "topic_tags": ["topic1", "topic2"],
-        "existential_q": false
+        "care_point": "...", "meaning_layer": "...", "insight": "...",
+        "logic_score": 0.8, "keywords": [],
+        "radar_scores": {{ "Care": 7 ... }}
     }}
     """
     return call_ai_api(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
-    任务：基于 Deep Meaning 共鸣进行融合。
-    A: "{node_a_content}"
-    B: "{node_b_content}"
+    融合 A: "{node_a_content}" B: "{node_b_content}"。
     返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
     """
     return call_ai_api(prompt)
@@ -214,60 +218,64 @@ def find_resonance(current_vector, current_user):
     if not current_vector: return None
     try:
         res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
-        others = res.data
-        best_match, highest_score = None, 0
-        for row in others:
+        best_match, highest = None, 0
+        for row in res.data:
             if row['vector']:
                 try:
                     score = cosine_similarity(current_vector, json.loads(row['vector']))
-                    if score > 0.75 and score > highest_score:
-                        highest_score = score
+                    if score > 0.75 and score > highest:
+                        highest = score
                         best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
                 except: continue
         return best_match
     except: return None
 
-# --- 🌍 3D 地球与星空渲染 (修复版) ---
+# --- 🌍 3D 渲染 (PyDeck 原生版) ---
 
 def render_3d_earth(nodes):
-    data = []
-    for _ in range(len(nodes) + 10): 
-        lon = np.random.uniform(-130, 150) 
-        lat = np.random.uniform(-30, 60)
-        value = np.random.randint(10, 100)
-        # 🌟 修复：明确转换为 Python float，防止 numpy 类型报错
-        data.append([float(lon), float(lat), int(value)])
+    """使用 PyDeck 渲染地球分布"""
+    # 模拟数据
+    map_data = []
+    for _ in range(len(nodes) + 20):
+        # 集中在主要大陆
+        lon = np.random.normal(0, 60) 
+        lat = np.random.normal(20, 20)
+        map_data.append({"lon": lon, "lat": lat, "size": np.random.randint(10000, 50000)})
+    
+    df = pd.DataFrame(map_data)
 
-    option = {
-        "backgroundColor": "#000",
-        "globe": {
-            "baseTexture": "https://echarts.apache.org/examples/data-gl/asset/earth.jpg",
-            "heightTexture": "https://echarts.apache.org/examples/data-gl/asset/bathymetry_bw_composite_4k.jpg",
-            "displacementScale": 0.1,
-            "shading": "lambert",
-            "environment": "https://echarts.apache.org/examples/data-gl/asset/starfield.jpg",
-            "light": {"ambient": {"intensity": 0.4}, "main": {"intensity": 0.4}},
-            "viewControl": {"autoRotate": True}
-        },
-        "series": [{
-            "type": "scatter3D",
-            "coordinateSystem": "globe",
-            "data": data,
-            "symbolSize": 5,
-            "itemStyle": {"color": "#ffaa00", "opacity": 0.8}, 
-            "blendMode": "lighter"
-        }]
-    }
-    st_echarts(options=option, height="500px")
+    # 定义图层
+    layer = pdk.Layer(
+        "ScatterplotLayer",
+        df,
+        get_position=["lon", "lat"],
+        get_color=[0, 255, 242, 160], # 赛博青
+        get_radius="size",
+        pickable=True,
+    )
+
+    # 定义视角 (3D 地球视角不是 PyDeck 强项，我们用平面地图模拟夜景，这是最稳的)
+    view_state = pdk.ViewState(
+        latitude=20,
+        longitude=0,
+        zoom=1,
+        pitch=0,
+    )
+
+    st.pydeck_chart(pdk.Deck(
+        map_style='mapbox://styles/mapbox/dark-v10', # 深色夜景模式
+        initial_view_state=view_state,
+        layers=[layer],
+        tooltip={"text": "MSC 活跃节点"}
+    ))
 
 def render_3d_galaxy(nodes):
-    if len(nodes) < 5:
-        st.warning("🌌 星辰数量不足，无法聚合成星系。请多生成几个意义节点（至少5个）。")
+    """使用 PyDeck PointCloud 渲染意义星河"""
+    if len(nodes) < 3:
+        st.warning("🌌 星辰汇聚中，请稍候...")
         return
 
-    vectors = []
-    labels = []
-    
+    vectors, labels = [], []
     for node in nodes:
         if node['vector']:
             try:
@@ -278,80 +286,55 @@ def render_3d_galaxy(nodes):
     
     if not vectors: return
 
+    # PCA 降维到 3D
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
     
-    n_clusters = min(3, len(vectors))
-    kmeans = KMeans(n_clusters=n_clusters)
-    clusters = kmeans.fit_predict(vectors)
-    
-    scatter_data = []
-    colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff"]
-    
+    # 归一化坐标以便渲染
+    coords = coords / np.max(np.abs(coords)) * 100 # 放大一点
+
+    df_data = []
     for i, (x, y, z) in enumerate(coords):
-        cluster_id = int(clusters[i]) # 🌟 修复：转为 int
-        scatter_data.append({
-            "name": labels[i],
-            # 🌟 修复：全部转为 float
-            "value": [float(x), float(y), float(z), cluster_id], 
-            "itemStyle": {"color": colors[cluster_id % len(colors)]}
+        df_data.append({
+            "position": [x, y, z],
+            "care": labels[i],
+            "color": [255, 0, 212] if i%2==0 else [0, 210, 255] # 赛博配色
         })
+    
+    df = pd.DataFrame(df_data)
 
-    option = {
-        "backgroundColor": "#000",
-        "tooltip": {},
-        "visualMap": {
-            "show": False,
-            "dimension": 3,
-            "min": 0,
-            "max": n_clusters,
-            "inRange": {"color": ["#313695", "#4575b4", "#74add1", "#abd9e9", "#e0f3f8", "#ffffbf", "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"]}
-        },
-        "xAxis3D": {"type": "value", "show": False},
-        "yAxis3D": {"type": "value", "show": False},
-        "zAxis3D": {"type": "value", "show": False},
-        "grid3D": {
-            "viewControl": {"autoRotate": True, "projection": "perspective"},
-            "axisLine": {"lineStyle": {"color": "#fff"}},
-            "splitLine": {"show": False}
-        },
-        "series": [{
-            "type": "scatter3D",
-            "data": scatter_data,
-            "symbolSize": 10,
-            "label": {
-                "show": True, 
-                "formatter": "{b}",
-                "textStyle": {"color": "white", "fontSize": 10, "backgroundColor": "rgba(0,0,0,0.5)"}
-            }
-        }]
-    }
-    st_echarts(options=option, height="600px")
+    point_cloud = pdk.Layer(
+        "PointCloudLayer",
+        data=df,
+        get_position="position",
+        get_normal=[0, 1, 0],
+        get_color="color",
+        point_size=5,
+        pickable=True,
+    )
 
-# --- 侧边栏小地图 ---
+    view_state = pdk.ViewState(
+        target=[0, 0, 0],
+        zoom=3,
+        rotation_x=15,
+        rotation_orbit=30,
+        pitch=45
+    )
+
+    st.pydeck_chart(pdk.Deck(
+        initial_view_state=view_state,
+        layers=[point_cloud],
+        tooltip={"html": "<b>Care Point:</b> {care}"}
+    ))
+
+# --- 侧边栏与主逻辑 ---
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
-    
     option = {
         "backgroundColor": "transparent",
-        "radar": {
-            "indicator": [{"name": k, "max": 10} for k in keys],
-            "splitNumber": 4,
-            "axisName": {"color": "#bbb"},
-            "splitLine": {"lineStyle": {"color": ["#333", "#444", "#555", "#666"]}},
-            "splitArea": {"show": False}
-        },
-        "series": [{
-            "type": "radar",
-            "data": [{
-                "value": scores,
-                "name": "Meta-Humanity",
-                "areaStyle": {"color": "rgba(0, 255, 242, 0.4)"},
-                "lineStyle": {"color": "#00fff2", "width": 2},
-                "itemStyle": {"color": "#fff"}
-            }]
-        }]
+        "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}},
+        "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]
     }
     st_echarts(options=option, height=height)
 
@@ -359,11 +342,8 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return
     graph_nodes, graph_links = [], []
     symbol_base = 30 if is_fullscreen else 15
-    repulsion = 1000 if is_fullscreen else 300
-
     for i, node in enumerate(nodes):
-        logic = node.get('logic_score')
-        if logic is None: logic = 0.5
+        logic = node.get('logic_score', 0.5)
         graph_nodes.append({
             "name": str(node['id']), "id": str(node['id']),
             "symbolSize": symbol_base * (0.8 + logic),
@@ -384,7 +364,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
                 elif score > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
     option = {
         "backgroundColor": "#0e1117",
-        "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": repulsion, "gravity": 0.05}, "itemStyle": {"shadowBlur": 10}}]
+        "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
     }
     st_echarts(options=option, height=height)
 
@@ -395,30 +375,27 @@ def view_fullscreen_map(nodes):
 @st.dialog("🌍 MSC World · 上帝视角", width="large")
 def view_msc_world():
     global_nodes = get_global_nodes()
-    tab1, tab2 = st.tabs(["🌍 地球夜景 (Earth)", "🌌 意义星河 (Galaxy)"])
+    tab1, tab2 = st.tabs(["🌍 地球夜景", "🌌 意义星河"])
     with tab1: render_3d_earth(global_nodes)
-    with tab2: 
-        if len(global_nodes) > 3: render_3d_galaxy(global_nodes)
-        else: st.info("星系正在坍缩中... 需要更多数据")
+    with tab2: render_3d_galaxy(global_nodes)
 
 # ==========================================
 # 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v22.1 Fixed", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v23.0 PyDeck", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
     st.title("🌌 MSC")
-    # ... Login UI ...
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
         p = st.text_input("密码", type='password')
         if st.button("登录", use_container_width=True):
             res = login_user(u, p)
-            if res and len(res) > 0:
+            if res:
                 st.session_state.logged_in = True
                 st.session_state.username = u
                 st.session_state.nickname = res[0]['nickname']
@@ -437,8 +414,6 @@ else:
     chat_history = get_active_chats(st.session_state.username)
     nodes_map = get_active_nodes_map(st.session_state.username)
     all_nodes_list = get_all_nodes_for_map(st.session_state.username)
-    
-    # 获取用户画像
     user_profile = get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
@@ -446,25 +421,19 @@ else:
     else: radar_dict = {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
 
     with st.sidebar:
-        # 🌟 修复：雷达图回来了！
         rank_name, rank_icon = calculate_rank(radar_dict)
         st.markdown(f"## {rank_icon} {st.session_state.nickname}")
         render_radar_chart(radar_dict)
-        
-        # 🌟 MSC World 入口
         if st.button("🌍 MSC World", use_container_width=True, type="primary"):
             view_msc_world()
-            
         c1, c2 = st.columns(2)
         if c1.button("🗑️ 回收站"): st.toast("功能维护中...")
         if c2.button("退出"): st.session_state.logged_in = False; st.rerun()
-        
         st.divider()
         render_cyberpunk_map(all_nodes_list, height="200px")
         if st.button("🔭 全屏", use_container_width=True): view_fullscreen_map(all_nodes_list)
 
     st.subheader("💬 意义流")
-    # ... (Chat UI logic) ...
     for msg in chat_history:
         col_chat, col_node = st.columns([0.65, 0.35], gap="small")
         with col_chat:
@@ -492,12 +461,12 @@ else:
         stream = get_normal_response(full_history)
         reply_text = st.write_stream(stream)
         save_chat(st.session_state.username, "assistant", reply_text)
-        
         with st.spinner("⚡ 意义判别..."):
             analysis = analyze_meaning_background(prompt)
             if analysis.get("valid", False):
                 vec = get_embedding(prompt)
                 save_node(st.session_state.username, prompt, analysis, "日常", vec)
+                if "radar_scores" in analysis: update_radar_score(st.session_state.username, analysis["radar_scores"])
                 match = find_resonance(vec, st.session_state.username)
                 if match: st.toast(f"🔔 发现共鸣！", icon="⚡")
         st.rerun()
