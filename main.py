@@ -10,7 +10,7 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 1. 核心配置区
+# 🛑 核心配置区
 # ==========================================
 
 try:
@@ -29,65 +29,26 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 🧮 2. 核心算法 & 工具函数 (提到最前，防止报错)
-# ==========================================
 
-def get_embedding(text):
-    """生成模拟向量 (1536维)"""
-    return np.random.rand(1536).tolist()
-
-def cosine_similarity(v1, v2):
-    """计算余弦相似度"""
-    if not v1 or not v2: return 0
-    vec1 = np.array(v1)
-    vec2 = np.array(v2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
-    if norm1 == 0 or norm2 == 0: return 0
-    return np.dot(vec1, vec2) / (norm1 * norm2)
-
-def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex_b):
-    """计算意义链接分数 (Meaning-Link Score)"""
-    # 1. 向量相似度
-    sim_vec = cosine_similarity(vec_a, vec_b)
-    
-    # 2. Topic Overlap
-    t_inter = len(set(topic_a).intersection(set(topic_b)))
-    t_union = len(set(topic_a).union(set(topic_b)))
-    topic_sim = t_inter / t_union if t_union > 0 else 0
-    
-    # 3. Meaning Overlap
-    m_inter = len(set(meaning_a).intersection(set(meaning_b)))
-    m_union = len(set(meaning_a).union(set(meaning_b)))
-    meaning_sim = m_inter / m_union if m_union > 0 else 0
-    
-    # 规则：Topic高 Meaning低 -> 惩罚
-    if topic_sim > 0.7 and meaning_sim < 0.3:
-        return 0.2
-        
-    # 4. 存在性匹配
-    ex_match = 1.0 if (ex_a and ex_b) else 0.0
-    
-    # 5. 综合打分
-    MLS = 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
-    return MLS
-
+# --- 🛠️ 基础设施 ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
-
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text: return True
-    return False
-
-# ==========================================
-# 💾 3. 数据库操作
-# ==========================================
 
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False
-        data = {"username": username, "password": make_hashes(password), "nickname": nickname}
+        # 初始化雷达图：所有维度默认 3.0 分 (满分10分)
+        default_radar = {
+            "Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0,
+            "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0
+        }
+        data = {
+            "username": username, 
+            "password": make_hashes(password), 
+            "nickname": nickname,
+            "radar_profile": json.dumps(default_radar)
+        }
         supabase.table('users').insert(data).execute()
         return True
     except: return False
@@ -99,18 +60,57 @@ def login_user(username, password):
         return res.data
     except: return []
 
-def get_nickname(username):
+def get_user_profile(username):
+    """获取用户信息，包括雷达数据"""
     try:
-        res = supabase.table('users').select("nickname").eq('username', username).execute()
-        if res.data: return res.data[0]['nickname']
-        return username
-    except: return username
+        res = supabase.table('users').select("nickname, radar_profile").eq('username', username).execute()
+        if res.data:
+            return res.data[0]
+    except: pass
+    return {"nickname": username, "radar_profile": None}
 
+def update_radar_score(username, new_scores):
+    """
+    元人性生长算法：
+    新值 = 旧值 * 0.95 + 本次得分 * 0.05
+    让雷达图呈现“缓慢生长”的生物特性，而不是剧烈跳动。
+    """
+    try:
+        # 1. 获取旧数据
+        user_data = get_user_profile(username)
+        current_radar = user_data.get('radar_profile')
+        
+        if not current_radar:
+            current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str):
+            current_radar = json.loads(current_radar)
+            
+        # 2. 计算进化
+        alpha = 0.05 # 学习率，越小越稳定
+        updated_radar = {}
+        for key in new_scores:
+            old_val = float(current_radar.get(key, 3.0))
+            input_val = float(new_scores.get(key, 0))
+            # 只有当本次输入在该维度有显著表现(>1)时才更新，避免被无效对话稀释
+            if input_val > 1.0:
+                updated_val = old_val * (1 - alpha) + input_val * alpha
+                updated_radar[key] = round(min(10.0, updated_val), 2)
+            else:
+                updated_radar[key] = old_val # 保持不变
+
+        # 3. 存回数据库
+        supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
+        return updated_radar
+    except Exception as e:
+        print(f"Radar update error: {e}")
+        return None
+
+# --- 💾 数据库操作 ---
 def save_chat(username, role, content):
     try:
         data = {"username": username, "role": role, "content": content, "is_deleted": False}
         supabase.table('chats').insert(data).execute()
-    except Exception as e: print(f"Chat save error: {e}")
+    except: pass
 
 def get_active_chats(username, limit=50):
     try:
@@ -118,23 +118,10 @@ def get_active_chats(username, limit=50):
         return list(reversed(res.data))
     except: return []
 
-def get_deleted_items(username):
-    try:
-        chats = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', True).order('id', desc=True).execute()
-        nodes = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', True).order('id', desc=True).execute()
-        return chats.data, nodes.data
-    except: return [], []
-
 def soft_delete_chat_and_node(chat_id, content, username):
     try:
         supabase.table('chats').update({"is_deleted": True}).eq("id", chat_id).execute()
         supabase.table('nodes').update({"is_deleted": True}).eq("username", username).eq("content", content).execute()
-        return True
-    except: return False
-
-def restore_item(table, item_id):
-    try:
-        supabase.table(table).update({"is_deleted": False}).eq("id", item_id).execute()
         return True
     except: return False
 
@@ -155,8 +142,7 @@ def save_node(username, content, data, mode, vector):
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
-    except Exception as e: st.error(f"Save Node Error: {e}")
-    return False
+    except: return False
 
 def get_active_nodes_map(username):
     try:
@@ -170,48 +156,12 @@ def get_all_nodes_for_map(username):
         return res.data
     except: return []
 
-def find_resonance(current_vector, current_user, current_data):
-    if not current_vector: return None
-    try:
-        res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
-        others = res.data
-        best_match, highest_score = None, 0
-        
-        c_topics = current_data.get('topic_tags', [])
-        c_meanings = current_data.get('keywords', [])
-        c_ex = current_data.get('existential_q', False)
-        
-        for row in others:
-            if row['vector']:
-                try:
-                    o_vec = json.loads(row['vector'])
-                    o_keywords = json.loads(row['keywords']) if row['keywords'] else []
-                    o_topics = [] 
-                    o_ex = False
-                    
-                    MLS = calculate_MLS(
-                        current_vector, o_vec,
-                        c_topics, o_topics,
-                        c_meanings, o_keywords,
-                        c_ex, o_ex
-                    )
-                    
-                    if MLS > 0.75 and MLS > highest_score:
-                        highest_score = MLS
-                        best_match = {"user": row['username'], "content": row['content'], "score": round(MLS * 100, 1)}
-                except: continue
-        return best_match
-    except: return None
-
-# ==========================================
-# 🧠 4. AI 业务逻辑
-# ==========================================
-
+# --- 🧠 AI 核心 (元人性升级版) ---
 def call_ai_api(prompt):
     try:
         response = client.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
+            messages=[{"role": "system", "content": "You are a profound philosopher. Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
             temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
@@ -221,6 +171,9 @@ def call_ai_api(prompt):
             else: return json.loads(content)
         except: return {"error": True, "msg": "JSON解析失败"}
     except Exception as e: return {"error": True, "msg": str(e)}
+
+def get_embedding(text):
+    return np.random.rand(1536).tolist()
 
 def get_normal_response(history_messages):
     try:
@@ -234,14 +187,22 @@ def get_normal_response(history_messages):
     except Exception as e: return f"Error: {e}"
 
 def analyze_meaning_background(text):
+    # 🌟 核心升级：增加元人性雷达评分
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
+    
+    1. 判断是否有深层意义 (valid: true/false)。
+    2. 提取 MSC 结构 (care_point, meaning_layer, insight)。
+    
+    3. 【元人性评分 (Meta-Humanity Radar)】
+    请对这段话背后的生成动机进行评分 (0-10分)：
+    - Care (在乎力): 情感投入、责任感、对价值的执着。
+    - Curiosity (探索欲): 对未知的追问、发现冲动。
+    - Reflection (反思力): 质疑自身、向内审视。
+    - Coherence (结构化): 逻辑清晰、体系化程度。
+    - Empathy (共感力): 对他人或世界的共情。
+    - Agency (行动力): 将意义转化为行动的倾向。
+    - Aesthetic (审美力): 对和谐、美感、诗意的敏锐度。
     
     返回 JSON:
     {{
@@ -250,9 +211,11 @@ def analyze_meaning_background(text):
         "meaning_layer": "...",
         "insight": "...",
         "logic_score": 0.8,
-        "keywords": ["tag1", "tag2"], 
-        "topic_tags": ["topic1", "topic2"],
-        "existential_q": false
+        "keywords": ["tag1", "tag2"],
+        "radar_scores": {{
+            "Care": 8, "Curiosity": 5, "Reflection": 7, 
+            "Coherence": 6, "Empathy": 4, "Agency": 2, "Aesthetic": 3
+        }}
     }}
     """
     return call_ai_api(prompt)
@@ -266,50 +229,103 @@ def generate_fusion(node_a_content, node_b_content):
     """
     return call_ai_api(prompt)
 
-# ==========================================
-# 🎨 5. 渲染与主程序
-# ==========================================
+def cosine_similarity(v1, v2):
+    vec1, vec2 = np.array(v1), np.array(v2)
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
+
+def find_resonance(current_vector, current_user):
+    if not current_vector: return None
+    try:
+        res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
+        others = res.data
+        best_match, highest_score = None, 0
+        for row in others:
+            if row['vector']:
+                try:
+                    score = cosine_similarity(current_vector, json.loads(row['vector']))
+                    if score > 0.75 and score > highest_score:
+                        highest_score = score
+                        best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+                except: continue
+        return best_match
+    except: return None
+
+# --- 🎨 渲染函数 ---
+
+def render_radar_chart(profile_data):
+    """渲染元人性雷达图"""
+    if not profile_data or not profile_data.get('radar_profile'):
+        scores = [3,3,3,3,3,3,3] # 默认值
+    else:
+        # 处理 JSON 字符串
+        radar_json = profile_data['radar_profile']
+        if isinstance(radar_json, str):
+            radar_dict = json.loads(radar_json)
+        else:
+            radar_dict = radar_json
+            
+        # 提取7个维度的值
+        keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
+        scores = [radar_dict.get(k, 3.0) for k in keys]
+
+    option = {
+        "backgroundColor": "transparent",
+        "radar": {
+            "indicator": [
+                {"name": "Care\n在乎", "max": 10},
+                {"name": "Curiosity\n探索", "max": 10},
+                {"name": "Reflection\n反思", "max": 10},
+                {"name": "Coherence\n结构", "max": 10},
+                {"name": "Empathy\n共感", "max": 10},
+                {"name": "Agency\n行动", "max": 10},
+                {"name": "Aesthetic\n审美", "max": 10}
+            ],
+            "splitNumber": 4,
+            "axisName": {"color": "#bbb"},
+            "splitLine": {"lineStyle": {"color": ["#333", "#444", "#555", "#666"]}},
+            "splitArea": {"show": False}
+        },
+        "series": [{
+            "type": "radar",
+            "data": [{
+                "value": scores,
+                "name": "Meta-Humanity",
+                "areaStyle": {"color": "rgba(0, 255, 242, 0.4)"}, # 赛博青
+                "lineStyle": {"color": "#00fff2", "width": 2},
+                "itemStyle": {"color": "#fff"}
+            }]
+        }]
+    }
+    st_echarts(options=option, height="300px")
 
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return
-    graph_nodes = []
-    graph_links = []
-    label_size = 14 if is_fullscreen else 10
+    graph_nodes, graph_links = [], []
     symbol_base = 30 if is_fullscreen else 15
     repulsion = 1000 if is_fullscreen else 300
 
     for i, node in enumerate(nodes):
-        logic = node.get('logic_score')
-        if logic is None: logic = 0.5
-        
-        # 解析关键字用于绘图连线计算
-        node_keywords = json.loads(node['keywords']) if node.get('keywords') else []
-        node_vector = json.loads(node['vector']) if node.get('vector') else None
-
+        logic = node.get('logic_score', 0.5)
         graph_nodes.append({
             "name": str(node['id']),
             "id": str(node['id']),
             "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
             "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
-            "vector": node_vector,
-            "keywords": node_keywords
+            "vector": json.loads(node['vector']) if node.get('vector') else None,
+            "keywords": json.loads(node['keywords']) if node.get('keywords') else []
         })
 
-    # 绘图时的简单链接逻辑 (模拟 MLS)
     node_count = len(graph_nodes)
     for i in range(node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                # 这里简化计算，只看向量和标签重叠
                 m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
                 m_union = len(set(na['keywords']).union(set(nb['keywords'])))
                 m_sim = m_inter / m_union if m_union > 0 else 0
-                
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
                 score = 0.6 * m_sim + 0.4 * vec_sim
-                
                 if score > 0.8:
                     graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
                 elif score > 0.6:
@@ -319,7 +335,8 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         "backgroundColor": "#0e1117",
         "series": [{
             "type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links,
-            "roam": True, "force": {"repulsion": repulsion, "gravity": 0.05}
+            "roam": True, "force": {"repulsion": repulsion, "gravity": 0.05},
+            "itemStyle": {"shadowBlur": 10, "shadowColor": "rgba(255, 255, 255, 0.5)"}
         }]
     }
     st_echarts(options=option, height=height)
@@ -328,32 +345,17 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
 def view_fullscreen_map(nodes):
     render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
 
-@st.dialog("🗑️ 回收站")
-def view_recycle_bin(username):
-    deleted_chats, deleted_nodes = get_deleted_items(username)
-    st.caption("碎片...")
-    tab_c, tab_n = st.tabs([f"对话 ({len(deleted_chats)})", f"节点 ({len(deleted_nodes)})"])
-    with tab_c:
-        for chat in deleted_chats:
-            c1, c2 = st.columns([8, 2])
-            with c1: st.text(f"{chat['content'][:20]}...")
-            with c2:
-                if st.button("♻️", key=f"res_c_{chat['id']}"):
-                    restore_item('chats', chat['id']); st.rerun()
-    with tab_n:
-        for node in deleted_nodes:
-            c1, c2 = st.columns([8, 2])
-            with c1: st.info(f"{node['care_point']}")
-            with c2:
-                if st.button("♻️", key=f"res_n_{node['id']}"):
-                    restore_item('nodes', node['id']); st.rerun()
+# ==========================================
+# 🖥️ 主程序
+# ==========================================
 
-st.set_page_config(page_title="MSC v19.1 Stable", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v20.0 Radar", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
     st.title("🌌 MSC")
+    # Login... (omitted for brevity, same as v19)
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
@@ -379,14 +381,23 @@ else:
     chat_history = get_active_chats(st.session_state.username)
     nodes_map = get_active_nodes_map(st.session_state.username)
     all_nodes_list = get_all_nodes_for_map(st.session_state.username)
+    # 获取用户画像（包含雷达数据）
+    user_profile = get_user_profile(st.session_state.username)
 
     with st.sidebar:
         st.write(f"👋 **{st.session_state.nickname}**")
+        
+        # 🌟 核心新功能：元人性雷达图
+        st.caption("🧬 元人性雷达 (Meta-Humanity Radar)")
+        render_radar_chart(user_profile)
+        
         c1, c2 = st.columns(2)
-        if c1.button("🗑️ 回收站"): view_recycle_bin(st.session_state.username)
+        if c1.button("🗑️ 回收站"): st.toast("功能维护中...")
         if c2.button("退出"): st.session_state.logged_in = False; st.rerun()
+        
         st.divider()
-        render_cyberpunk_map(all_nodes_list, height="250px")
+        st.caption("🌐 思想星云")
+        render_cyberpunk_map(all_nodes_list, height="200px")
         if st.button("🔭 全屏星云", use_container_width=True): view_fullscreen_map(all_nodes_list)
 
     st.subheader("💬 意义流")
@@ -422,14 +433,18 @@ else:
         reply_text = st.write_stream(stream)
         save_chat(st.session_state.username, "assistant", reply_text)
         
-        with st.spinner("⚡ 意义判别中..."):
+        with st.spinner("⚡ 意义判别 & 雷达扫描..."):
             analysis = analyze_meaning_background(prompt)
             if analysis.get("valid", False):
                 vec = get_embedding(prompt)
                 save_node(st.session_state.username, prompt, analysis, "日常", vec)
                 
-                match = find_resonance(vec, st.session_state.username, analysis)
+                # 🌟 更新用户的雷达数据
+                if "radar_scores" in analysis:
+                    update_radar_score(st.session_state.username, analysis["radar_scores"])
+                
+                match = find_resonance(vec, st.session_state.username)
                 if match:
-                    st.toast(f"🔔 发现深度共鸣！(MLS={match['score']})", icon="⚡")
+                    st.toast(f"🔔 发现深度共鸣！", icon="⚡")
         
         st.rerun()
