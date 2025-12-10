@@ -9,17 +9,15 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区 (云端原生版 v7.1)
+# 🛑 核心配置区 (云端兼容版 v7.2)
 # ==========================================
 
-# 1. 获取密钥
 try:
     MY_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
     st.error("🚨 未检测到密钥！请在 Streamlit 后台 Settings -> Secrets 中配置 GOOGLE_API_KEY。")
     st.stop()
 
-# 2. 配置 Google 官方库
 genai.configure(api_key=MY_API_KEY)
 
 # ==========================================
@@ -72,13 +70,13 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：官方库调用 (v7.1修正版) ---
+# --- 🧠 AI 核心：全兼容调用 (v7.2) ---
 def call_gemini_official(prompt):
     """
-    使用 Google 官方库调用，锁定 1.5 系列
+    尝试所有世代的模型，确保连通性
     """
-    # 🌟 修正：只使用 1.5 系列，不再尝试老的 gemini-pro
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+    # 🌟 修正：加入了 'gemini-pro' (1.0版本)，这是兼容性最好的老模型
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
     
     errors = []
 
@@ -87,7 +85,6 @@ def call_gemini_official(prompt):
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt)
             
-            # 解析结果
             if response.text:
                 raw_text = response.text
                 match = re.search(r'\{.*\}', raw_text, re.DOTALL)
@@ -96,24 +93,28 @@ def call_gemini_official(prompt):
                     res['model_used'] = model_name
                     return res
         except Exception as e:
+            # 记录错误但不崩溃，继续试下一个
             errors.append(f"{model_name}: {str(e)}")
             continue 
             
-    # 如果都失败了，打印出具体的错误日志
-    return {"error": True, "msg": f"连接失败。详情: {'; '.join(errors)}"}
+    return {"error": True, "msg": f"所有模型均不可用。详情: {'; '.join(errors)}"}
 
-# --- 🧠 向量化 ---
+# --- 🧠 向量化 (兼容版) ---
 def get_embedding(text):
-    try:
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=text,
-            task_type="retrieval_document",
-            title="MSC Node"
-        )
-        return result['embedding']
-    except:
-        return []
+    # 尝试两个版本的向量模型
+    models = ["models/text-embedding-004", "models/embedding-001"]
+    for model in models:
+        try:
+            result = genai.embed_content(
+                model=model,
+                content=text,
+                task_type="retrieval_document",
+                title="MSC Node"
+            )
+            return result['embedding']
+        except:
+            continue
+    return []
 
 def generate_node_data(mode, text):
     prompt = f"""
@@ -141,7 +142,7 @@ def generate_fusion(node_a_content, node_b_content):
     """
     return call_gemini_official(prompt)
 
-# --- 🧮 算法：计算灵魂相似度 ---
+# --- 🧮 算法 ---
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
     vec1 = np.array(v1)
@@ -180,7 +181,7 @@ def find_resonance(current_vector, current_user):
     
     return best_match
 
-# --- 💾 存取逻辑 ---
+# --- 💾 存取 ---
 def save_node(username, content, data, mode, vector):
     c = conn.cursor()
     vector_str = json.dumps(vector)
@@ -202,7 +203,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v7.1 Cloud Native", layout="wide")
+st.set_page_config(page_title="MSC v7.2 Compatible", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -210,7 +211,7 @@ if "logged_in" not in st.session_state:
 # --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("云端原生版 · 官方库驱动 v7.1")
+    st.caption("云端兼容版 · 自动降级保护")
     
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
@@ -289,11 +290,10 @@ else:
             st.markdown(user_input)
             
         with st.chat_message("assistant"):
-            with st.spinner("AI 正在思考..."):
+            with st.spinner("AI 正在思考 (Compatibility Mode)..."):
                 res = generate_node_data(mode, user_input)
                 
                 if "error" in res:
-                    # 🌟 这里的报错信息会变得非常具体，告诉我们到底是哪个模型出了什么问题
                     st.error(f"⚠️ 生成失败: {res.get('msg')}")
                 else:
                     vec = get_embedding(user_input)
