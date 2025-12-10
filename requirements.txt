@@ -3,3 +3,4 @@ requests
 numpy
 openai
 supabase
+streamlit-echarts
