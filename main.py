@@ -10,7 +10,7 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区
+# 🛑 1. 核心配置区
 # ==========================================
 
 try:
@@ -29,14 +29,59 @@ except Exception as e:
     st.stop()
 
 # ==========================================
+# 🧮 2. 核心算法 & 工具函数 (提到最前，防止报错)
+# ==========================================
 
-# --- 🛠️ 基础设施 ---
+def get_embedding(text):
+    """生成模拟向量 (1536维)"""
+    return np.random.rand(1536).tolist()
+
+def cosine_similarity(v1, v2):
+    """计算余弦相似度"""
+    if not v1 or not v2: return 0
+    vec1 = np.array(v1)
+    vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0: return 0
+    return np.dot(vec1, vec2) / (norm1 * norm2)
+
+def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex_b):
+    """计算意义链接分数 (Meaning-Link Score)"""
+    # 1. 向量相似度
+    sim_vec = cosine_similarity(vec_a, vec_b)
+    
+    # 2. Topic Overlap
+    t_inter = len(set(topic_a).intersection(set(topic_b)))
+    t_union = len(set(topic_a).union(set(topic_b)))
+    topic_sim = t_inter / t_union if t_union > 0 else 0
+    
+    # 3. Meaning Overlap
+    m_inter = len(set(meaning_a).intersection(set(meaning_b)))
+    m_union = len(set(meaning_a).union(set(meaning_b)))
+    meaning_sim = m_inter / m_union if m_union > 0 else 0
+    
+    # 规则：Topic高 Meaning低 -> 惩罚
+    if topic_sim > 0.7 and meaning_sim < 0.3:
+        return 0.2
+        
+    # 4. 存在性匹配
+    ex_match = 1.0 if (ex_a and ex_b) else 0.0
+    
+    # 5. 综合打分
+    MLS = 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
+    return MLS
+
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_hashes(password, hashed_text):
     if make_hashes(password) == hashed_text: return True
     return False
+
+# ==========================================
+# 💾 3. 数据库操作
+# ==========================================
 
 def add_user(username, password, nickname):
     try:
@@ -61,7 +106,6 @@ def get_nickname(username):
         return username
     except: return username
 
-# --- 💾 数据库操作 ---
 def save_chat(username, role, content):
     try:
         data = {"username": username, "role": role, "content": content, "is_deleted": False}
@@ -98,9 +142,7 @@ def save_node(username, content, data, mode, vector):
     try:
         logic = data.get('logic_score')
         if logic is None: logic = 0.5
-        # 🌟 新增：存储 tags 用于 MLS 计算
-        keywords = data.get('keywords', []) # 这是 Meaning Tags
-        topic_tags = data.get('topic_tags', []) # 这是 Topic Tags
+        keywords = data.get('keywords', [])
         
         insert_data = {
             "username": username, "content": content,
@@ -109,7 +151,7 @@ def save_node(username, content, data, mode, vector):
             "insight": data.get('insight', '生成中断'),
             "mode": mode, "vector": json.dumps(vector),
             "logic_score": logic, "is_deleted": False,
-            "keywords": json.dumps(keywords) # 存入keywords字段
+            "keywords": json.dumps(keywords)
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
@@ -128,105 +170,6 @@ def get_all_nodes_for_map(username):
         return res.data
     except: return []
 
-# --- 🧠 AI 核心 (Meaning-Link 升级版) ---
-def call_ai_api(prompt):
-    try:
-        response = client.chat.completions.create(
-            model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
-            temperature=0.7, stream=False, response_format={"type": "json_object"} 
-        )
-        content = response.choices[0].message.content
-        try:
-            match = re.search(r'\{.*\}', content, re.DOTALL)
-            if match: return json.loads(match.group(0))
-            else: return json.loads(content)
-        except: return {"error": True, "msg": "JSON解析失败"}
-    except Exception as e: return {"error": True, "msg": str(e)}
-
-def get_embedding(text):
-    return np.random.rand(1536).tolist()
-
-def get_normal_response(history_messages):
-    try:
-        api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
-        for msg in history_messages:
-            api_messages.append({"role": msg["role"], "content": msg["content"]})
-        response = client.chat.completions.create(
-            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
-        )
-        return response
-    except Exception as e: return f"Error: {e}"
-
-def analyze_meaning_background(text):
-    # 🌟 升级 Prompt：要求提取 Topic 和 Meaning 两个维度的标签
-    prompt = f"""
-    分析输入："{text}"
-    
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)：如 健身, 吃饭, 旅游。
-    3. 提取 Meaning Tags (深层价值)：如 自律, 孤独, 自由, 焦虑, 爱。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
-    返回 JSON:
-    {{
-        "valid": true,
-        "care_point": "...",
-        "meaning_layer": "...",
-        "insight": "...",
-        "logic_score": 0.8,
-        "keywords": ["深层标签1", "深层标签2"], 
-        "topic_tags": ["表层标签1", "表层标签2"],
-        "existential_q": true (是否涉及存在性问题)
-    }}
-    """
-    return call_ai_api(prompt)
-
-def generate_fusion(node_a_content, node_b_content):
-    prompt = f"""
-    任务：基于 Deep Meaning 共鸣进行融合。
-    A: "{node_a_content}"
-    B: "{node_b_content}"
-    
-    请忽略表层话题差异，寻找底层的价值共识。
-    返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
-    """
-    return call_ai_api(prompt)
-
-# --- 🧮 MLS 核心算法 (Meaning-Link Score) ---
-def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex_b):
-    # 1. 向量相似度 (作为 Meaning Sim 的基础)
-    sim_vec = np.dot(vec_a, vec_b) / (np.linalg.norm(vec_a) * np.linalg.norm(vec_b))
-    
-    # 2. Topic Overlap (Jaccard)
-    t_inter = len(set(topic_a).intersection(set(topic_b)))
-    t_union = len(set(topic_a).union(set(topic_b)))
-    topic_sim = t_inter / t_union if t_union > 0 else 0
-    
-    # 3. Meaning Overlap (Jaccard)
-    m_inter = len(set(meaning_a).intersection(set(meaning_b)))
-    m_union = len(set(meaning_a).union(set(meaning_b)))
-    meaning_sim = m_inter / m_union if m_union > 0 else 0
-    
-    # 🌟 关键规则：如果 Topic 高但 Meaning 低，打压分数
-    if topic_sim > 0.7 and meaning_sim < 0.3:
-        return 0.2 # 强制判定为无效链接
-        
-    # 🌟 关键规则：如果 Meaning 高但 Topic 低，提升分数
-    # 既然向量化目前是随机的，我们主要依靠 tag overlap 来模拟
-    # 真实场景下 sim_vec 应该是 Meaning Embedding
-    
-    # 4. Existential Match
-    ex_match = 1.0 if (ex_a and ex_b) else 0.0
-    
-    # 5. MLS 公式
-    # 这里我们用 tag overlap 代替 embedding sim，因为 embedding 目前是 mock 的
-    MLS = 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
-    
-    return MLS
-
 def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     try:
@@ -243,7 +186,6 @@ def find_resonance(current_vector, current_user, current_data):
                 try:
                     o_vec = json.loads(row['vector'])
                     o_keywords = json.loads(row['keywords']) if row['keywords'] else []
-                    # 旧数据可能没有 topic_tags，兼容处理
                     o_topics = [] 
                     o_ex = False
                     
@@ -261,7 +203,73 @@ def find_resonance(current_vector, current_user, current_data):
         return best_match
     except: return None
 
-# --- 🎨 渲染 ---
+# ==========================================
+# 🧠 4. AI 业务逻辑
+# ==========================================
+
+def call_ai_api(prompt):
+    try:
+        response = client.chat.completions.create(
+            model=TARGET_MODEL,
+            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
+            temperature=0.7, stream=False, response_format={"type": "json_object"} 
+        )
+        content = response.choices[0].message.content
+        try:
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True, "msg": "JSON解析失败"}
+    except Exception as e: return {"error": True, "msg": str(e)}
+
+def get_normal_response(history_messages):
+    try:
+        api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
+        for msg in history_messages:
+            api_messages.append({"role": msg["role"], "content": msg["content"]})
+        response = client.chat.completions.create(
+            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
+        )
+        return response
+    except Exception as e: return f"Error: {e}"
+
+def analyze_meaning_background(text):
+    prompt = f"""
+    分析输入："{text}"
+    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
+    2. 提取 Topic Tags (表层话题)。
+    3. 提取 Meaning Tags (深层价值)。
+    4. 提取 Care Point (简短关切)。
+    5. 提取 Meaning Layer (结构分析)。
+    6. 提取 Insight (升维洞察)。
+    
+    返回 JSON:
+    {{
+        "valid": true,
+        "care_point": "...",
+        "meaning_layer": "...",
+        "insight": "...",
+        "logic_score": 0.8,
+        "keywords": ["tag1", "tag2"], 
+        "topic_tags": ["topic1", "topic2"],
+        "existential_q": false
+    }}
+    """
+    return call_ai_api(prompt)
+
+def generate_fusion(node_a_content, node_b_content):
+    prompt = f"""
+    任务：基于 Deep Meaning 共鸣进行融合。
+    A: "{node_a_content}"
+    B: "{node_b_content}"
+    返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
+    """
+    return call_ai_api(prompt)
+
+# ==========================================
+# 🎨 5. 渲染与主程序
+# ==========================================
+
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return
     graph_nodes = []
@@ -273,36 +281,38 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i, node in enumerate(nodes):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
+        
+        # 解析关键字用于绘图连线计算
+        node_keywords = json.loads(node['keywords']) if node.get('keywords') else []
+        node_vector = json.loads(node['vector']) if node.get('vector') else None
+
         graph_nodes.append({
             "name": str(node['id']),
+            "id": str(node['id']),
             "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
             "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
-            "vector": json.loads(node['vector']) if node.get('vector') else None,
-            "keywords": json.loads(node['keywords']) if node.get('keywords') else []
+            "vector": node_vector,
+            "keywords": node_keywords
         })
 
-    # MLS 链接逻辑
+    # 绘图时的简单链接逻辑 (模拟 MLS)
     node_count = len(graph_nodes)
     for i in range(node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
-            # 简化的 MLS 计算用于绘图
-            # 因为绘图时没有完整的 topic 数据，我们主要依靠近似算法
             if na['vector'] and nb['vector']:
-                # 简单计算 Jaccard Meaning Sim
+                # 这里简化计算，只看向量和标签重叠
                 m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
                 m_union = len(set(na['keywords']).union(set(nb['keywords'])))
                 m_sim = m_inter / m_union if m_union > 0 else 0
                 
-                # 结合向量相似度
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
-                
                 score = 0.6 * m_sim + 0.4 * vec_sim
                 
-                if score > 0.8: # 强意义链接
+                if score > 0.8:
                     graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
-                elif score > 0.6: # 弱意义链接
+                elif score > 0.6:
                     graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
 
     option = {
@@ -338,17 +348,12 @@ def view_recycle_bin(username):
                 if st.button("♻️", key=f"res_n_{node['id']}"):
                     restore_item('nodes', node['id']); st.rerun()
 
-# ==========================================
-# 🖥️ 主程序
-# ==========================================
-
-st.set_page_config(page_title="MSC v19.0 Meaning Core", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v19.1 Stable", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
     st.title("🌌 MSC")
-    # ... (Login UI omitted for brevity, same as v18) ...
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
@@ -398,16 +403,14 @@ else:
                         if soft_delete_chat_and_node(msg['id'], msg['content'], st.session_state.username): st.rerun()
             
             if msg.get('role') == 'assistant' and "🧬 融合成功" in msg['content']:
-                 pass # Already rendered in markdown
+                 pass 
 
         with col_node:
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map[msg['content']]
-                # 🌟 修复：恢复 Structure 显示
                 with st.expander(f"✨ {node['care_point']}", expanded=False):
                     st.caption(f"MLS Logic: {node.get('logic_score', 0.5)}")
                     st.markdown(f"**Insight:** {node['insight']}")
-                    # 这里恢复了 Structure
                     st.markdown(f"**Structure:**\n{node['meaning_layer']}")
                     st.caption(f"Time: {node['created_at'][:16]}")
 
@@ -425,10 +428,8 @@ else:
                 vec = get_embedding(prompt)
                 save_node(st.session_state.username, prompt, analysis, "日常", vec)
                 
-                # 🌟 使用 MLS 算法寻找共鸣
-                match = find_resonance(vec, st.session_state.username)
+                match = find_resonance(vec, st.session_state.username, analysis)
                 if match:
                     st.toast(f"🔔 发现深度共鸣！(MLS={match['score']})", icon="⚡")
-                    # 这里可以进一步自动触发融合弹窗或按钮
         
         st.rerun()
