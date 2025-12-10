@@ -9,18 +9,17 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区 (云端原生版)
+# 🛑 核心配置区 (云端原生版 v7.1)
 # ==========================================
 
-# 从 Streamlit 的“保险箱”里自动获取 Key
-# 如果您还没配置 Secrets，代码会提示您
+# 1. 获取密钥
 try:
     MY_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
     st.error("🚨 未检测到密钥！请在 Streamlit 后台 Settings -> Secrets 中配置 GOOGLE_API_KEY。")
     st.stop()
 
-# 配置 Google 官方库
+# 2. 配置 Google 官方库
 genai.configure(api_key=MY_API_KEY)
 
 # ==========================================
@@ -73,15 +72,15 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：官方库调用 (最稳) ---
+# --- 🧠 AI 核心：官方库调用 (v7.1修正版) ---
 def call_gemini_official(prompt):
     """
-    使用 Google 官方库调用，稳定性 100%
+    使用 Google 官方库调用，锁定 1.5 系列
     """
-    # 优先尝试 Flash，如果官方库自动路由失败，它会抛出清晰的异常
-    models_to_try = ["gemini-1.5-flash", "gemini-pro"]
+    # 🌟 修正：只使用 1.5 系列，不再尝试老的 gemini-pro
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
     
-    last_error = ""
+    errors = []
 
     for model_name in models_to_try:
         try:
@@ -97,12 +96,13 @@ def call_gemini_official(prompt):
                     res['model_used'] = model_name
                     return res
         except Exception as e:
-            last_error = str(e)
-            continue # 试下一个
+            errors.append(f"{model_name}: {str(e)}")
+            continue 
             
-    return {"error": True, "msg": f"AI 连接失败: {last_error}"}
+    # 如果都失败了，打印出具体的错误日志
+    return {"error": True, "msg": f"连接失败。详情: {'; '.join(errors)}"}
 
-# --- 🧠 向量化 (官方库版) ---
+# --- 🧠 向量化 ---
 def get_embedding(text):
     try:
         result = genai.embed_content(
@@ -202,7 +202,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v7.0 Cloud Native", layout="wide")
+st.set_page_config(page_title="MSC v7.1 Cloud Native", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -210,7 +210,7 @@ if "logged_in" not in st.session_state:
 # --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("云端原生版 · 官方库驱动")
+    st.caption("云端原生版 · 官方库驱动 v7.1")
     
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
@@ -289,10 +289,11 @@ else:
             st.markdown(user_input)
             
         with st.chat_message("assistant"):
-            with st.spinner("AI 正在思考 (Official Cloud)..."):
+            with st.spinner("AI 正在思考..."):
                 res = generate_node_data(mode, user_input)
                 
                 if "error" in res:
+                    # 🌟 这里的报错信息会变得非常具体，告诉我们到底是哪个模型出了什么问题
                     st.error(f"⚠️ 生成失败: {res.get('msg')}")
                 else:
                     vec = get_embedding(user_input)
