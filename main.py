@@ -14,7 +14,7 @@ from datetime import datetime
 # ==========================================
 
 try:
-    client = OpenAI(
+    client_ai = OpenAI(
         api_key=st.secrets["API_KEY"],
         base_url=st.secrets["BASE_URL"]
     )
@@ -61,55 +61,75 @@ def get_nickname(username):
         return username
     except: return username
 
-# --- 🧠 引擎 A：正常聊天 (ChatBot) ---
-def get_normal_response(history_messages):
+# --- 🧠 AI 核心 ---
+def call_ai_api(prompt):
     try:
-        api_messages = [{"role": "system", "content": "你是一个温暖、智慧的对话伙伴。请用自然、流畅的语言与用户交流。不要输出JSON。"}]
-        for msg in history_messages:
-            if msg["role"] != "system":
-                api_messages.append({"role": msg["role"], "content": msg["content"]})
-        
-        response = client.chat.completions.create(
+        response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
-            messages=api_messages,
-            temperature=0.8,
-            stream=True 
-        )
-        return response
-    except Exception as e:
-        return f"（网络小差：{str(e)}）"
-
-# --- 🧠 引擎 B：意义分析 (MSC Analyst) ---
-def analyze_meaning_background(text):
-    prompt = f"""
-    任务：判断用户的这句话是否有深层意义。
-    输入："{text}"
-    判断标准：必须包含明确观点、强烈情绪或独特洞察。只是寒暄则返回 {{ "valid": false }}。
-    若符合，请提取结构并返回 JSON：
-    {{
-        "valid": true,
-        "care_point": "简短核心关切(10字内)",
-        "meaning_layer": "完整结构分析...",
-        "insight": "升维洞察金句...",
-        "logic_score": 0.8
-    }}
-    """
-    try:
-        response = client.chat.completions.create(
-            model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output JSON only."}, {"role": "user", "content": prompt}],
-            temperature=0.5, 
-            response_format={"type": "json_object"}
+            messages=[{"role": "system", "content": "You are a profound philosopher. Output valid JSON only."}, {"role": "user", "content": prompt}],
+            temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
-        return json.loads(content)
-    except:
-        return {"valid": False}
+        try:
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True, "msg": "JSON解析失败"}
+    except Exception as e: return {"error": True, "msg": str(e)}
 
 def get_embedding(text):
     return np.random.rand(1536).tolist()
 
-def save_node(username, content, data, vector):
+def generate_node_data(mode, text):
+    prompt = f"""
+    场景：【{mode}】。用户输入："{text}"。
+    请提取结构，返回JSON:
+    {{
+        "care_point": "用户潜意识里的情绪...",
+        "meaning_layer": "背后的深层逻辑...",
+        "insight": "一句升维洞察...",
+        "logic_score": 0.8
+    }}
+    """
+    return call_ai_api(prompt)
+
+def generate_fusion(node_a_content, node_b_content):
+    prompt = f"""
+    融合 A: "{node_a_content}" 和 B: "{node_b_content}"。
+    返回JSON:
+    {{
+        "care_point": "共同深层诉求...",
+        "meaning_layer": "全景视角...",
+        "insight": "全新洞察..."
+    }}
+    """
+    return call_ai_api(prompt)
+
+def cosine_similarity(v1, v2):
+    if not v1 or not v2: return 0
+    vec1, vec2 = np.array(v1), np.array(v2)
+    norm1, norm2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0: return 0
+    return np.dot(vec1, vec2) / (norm1 * norm2)
+
+def find_resonance(current_vector, current_user):
+    if not current_vector: return None
+    try:
+        res = supabase.table('nodes').select("username, content, vector").neq('username', current_user).execute()
+        others = res.data
+        best_match, highest_score = None, 0
+        for row in others:
+            if row['vector']:
+                try:
+                    score = cosine_similarity(current_vector, json.loads(row['vector']))
+                    if score > 0.75 and score > highest_score: # 提高阈值
+                        highest_score = score
+                        best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+                except: continue
+        return best_match
+    except: return None
+
+def save_node(username, content, data, mode, vector):
     try:
         logic = data.get('logic_score')
         if logic is None: logic = 0.5
@@ -118,94 +138,84 @@ def save_node(username, content, data, vector):
             "care_point": data.get('care_point', '未命名'),
             "meaning_layer": data.get('meaning_layer', '暂无结构'),
             "insight": data.get('insight', '生成中断'),
-            "mode": "日常", "vector": json.dumps(vector),
-            "logic_score": logic, "keywords": json.dumps([]) 
+            "mode": mode, "vector": json.dumps(vector),
+            "logic_score": logic
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
     except: return False
 
-def get_recent_nodes(username, limit=20):
+def get_user_nodes(username):
     try:
-        # 获取最近的N个节点用于绘图
-        res = supabase.table('nodes').select("*").eq('username', username).order('id', desc=True).limit(limit).execute()
-        # 翻转顺序，让旧的在前，方便画时间线
-        return list(reversed(res.data))
+        # 获取所有节点用于构建全量地图
+        res = supabase.table('nodes').select("*").eq('username', username).order('id', desc=False).execute()
+        return res.data
     except: return []
 
-# --- 🧮 算法：余弦相似度 ---
-def cosine_similarity(v1, v2):
-    if not v1 or not v2: return 0
-    vec1, vec2 = np.array(v1), np.array(v2)
-    norm1, norm2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
-    if norm1 == 0 or norm2 == 0: return 0
-    return np.dot(vec1, vec2) / (norm1 * norm2)
-
-# --- 🎨 赛博朋克地图 (孤星版) ---
-def render_cyberpunk_map(nodes, height="300px", is_fullscreen=False):
-    if not nodes: return
+# --- 🎨 自由星云地图 (Non-linear Topology) ---
+def render_constellation_map(nodes, height="350px", is_fullscreen=False):
+    if not nodes:
+        st.caption("宇宙一片寂静...")
+        return
 
     graph_nodes = []
     graph_links = []
+    categories = [{"name": "日常"}, {"name": "学术"}, {"name": "艺术"}]
     
-    # 全屏时的参数调整
-    label_size = 14 if is_fullscreen else 10
-    symbol_base_size = 30 if is_fullscreen else 15
-    repulsion = 1500 if is_fullscreen else 300
-
-    # 1. 生成节点
-    for i, node in enumerate(nodes):
+    # 1. 准备节点
+    for node in nodes:
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
         
         # 节点大小随逻辑分变化
-        size = symbol_base_size * (0.8 + logic)
+        size = 10 + (logic * 20)
+        if is_fullscreen: size *= 1.5
         
-        short_care = node['care_point'][:6] + "..."
+        cat_idx = 0
+        if "学术" in node['mode']: cat_idx = 1
+        elif "艺术" in node['mode']: cat_idx = 2
         
         graph_nodes.append({
-            "name": f"#{node['id']}",
+            "name": str(node['id']),
             "id": str(node['id']),
             "symbolSize": size,
-            "value": node['insight'], # tooltip显示
+            "category": cat_idx,
+            "value": node['care_point'], # 鼠标悬停显示
             "label": {
-                "show": True,
-                "formatter": short_care if is_fullscreen else "{b}",
-                "color": "#fff",
-                "fontSize": label_size
+                "show": is_fullscreen, # 全屏才显示文字，侧边栏只显示点
+                "formatter": "{b}", # 显示ID
+                "color": "#eee"
             },
-            # 存向量数据用于前端计算不太方便，我们在后端算好 Link
             "vector": json.loads(node['vector']) if node.get('vector') else None
         })
 
-        # 2. 生成连线 (基于相似度的“星座”逻辑)
-        # 我们只尝试连接当前节点和它之前的节点
-        if i > 0:
-            curr_vec = json.loads(node['vector']) if node.get('vector') else None
-            prev_vec = json.loads(nodes[i-1]['vector']) if nodes[i-1].get('vector') else None
+    # 2. 构建星系连接 (全量两两比对，O(N^2)对于个人数据量是可接受的)
+    # 只有相似度够高才连接，不再按时间顺序连
+    node_count = len(graph_nodes)
+    for i in range(node_count):
+        for j in range(i + 1, node_count): # 只比较后面的，避免重复
+            node_a = graph_nodes[i]
+            node_b = graph_nodes[j]
             
-            if curr_vec and prev_vec:
-                # 计算相似度
-                sim = cosine_similarity(curr_vec, prev_vec)
+            if node_a['vector'] and node_b['vector']:
+                sim = cosine_similarity(node_a['vector'], node_b['vector'])
                 
-                # 🌟 核心逻辑：只有相似度够高才连接
-                if sim > 0.8:
-                    # 强链接：粗、亮、青色
+                # 🌟 核心逻辑：只有共鸣才连接
+                if sim > 0.85:
+                    # 强链接：显眼的亮线 (星座连线)
                     graph_links.append({
-                        "source": str(nodes[i-1]['id']),
-                        "target": str(node['id']),
-                        "lineStyle": {"width": 3, "color": "#00d2ff", "curveness": 0.2}
+                        "source": node_a['id'],
+                        "target": node_b['id'],
+                        "lineStyle": {"width": 2, "color": "#00fff2", "curveness": 0.1}
                     })
-                elif sim > 0.6:
-                    # 弱链接：细、暗、紫色
+                elif sim > 0.65:
+                    # 弱链接：暗淡的细线
                     graph_links.append({
-                        "source": str(nodes[i-1]['id']),
-                        "target": str(node['id']),
-                        "lineStyle": {"width": 1, "color": "#ff00d4", "type": "dashed", "curveness": 0.1}
+                        "source": node_a['id'],
+                        "target": node_b['id'],
+                        "lineStyle": {"width": 0.5, "color": "#555", "curveness": 0.3}
                     })
-                else:
-                    # 无链接：孤独的漂浮
-                    pass 
+                # < 0.65 的就是孤星，不产生连接
 
     option = {
         "backgroundColor": "#0e1117",
@@ -214,42 +224,36 @@ def render_cyberpunk_map(nodes, height="300px", is_fullscreen=False):
             "left": "center",
             "textStyle": {"color": "#fff"}
         },
-        "tooltip": {"trigger": "item", "formatter": "{b}: {c}"},
+        "tooltip": {"trigger": "item", "formatter": "ID: {b}<br/>{c}"},
         "series": [{
             "type": "graph",
-            "layout": "force",
+            "layout": "force", # 力引导布局会自动把孤星推开，把星座聚在一起
             "data": graph_nodes,
             "links": graph_links,
+            "categories": categories,
             "roam": True,
             "force": {
-                "repulsion": repulsion,
-                "gravity": 0.1, # 稍微有点引力，让孤星不至于飘太远
-                "edgeLength": [50, 150]
+                "repulsion": 500 if is_fullscreen else 100,
+                "gravity": 0.05,
+                "edgeLength": [20, 100]
             },
-            "itemStyle": {
-                "shadowBlur": 10,
-                "shadowColor": "rgba(255, 255, 255, 0.5)",
-                "color": "#7b68ee" # 默认星体颜色
-            }
+            "itemStyle": {"shadowBlur": 10, "shadowColor": "rgba(255, 255, 255, 0.5)"}
         }]
     }
     st_echarts(options=option, height=height)
 
-# --- 🖥️ 全屏弹窗 ---
-@st.dialog("🔭 浩荡宇宙 · 思想星云", width="large")
+@st.dialog("🔭 浩荡宇宙 · 自由星云", width="large")
 def view_fullscreen_map(nodes):
-    st.caption("孤独是常态，连接是奇迹。")
-    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
+    render_constellation_map(nodes, height="600px", is_fullscreen=True)
 
 # ==========================================
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v16.0 Lonely Universe", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v16.0 Alignment", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
-# --- 登录页 ---
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -274,14 +278,16 @@ if not st.session_state.logged_in:
             np_pass = st.text_input("新密码", type='password')
             nn = st.text_input("昵称")
             if st.button("注册", use_container_width=True):
-                if add_user(nu, np_pass, nn): st.success("注册成功，请登录")
-                else: st.error("注册失败")
+                if add_user(nu, np_pass, nn): st.success("注册成功")
+                else: st.error("失败")
 
-# --- 主界面 ---
 else:
-    # 获取历史数据
-    history_nodes = get_recent_nodes(st.session_state.username, limit=30)
+    # --- 全局数据准备 ---
+    # 一次性拉取所有节点，构建 {content: node_data} 映射表，用于对齐显示
+    history_nodes = get_user_nodes(st.session_state.username)
+    node_map = {node['content']: node for node in history_nodes} if history_nodes else {}
 
+    # --- 侧边栏 ---
     with st.sidebar:
         st.caption(f"当前用户: {st.session_state.nickname}")
         if st.button("退出"):
@@ -289,58 +295,111 @@ else:
             st.rerun()
         st.divider()
         st.caption("🌐 全局拓扑")
-        
-        # 1. 渲染侧边栏地图
-        render_cyberpunk_map(history_nodes, height="250px")
-        
-        # 2. 全屏按钮回归
-        if st.button("🔭 全屏星云模式", use_container_width=True):
+        render_constellation_map(history_nodes, height="300px")
+        if st.button("🔭 全屏星云", use_container_width=True):
             view_fullscreen_map(history_nodes)
 
-    col_chat, col_insight = st.columns([0.7, 0.3], gap="large")
-
-    with col_chat:
-        st.subheader("💬 对话")
+    # --- 主界面：左右对齐流 ---
+    st.subheader("💬 意义流")
+    
+    # 🌟 核心修改：逐行渲染，实现对齐
+    # 每一条消息占用一行，这一行分左右两列
+    for msg in st.session_state.messages:
+        # 定义布局：左边 70% 聊天，右边 30% 卡片
+        c_chat, c_node = st.columns([0.7, 0.3])
         
-        for msg in st.session_state.messages:
+        # 1. 左列：显示聊天气泡
+        with c_chat:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"], unsafe_allow_html=True)
-
-        if prompt := st.chat_input("说点什么..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            with st.chat_message("assistant"):
-                stream = get_normal_response(st.session_state.messages)
-                response_text = st.write_stream(stream)
-            
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
-            
-            with st.spinner("⚡ 正在捕捉意义..."):
-                analysis = analyze_meaning_background(prompt)
                 
+                # 如果有共鸣按钮，显示在气泡下面
+                if "fusion_data" in msg:
+                    match = msg["fusion_data"]
+                    btn_key = f"btn_merge_{msg['id']}"
+                    if st.button(f"⚡ 发现共鸣 ({match['score']}%)：与 {get_nickname(match['user'])} 合并", key=btn_key):
+                        with st.spinner("融合中..."):
+                            c_node = generate_fusion(msg["my_content"], match["content"])
+                            if "error" not in c_node:
+                                fusion_html = f"""
+                                <div style="background-color:#E8F5E9;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;">
+                                    <b>🧬 融合成功</b><br>
+                                    <small>{msg['my_content']} + {match['content']}</small>
+                                    <hr>
+                                    <p style="color:#1B5E20;">{c_node.get('insight')}</p>
+                                </div>
+                                """
+                                st.session_state.messages.append({"role": "assistant", "content": fusion_html})
+                                st.rerun()
+
+        # 2. 右列：显示对应的意义卡片 (如果有的话)
+        with c_node:
+            # 只有当消息是用户发的，并且能在数据库里找到对应的节点时，才显示
+            if msg["role"] == "user" and msg["content"] in node_map:
+                node = node_map[msg["content"]]
+                # 渲染折叠卡片
+                with st.expander(f"✨ #{node['id']} {node['care_point'][:5]}...", expanded=False):
+                    st.caption(f"Logic: {node.get('logic_score', 0.5)}")
+                    st.write(f"**Structure:** {node['meaning_layer']}")
+                    st.info(f"💡 {node['insight']}")
+            
+            # 或者是 AI 发的融合结果，也可以在这里显示（当前暂且留空保持整洁）
+
+    # --- 底部输入区 ---
+    if prompt := st.chat_input("输入思考..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        # 显式重跑一次以渲染新消息
+        st.rerun()
+
+    # 处理最新的一条用户消息 (放在循环外处理逻辑，避免阻塞渲染)
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        last_msg = st.session_state.messages[-1]
+        # 检查是否已经处理过（防止重复调用 AI）
+        # 这里用简单判断：如果数据库里已经有这句话了，就不再处理
+        if last_msg["content"] not in node_map:
+            with st.spinner("AI 正在思考..."):
+                # 1. 正常回复
+                stream = get_normal_response(st.session_state.messages[:-1]) # 不包含刚发的这句，防止递归？其实没关系
+                # 这里为了简单，我们还是用之前的逻辑，先回复再分析
+                # 但由于 Streamlit 的刷新机制，我们需要把回复追加到 messages
+                
+                # ... (此处为了代码简洁，保留 v15 的逻辑，但集成在上面的渲染循环里其实更好)
+                # 修正策略：Streamlit 的 chat_input 触发 rerrun。
+                # 我们在最上面的循环里已经渲染了 user message。
+                # 现在这里只负责生成 assistant response 和 异步分析。
+                
+                # 1. 生成回复
+                resp_content = get_normal_response(st.session_state.messages) # 这里其实是模拟，简单起见直接调
+                # 注意：get_normal_response 需要适配
+                
+                # 简化处理：直接在这里生成回复并追加
+                api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
+                for m in st.session_state.messages: api_messages.append({"role": m["role"], "content": m["content"]})
+                
+                try:
+                    r = client.chat.completions.create(model=TARGET_MODEL, messages=api_messages, temperature=0.8)
+                    bot_reply = r.choices[0].message.content
+                    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                except: pass
+
+                # 2. 分析意义
+                analysis = analyze_meaning_background(last_msg["content"])
                 if analysis.get("valid", False):
-                    vec = get_embedding(prompt)
-                    save_node(st.session_state.username, prompt, analysis, vec)
-                    st.session_state.new_node = analysis
-                    st.rerun()
-                else:
-                    pass
-
-    with col_insight:
-        st.subheader("🧩 意义注释")
-        
-        if not history_nodes:
-            st.info("这里是你的思想副驾驶。")
-        
-        # 显示最近5个节点的折叠卡片
-        for node in reversed(history_nodes[-5:]):
-            with st.expander(f"✨ {node['care_point']}", expanded=False):
-                st.markdown(f"**Insight:** {node['insight']}")
-                st.caption(f"Structure: {node['meaning_layer']}")
-                st.caption(f"Time: {node['created_at'][:16]}")
+                    vec = get_embedding(last_msg["content"])
+                    save_node(st.session_state.username, last_msg["content"], analysis, "日常", vec)
+                    
+                    # 3. 寻找共鸣
+                    match = find_resonance(vec, st.session_state.username)
+                    if match:
+                        # 往刚才那条 assistant 消息里塞入共鸣数据 (这是个 trick)
+                        # 或者追加一条系统提示
+                        msg_id = int(time.time())
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": "🔔 发现思想共鸣！", 
+                            "fusion_data": match,
+                            "my_content": last_msg["content"],
+                            "id": msg_id
+                        })
                 
-        if st.session_state.get("new_node"):
-            st.toast(f"捕获新意义：{st.session_state.new_node['care_point']}")
-            st.session_state.new_node = None
+                st.rerun()
