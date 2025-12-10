@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+import requests
 import json
 import re
 import sqlite3
@@ -9,16 +9,15 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区 (云端兼容版 v7.2)
+# 🛑 核心配置区 (越狱版 v8.0)
 # ==========================================
 
+# 从 Secrets 获取 Key
 try:
     MY_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
-    st.error("🚨 未检测到密钥！请在 Streamlit 后台 Settings -> Secrets 中配置 GOOGLE_API_KEY。")
+    st.error("🚨 未检测到密钥！请在 Streamlit 后台配置 GOOGLE_API_KEY。")
     st.stop()
-
-genai.configure(api_key=MY_API_KEY)
 
 # ==========================================
 
@@ -70,52 +69,94 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：全兼容调用 (v7.2) ---
-def call_gemini_official(prompt):
-    """
-    尝试所有世代的模型，确保连通性
-    """
-    # 🌟 修正：加入了 'gemini-pro' (1.0版本)，这是兼容性最好的老模型
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
-    
-    errors = []
+# --- 🧠 AI 核心：HTTP 自动寻路 (不依赖官方库) ---
 
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            
-            if response.text:
-                raw_text = response.text
+def get_best_model_via_http():
+    """
+    通过 HTTP 请求直接询问 Google 有哪些模型可用
+    """
+    if "cached_model" in st.session_state and st.session_state.cached_model:
+        return st.session_state.cached_model
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={MY_API_KEY}"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            # 1. 优先找 Flash
+            for m in data.get('models', []):
+                name = m['name'].replace('models/', '')
+                if 'flash' in name and 'generateContent' in m['supportedGenerationMethods']:
+                    st.session_state.cached_model = name
+                    return name
+            # 2. 其次找 Pro
+            for m in data.get('models', []):
+                name = m['name'].replace('models/', '')
+                if 'gemini' in name and 'generateContent' in m['supportedGenerationMethods']:
+                    st.session_state.cached_model = name
+                    return name
+    except:
+        pass
+    
+    # 如果问不到，就用最稳的保底
+    return "gemini-1.5-flash"
+
+def call_gemini_http(prompt):
+    """
+    完全绕过 SDK，使用 requests 发送请求
+    """
+    # 1. 自动寻找模型
+    model_name = get_best_model_via_http()
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={MY_API_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    data = {"contents": [{"parts": [{"text": prompt}]}]}
+    
+    try:
+        # 30秒超时
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            result_json = response.json()
+            try:
+                # 提取文本
+                raw_text = result_json['candidates'][0]['content']['parts'][0]['text']
+                # 清洗 JSON
                 match = re.search(r'\{.*\}', raw_text, re.DOTALL)
                 if match:
                     res = json.loads(match.group(0))
                     res['model_used'] = model_name
                     return res
-        except Exception as e:
-            # 记录错误但不崩溃，继续试下一个
-            errors.append(f"{model_name}: {str(e)}")
-            continue 
+                else:
+                    return {"error": True, "msg": "数据格式清洗失败"}
+            except:
+                return {"error": True, "msg": "API 返回结构异常"}
+        else:
+            # 如果自动寻路失败，尝试硬编码重试一次 gemini-pro
+            if "404" in str(response.status_code):
+                 return {"error": True, "msg": f"模型 {model_name} 未找到 (404)，请重试。"}
+            return {"error": True, "msg": f"HTTP {response.status_code}: {response.text}"}
             
-    return {"error": True, "msg": f"所有模型均不可用。详情: {'; '.join(errors)}"}
+    except Exception as e:
+        return {"error": True, "msg": f"网络层错误: {str(e)}"}
 
-# --- 🧠 向量化 (兼容版) ---
-def get_embedding(text):
-    # 尝试两个版本的向量模型
-    models = ["models/text-embedding-004", "models/embedding-001"]
-    for model in models:
-        try:
-            result = genai.embed_content(
-                model=model,
-                content=text,
-                task_type="retrieval_document",
-                title="MSC Node"
-            )
-            return result['embedding']
-        except:
-            continue
+# --- 🧠 向量化 (HTTP 版) ---
+def get_embedding_http(text):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={MY_API_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "model": "models/text-embedding-004",
+        "content": {"parts": [{"text": text}]}
+    }
+    try:
+        response = requests.post(url, headers=headers, json=data, timeout=10)
+        if response.status_code == 200:
+            return response.json()['embedding']['values']
+    except: 
+        pass
     return []
 
+# --- 业务逻辑 ---
 def generate_node_data(mode, text):
     prompt = f"""
     你是 MSC 意义构建者。场景：【{mode}】。用户输入："{text}"。
@@ -126,7 +167,7 @@ def generate_node_data(mode, text):
         "insight": "一句意想不到的升维洞察..."
     }}
     """
-    return call_gemini_official(prompt)
+    return call_gemini_http(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
@@ -140,7 +181,7 @@ def generate_fusion(node_a_content, node_b_content):
         "insight": "集体智慧金句"
     }}
     """
-    return call_gemini_official(prompt)
+    return call_gemini_http(prompt)
 
 # --- 🧮 算法 ---
 def cosine_similarity(v1, v2):
@@ -203,7 +244,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v7.2 Compatible", layout="wide")
+st.set_page_config(page_title="MSC v8.0 Jailbreak", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -211,7 +252,7 @@ if "logged_in" not in st.session_state:
 # --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("云端兼容版 · 自动降级保护")
+    st.caption("HTTP 越狱版 · 自动寻路 v8.0")
     
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
@@ -290,13 +331,15 @@ else:
             st.markdown(user_input)
             
         with st.chat_message("assistant"):
-            with st.spinner("AI 正在思考 (Compatibility Mode)..."):
+            with st.spinner("AI 正在思考 (HTTP Bypass)..."):
+                # 1. 生成内容
                 res = generate_node_data(mode, user_input)
                 
                 if "error" in res:
                     st.error(f"⚠️ 生成失败: {res.get('msg')}")
                 else:
-                    vec = get_embedding(user_input)
+                    # 2. 生成向量 (同样走 HTTP)
+                    vec = get_embedding_http(user_input)
                     save_node(st.session_state.username, user_input, res, mode, vec)
                     
                     card = f"""
