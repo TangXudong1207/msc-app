@@ -2,13 +2,11 @@ import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
-import pydeck as pdk  # 🌟 新增：Uber级 3D 绘图引擎
 import json
 import re
 import hashlib
 import time
 import numpy as np
-import pandas as pd # PyDeck 需要 Pandas
 from datetime import datetime
 from sklearn.decomposition import PCA 
 from sklearn.cluster import KMeans    
@@ -18,7 +16,7 @@ from sklearn.cluster import KMeans
 # ==========================================
 
 try:
-    client_ai = OpenAI(
+    client = OpenAI(
         api_key=st.secrets["API_KEY"],
         base_url=st.secrets["BASE_URL"]
     )
@@ -38,11 +36,18 @@ except Exception as e:
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
+def check_hashes(password, hashed_text):
+    if make_hashes(password) == hashed_text: return True
+    return False
+
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False
-        default_radar = {"Care":3.0,"Curiosity":3.0,"Reflection":3.0,"Coherence":3.0,"Empathy":3.0,"Agency":3.0,"Aesthetic":3.0}
+        default_radar = {
+            "Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0,
+            "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0
+        }
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
         return True
@@ -230,49 +235,64 @@ def find_resonance(current_vector, current_user):
         return best_match
     except: return None
 
-# --- 🌍 3D 渲染 (PyDeck 原生版) ---
-
-def render_3d_earth(nodes):
-    """使用 PyDeck 渲染地球分布"""
-    # 模拟数据
+# --- 🌍 2D 地球渲染 (ECharts 地图版) ---
+def render_2d_world_map(nodes):
+    """
+    2D 夜景地球：直观、清晰、深色风格
+    """
+    # 模拟全球数据点
     map_data = []
-    for _ in range(len(nodes) + 20):
-        # 集中在主要大陆
-        lon = np.random.normal(0, 60) 
-        lat = np.random.normal(20, 20)
-        map_data.append({"lon": lon, "lat": lat, "size": np.random.randint(10000, 50000)})
+    # 添加一个北京的基准点作为示例，确保有数据显示
+    map_data.append({"name": "MSC Center", "value": [116.4, 39.9, 100]}) 
     
-    df = pd.DataFrame(map_data)
+    for _ in range(len(nodes) + 20): 
+        # 随机分布在主要城市区域
+        lon = np.random.uniform(-120, 140) 
+        lat = np.random.uniform(10, 60)
+        val = np.random.randint(10, 100)
+        # 🌟 核心修复：强制转 float/int
+        map_data.append({"name": "Node", "value": [float(lon), float(lat), int(val)]})
 
-    # 定义图层
-    layer = pdk.Layer(
-        "ScatterplotLayer",
-        df,
-        get_position=["lon", "lat"],
-        get_color=[0, 255, 242, 160], # 赛博青
-        get_radius="size",
-        pickable=True,
-    )
+    option = {
+        "backgroundColor": "#000",
+        "title": {
+            "text": "🌍 MSC 全球共鸣",
+            "left": "center",
+            "textStyle": {"color": "#fff"}
+        },
+        "geo": {
+            "map": "world",
+            "roam": True,
+            "label": {"emphasis": {"show": False}},
+            "itemStyle": {
+                "normal": {"areaColor": "#0d1b2a", "borderColor": "#1b263b"}, # 深蓝海洋风格
+                "emphasis": {"areaColor": "#2a9d8f"}
+            }
+        },
+        "series": [
+            {
+                "name": "Nodes",
+                "type": "scatter",
+                "coordinateSystem": "geo",
+                "data": map_data,
+                "symbolSize": 5,
+                "label": {"normal": {"show": False}, "emphasis": {"show": False}},
+                "itemStyle": {
+                    "emphasis": {"borderColor": "#fff", "borderWidth": 1},
+                    "color": "#ffd60a" # 亮黄色节点
+                }
+            }
+        ]
+    }
+    st_echarts(options=option, height="500px", map="world")
 
-    # 定义视角 (3D 地球视角不是 PyDeck 强项，我们用平面地图模拟夜景，这是最稳的)
-    view_state = pdk.ViewState(
-        latitude=20,
-        longitude=0,
-        zoom=1,
-        pitch=0,
-    )
-
-    st.pydeck_chart(pdk.Deck(
-        map_style='mapbox://styles/mapbox/dark-v10', # 深色夜景模式
-        initial_view_state=view_state,
-        layers=[layer],
-        tooltip={"text": "MSC 活跃节点"}
-    ))
-
+# --- 🌌 3D 星河渲染 (ECharts GL 修复版) ---
 def render_3d_galaxy(nodes):
-    """使用 PyDeck PointCloud 渲染意义星河"""
-    if len(nodes) < 3:
-        st.warning("🌌 星辰汇聚中，请稍候...")
+    """
+    3D 意义星河：强制类型转换 + 纯黑背景
+    """
+    if len(nodes) < 5:
+        st.info("🌌 星辰汇聚中，请再多生成几个节点...")
         return
 
     vectors, labels = [], []
@@ -286,48 +306,48 @@ def render_3d_galaxy(nodes):
     
     if not vectors: return
 
-    # PCA 降维到 3D
+    # PCA 降维
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
     
-    # 归一化坐标以便渲染
-    coords = coords / np.max(np.abs(coords)) * 100 # 放大一点
-
-    df_data = []
-    for i, (x, y, z) in enumerate(coords):
-        df_data.append({
-            "position": [x, y, z],
-            "care": labels[i],
-            "color": [255, 0, 212] if i%2==0 else [0, 210, 255] # 赛博配色
-        })
+    # 聚类 (模拟星云颜色)
+    n_clusters = min(3, len(vectors))
+    kmeans = KMeans(n_clusters=n_clusters)
+    clusters = kmeans.fit_predict(vectors)
     
-    df = pd.DataFrame(df_data)
+    scatter_data = []
+    colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff"]
+    
+    for i, (x, y, z) in enumerate(coords):
+        cluster_id = int(clusters[i]) # 🌟 核心修复：强制转 int
+        scatter_data.append({
+            "name": labels[i],
+            # 🌟 核心修复：强制转 float，防止 Marshall 报错
+            "value": [float(x), float(y), float(z), cluster_id], 
+            "itemStyle": {"color": colors[cluster_id % len(colors)]}
+        })
 
-    point_cloud = pdk.Layer(
-        "PointCloudLayer",
-        data=df,
-        get_position="position",
-        get_normal=[0, 1, 0],
-        get_color="color",
-        point_size=5,
-        pickable=True,
-    )
+    option = {
+        "backgroundColor": "#000", # 纯黑背景
+        "grid3D": {
+            "viewControl": {"autoRotate": True, "projection": "perspective"},
+            "axisLine": {"lineStyle": {"color": "#fff"}}, # 白色坐标轴
+            "splitLine": {"show": False}
+        },
+        "series": [{
+            "type": "scatter3D",
+            "data": scatter_data,
+            "symbolSize": 8,
+            "label": {
+                "show": True, 
+                "formatter": "{b}", # 显示 Care Point
+                "textStyle": {"color": "white", "fontSize": 10, "backgroundColor": "rgba(0,0,0,0.5)"}
+            }
+        }]
+    }
+    st_echarts(options=option, height="600px")
 
-    view_state = pdk.ViewState(
-        target=[0, 0, 0],
-        zoom=3,
-        rotation_x=15,
-        rotation_orbit=30,
-        pitch=45
-    )
-
-    st.pydeck_chart(pdk.Deck(
-        initial_view_state=view_state,
-        layers=[point_cloud],
-        tooltip={"html": "<b>Care Point:</b> {care}"}
-    ))
-
-# --- 侧边栏与主逻辑 ---
+# --- 侧边栏小地图 ---
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
@@ -375,20 +395,21 @@ def view_fullscreen_map(nodes):
 @st.dialog("🌍 MSC World · 上帝视角", width="large")
 def view_msc_world():
     global_nodes = get_global_nodes()
-    tab1, tab2 = st.tabs(["🌍 地球夜景", "🌌 意义星河"])
-    with tab1: render_3d_earth(global_nodes)
+    tab1, tab2 = st.tabs(["🌍 地球夜景 (2D Map)", "🌌 意义星河 (3D Galaxy)"])
+    with tab1: render_2d_world_map(global_nodes)
     with tab2: render_3d_galaxy(global_nodes)
 
 # ==========================================
 # 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v23.0 PyDeck", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v23.1 2D Earth", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
     st.title("🌌 MSC")
+    # ... Login UI ...
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
@@ -424,8 +445,11 @@ else:
         rank_name, rank_icon = calculate_rank(radar_dict)
         st.markdown(f"## {rank_icon} {st.session_state.nickname}")
         render_radar_chart(radar_dict)
+        
+        # 🌟 入口
         if st.button("🌍 MSC World", use_container_width=True, type="primary"):
             view_msc_world()
+            
         c1, c2 = st.columns(2)
         if c1.button("🗑️ 回收站"): st.toast("功能维护中...")
         if c2.button("退出"): st.session_state.logged_in = False; st.rerun()
