@@ -29,15 +29,10 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 🛠️ 1. 基础设施函数 (先定义，防止报错)
-# ==========================================
 
+# --- 🛠️ 基础设施 ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
-
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text: return True
-    return False
 
 def add_user(username, password, nickname):
     try:
@@ -62,28 +57,55 @@ def get_nickname(username):
         return username
     except: return username
 
-# --- 💾 数据库存取 (新增：聊天记录) ---
+# --- 💾 数据库操作 (增删改查) ---
 
 def save_chat(username, role, content):
-    """保存日常对话到数据库"""
     try:
-        data = {"username": username, "role": role, "content": content}
+        data = {"username": username, "role": role, "content": content, "is_deleted": False}
         supabase.table('chats').insert(data).execute()
     except Exception as e: print(f"Chat save error: {e}")
 
-def get_chat_history(username, limit=50):
-    """获取最近的聊天记录"""
+def get_active_chats(username, limit=50):
+    """获取未删除的聊天记录"""
     try:
-        # 按时间正序排列
-        res = supabase.table('chats').select("*").eq('username', username).order('id', desc=False).limit(limit).execute()
-        # 修正：如果 limit 生效，取回来的是最新的N条，但顺序可能是反的，需要确认 desc=False 取的是最旧的还是最新的
-        # 通常我们取 desc=True (最新的50条)，然后反转列表显示
-        res = supabase.table('chats').select("*").eq('username', username).order('id', desc=True).limit(limit).execute()
+        # 只取 is_deleted = false
+        res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(limit).execute()
         return list(reversed(res.data))
     except: return []
 
+def get_deleted_items(username):
+    """获取回收站内容"""
+    try:
+        chats = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', True).order('id', desc=True).execute()
+        nodes = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', True).order('id', desc=True).execute()
+        return chats.data, nodes.data
+    except: return [], []
+
+def soft_delete_chat_and_node(chat_id, content, username):
+    """软删除：同时删除对话和对应的节点"""
+    try:
+        # 1. 标记对话为删除
+        supabase.table('chats').update({"is_deleted": True}).eq("id", chat_id).execute()
+        # 2. 尝试标记对应的节点为删除 (通过内容匹配)
+        supabase.table('nodes').update({"is_deleted": True}).eq("username", username).eq("content", content).execute()
+        return True
+    except: return False
+
+def restore_item(table, item_id):
+    """恢复数据"""
+    try:
+        supabase.table(table).update({"is_deleted": False}).eq("id", item_id).execute()
+        return True
+    except: return False
+
+def permanently_delete(table, item_id):
+    """永久删除"""
+    try:
+        supabase.table(table).delete().eq("id", item_id).execute()
+        return True
+    except: return False
+
 def save_node(username, content, data, mode, vector):
-    """保存意义节点"""
     try:
         logic = data.get('logic_score')
         if logic is None: logic = 0.5
@@ -93,298 +115,222 @@ def save_node(username, content, data, mode, vector):
             "meaning_layer": data.get('meaning_layer', '暂无结构'),
             "insight": data.get('insight', '生成中断'),
             "mode": mode, "vector": json.dumps(vector),
-            "logic_score": logic, "keywords": json.dumps([])
+            "logic_score": logic, "is_deleted": False
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
     except: return False
 
-def get_user_nodes(username):
+def get_active_nodes_map(username):
+    """获取所有未删除节点，并转为字典 {content: node_data} 以便对齐"""
     try:
-        res = supabase.table('nodes').select("*").eq('username', username).order('id', desc=False).execute()
+        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).execute()
+        return {node['content']: node for node in res.data}
+    except: return {}
+
+def get_all_nodes_for_map(username):
+    """获取未删除节点用于画图"""
+    try:
+        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
         return res.data
     except: return []
 
-# ==========================================
-# 🧠 2. AI 核心逻辑函数
-# ==========================================
+# --- 🧠 AI 核心 ---
+def call_ai_api(prompt):
+    try:
+        response = client_ai.chat.completions.create(
+            model=TARGET_MODEL,
+            messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
+            temperature=0.7, stream=False, response_format={"type": "json_object"} 
+        )
+        content = response.choices[0].message.content
+        try:
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True, "msg": "JSON解析失败"}
+    except Exception as e: return {"error": True, "msg": str(e)}
 
 def get_embedding(text):
     return np.random.rand(1536).tolist()
 
-def cosine_similarity(v1, v2):
-    if not v1 or not v2: return 0
-    vec1, vec2 = np.array(v1), np.array(v2)
-    norm1, norm2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
-    if norm1 == 0 or norm2 == 0: return 0
-    return np.dot(vec1, vec2) / (norm1 * norm2)
-
-# --- 聊天机器人 ---
 def get_normal_response(history_messages):
-    """
-    普通聊天模式
-    """
     try:
-        api_messages = [{"role": "system", "content": "你是一个温暖、智慧的对话伙伴。请用自然、流畅的语言与用户交流。不要输出JSON。"}]
-        # 转换数据库格式到 OpenAI 格式
+        api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
         for msg in history_messages:
-            # 过滤掉非 standard role
-            role = msg['role'] if msg['role'] in ['user', 'assistant'] else 'user'
-            api_messages.append({"role": role, "content": msg['content']})
-        
+            api_messages.append({"role": msg["role"], "content": msg["content"]})
         response = client_ai.chat.completions.create(
-            model=TARGET_MODEL,
-            messages=api_messages,
-            temperature=0.8,
-            stream=True 
+            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
         )
         return response
-    except Exception as e:
-        return f"（思考中断：{str(e)}）"
+    except Exception as e: return f"Error: {e}"
 
-# --- 意义分析师 ---
 def analyze_meaning_background(text):
     prompt = f"""
-    任务：判断用户的这句话是否有深层意义。
-    输入："{text}"
-    判断标准：必须包含明确观点、强烈情绪或独特洞察。只是寒暄则返回 {{ "valid": false }}。
-    若符合，请提取结构并返回 JSON：
-    {{
-        "valid": true,
-        "care_point": "简短核心关切(10字内)",
-        "meaning_layer": "完整结构分析...",
-        "insight": "升维洞察金句...",
-        "logic_score": 0.8
-    }}
+    判断输入："{text}" 是否有深层意义。
+    若只是寒暄返回 {{ "valid": false }}。
+    若有意义返回 JSON:
+    {{ "valid": true, "care_point": "核心关切", "meaning_layer": "结构", "insight": "洞察", "logic_score": 0.8 }}
     """
-    try:
-        response = client_ai.chat.completions.create(
-            model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output JSON only."}, {"role": "user", "content": prompt}],
-            temperature=0.5, 
-            response_format={"type": "json_object"}
-        )
-        content = response.choices[0].message.content
-        return json.loads(content)
-    except:
-        return {"valid": False}
+    return call_ai_api(prompt)
 
-def generate_fusion(node_a_content, node_b_content):
+def generate_fusion(node_a, node_b):
     prompt = f"""
-    融合 A: "{node_a_content}" 和 B: "{node_b_content}"。
-    返回JSON:
-    {{
-        "care_point": "共同深层诉求...",
-        "meaning_layer": "全景视角...",
-        "insight": "全新洞察..."
-    }}
+    融合 A: "{node_a}" B: "{node_b}"。
+    返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
     """
-    try:
-        response = client_ai.chat.completions.create(
-            model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output JSON only."}, {"role": "user", "content": prompt}],
-            temperature=0.7, response_format={"type": "json_object"} 
-        )
-        return json.loads(response.choices[0].message.content)
-    except: return {"error": True}
+    return call_ai_api(prompt)
+
+def cosine_similarity(v1, v2):
+    vec1, vec2 = np.array(v1), np.array(v2)
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
 
 def find_resonance(current_vector, current_user):
     if not current_vector: return None
     try:
-        res = supabase.table('nodes').select("username, content, vector").neq('username', current_user).execute()
-        others = res.data
-        best_match, highest_score = None, 0
-        for row in others:
+        res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
+        best_match, highest = None, 0
+        for row in res.data:
             if row['vector']:
                 try:
                     score = cosine_similarity(current_vector, json.loads(row['vector']))
-                    if score > 0.75 and score > highest_score:
-                        highest_score = score
+                    if score > 0.75 and score > highest:
+                        highest = score
                         best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
                 except: continue
         return best_match
     except: return None
 
-# ==========================================
-# 🎨 3. UI 渲染函数
-# ==========================================
-
-def render_constellation_map(nodes, height="350px", is_fullscreen=False):
-    if not nodes:
-        st.caption("宇宙一片寂静...")
-        return
-
+# --- 🎨 渲染 ---
+def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
+    if not nodes: return
     graph_nodes = []
     graph_links = []
-    categories = [{"name": "日常"}, {"name": "学术"}, {"name": "艺术"}]
-    
     label_size = 14 if is_fullscreen else 10
     symbol_base = 30 if is_fullscreen else 15
-    repulsion = 800 if is_fullscreen else 200
+    repulsion = 1000 if is_fullscreen else 300
 
     for i, node in enumerate(nodes):
-        logic = node.get('logic_score')
-        if logic is None: logic = 0.5
-        size = symbol_base * (0.8 + logic)
-        cat_idx = 0
-        if "学术" in node['mode']: cat_idx = 1
-        elif "艺术" in node['mode']: cat_idx = 2
-        
+        logic = node.get('logic_score', 0.5)
         graph_nodes.append({
             "name": str(node['id']),
-            "id": str(node['id']),
-            "symbolSize": size,
-            "category": cat_idx,
+            "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
-            "label": {"show": is_fullscreen, "formatter": "{b}", "color": "#eee"},
+            "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
             "vector": json.loads(node['vector']) if node.get('vector') else None
         })
 
-    node_count = len(graph_nodes)
-    for i in range(node_count):
-        for j in range(i + 1, node_count):
-            node_a, node_b = graph_nodes[i], graph_nodes[j]
-            if node_a['vector'] and node_b['vector']:
-                sim = cosine_similarity(node_a['vector'], node_b['vector'])
+    for i in range(len(graph_nodes)):
+        for j in range(i + 1, len(graph_nodes)):
+            na, nb = graph_nodes[i], graph_nodes[j]
+            if na['vector'] and nb['vector']:
+                sim = cosine_similarity(na['vector'], nb['vector'])
                 if sim > 0.85:
-                    graph_links.append({"source": node_a['id'], "target": node_b['id'], "lineStyle": {"width": 2, "color": "#00fff2"}})
+                    graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
                 elif sim > 0.65:
-                    graph_links.append({"source": node_a['id'], "target": node_b['id'], "lineStyle": {"width": 0.5, "color": "#555"}})
+                    graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555"}})
 
     option = {
         "backgroundColor": "#0e1117",
-        "title": {"text": "🌌 思想星云" if is_fullscreen else "", "left": "center", "textStyle": {"color": "#fff"}},
-        "tooltip": {"trigger": "item", "formatter": "ID: {b}<br/>{c}"},
         "series": [{
-            "type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "categories": categories,
-            "roam": True, "force": {"repulsion": repulsion, "gravity": 0.05, "edgeLength": [20, 100]},
-            "itemStyle": {"shadowBlur": 10, "shadowColor": "rgba(255, 255, 255, 0.5)"}
+            "type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links,
+            "roam": True, "force": {"repulsion": repulsion, "gravity": 0.05}
         }]
     }
     st_echarts(options=option, height=height)
 
-@st.dialog("🔭 浩荡宇宙 · 自由星云", width="large")
+@st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes):
-    render_constellation_map(nodes, height="600px", is_fullscreen=True)
+    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
+
+@st.dialog("🗑️ 回收站")
+def view_recycle_bin(username):
+    deleted_chats, deleted_nodes = get_deleted_items(username)
+    
+    st.caption("这里存放着被遗忘的思想碎片...")
+    
+    tab_c, tab_n = st.tabs([f"对话 ({len(deleted_chats)})", f"节点 ({len(deleted_nodes)})"])
+    
+    with tab_c:
+        for chat in deleted_chats:
+            c1, c2 = st.columns([8, 2])
+            with c1: st.text(f"{chat['content'][:20]}...")
+            with c2:
+                if st.button("♻️", key=f"res_c_{chat['id']}"):
+                    restore_item('chats', chat['id'])
+                    st.rerun()
+    
+    with tab_n:
+        for node in deleted_nodes:
+            c1, c2 = st.columns([8, 2])
+            with c1: st.info(f"{node['care_point']}")
+            with c2:
+                if st.button("♻️", key=f"res_n_{node['id']}"):
+                    restore_item('nodes', node['id'])
+                    st.rerun()
 
 # ==========================================
-# 🖥️ 4. 主程序入口
+# 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v17.0 Eternal Chat", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v18.0 Aligned", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.title("🌌 MSC")
-        st.caption("人机共生 · 意义构建系统")
-        tab1, tab2 = st.tabs(["登录", "注册"])
-        with tab1:
-            u = st.text_input("用户名")
-            p = st.text_input("密码", type='password')
-            if st.button("登录", use_container_width=True):
-                res = login_user(u, p)
-                if res and len(res) > 0:
-                    st.session_state.logged_in = True
-                    st.session_state.username = u
-                    st.session_state.nickname = res[0]['nickname']
-                    st.rerun()
-                else: st.error("账号或密码错误")
-        with tab2:
-            nu = st.text_input("新用户名")
-            np_pass = st.text_input("新密码", type='password')
-            nn = st.text_input("昵称")
-            if st.button("注册", use_container_width=True):
-                if add_user(nu, np_pass, nn): st.success("注册成功")
-                else: st.error("失败")
+    st.title("🌌 MSC")
+    # ... (登录注册代码省略，与之前相同，节省篇幅) ...
+    tab1, tab2 = st.tabs(["登录", "注册"])
+    with tab1:
+        u = st.text_input("用户名")
+        p = st.text_input("密码", type='password')
+        if st.button("登录", use_container_width=True):
+            res = login_user(u, p)
+            if res and len(res) > 0:
+                st.session_state.logged_in = True
+                st.session_state.username = u
+                st.session_state.nickname = res[0]['nickname']
+                st.rerun()
+            else: st.error("错误")
+    with tab2:
+        nu = st.text_input("新用户名")
+        np_pass = st.text_input("新密码", type='password')
+        nn = st.text_input("昵称")
+        if st.button("注册", use_container_width=True):
+            if add_user(nu, np_pass, nn): st.success("成功")
+            else: st.error("失败")
 
 else:
-    # --- 数据加载 ---
-    # 1. 加载节点历史（用于地图和右侧批注）
-    history_nodes = get_user_nodes(st.session_state.username)
-    node_map = {node['content']: node for node in history_nodes} if history_nodes else {}
-    
-    # 2. 加载聊天历史（用于中间对话框）
-    # 注意：这里我们每次都从数据库拉取最新的 N 条，保证不丢失
-    chat_history = get_chat_history(st.session_state.username, limit=50)
+    # 准备数据
+    chat_history = get_active_chats(st.session_state.username)
+    nodes_map = get_active_nodes_map(st.session_state.username) # 获取所有节点用于匹配
+    all_nodes_list = get_all_nodes_for_map(st.session_state.username)
 
-    # --- 侧边栏 ---
     with st.sidebar:
-        st.caption(f"当前用户: {st.session_state.nickname}")
-        if st.button("退出"):
+        st.write(f"👋 **{st.session_state.nickname}**")
+        c1, c2 = st.columns(2)
+        if c1.button("🗑️ 回收站"):
+            view_recycle_bin(st.session_state.username)
+        if c2.button("退出"):
             st.session_state.logged_in = False
             st.rerun()
+        
         st.divider()
-        st.caption("🌐 全局拓扑")
-        render_constellation_map(history_nodes, height="300px")
+        render_cyberpunk_map(all_nodes_list, height="250px")
         if st.button("🔭 全屏星云", use_container_width=True):
-            view_fullscreen_map(history_nodes)
+            view_fullscreen_map(all_nodes_list)
 
-    # --- 主界面布局 ---
-    col_chat, col_insight = st.columns([0.7, 0.3], gap="large")
-
-    # --- 1. 左侧：聊天流 ---
-    with col_chat:
-        st.subheader("💬 意义流")
+    # --- 核心：逐行对齐渲染 ---
+    st.subheader("💬 意义流")
+    
+    # 遍历每一条聊天记录 (从旧到新显示)
+    for msg in chat_history:
+        # 定义一行两列：左边聊天，右边批注
+        col_chat, col_node = st.columns([0.65, 0.35], gap="small")
         
-        # 渲染数据库里的历史记录
-        for msg in chat_history:
-            with st.chat_message(msg['role']):
-                st.markdown(msg['content'], unsafe_allow_html=True)
-                # 这里暂时不渲染历史共鸣按钮，避免界面太乱，只在实时交互时出现
-
-        # 输入处理
-        if prompt := st.chat_input("输入思考..."):
-            # A. 立即显示并保存用户消息
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            save_chat(st.session_state.username, "user", prompt)
-
-            # B. 生成并保存助手回复
-            with st.chat_message("assistant"):
-                # 传入当前历史上下文（包含刚存入的那条）
-                # 为了流式效果，我们直接调用 AI，不重新拉数据库
-                stream_response = get_normal_response(chat_history + [{'role':'user', 'content':prompt}])
-                response_text = st.write_stream(stream_response)
-            save_chat(st.session_state.username, "assistant", response_text)
-            
-            # C. 异步进行意义分析
-            with st.spinner("⚡ 解析中..."):
-                analysis = analyze_meaning_background(prompt)
-                
-                if analysis.get("valid", False):
-                    vec = get_embedding(prompt)
-                    save_node(st.session_state.username, prompt, analysis, "日常", vec)
-                    
-                    # 寻找共鸣
-                    match = find_resonance(vec, st.session_state.username)
-                    if match:
-                        msg_id = int(time.time())
-                        # 把共鸣提示也作为一条 assistant 消息存进去？
-                        # 或者只存入 Session 供本次显示？
-                        # 这里为了简单，我们只在界面显示，不存入 chat 表，因为它是一种“系统通知”
-                        st.toast(f"🔔 发现与 {match['user']} 的共鸣！", icon="⚡")
-                        # (由于 Streamlit 刷新机制，这里不好直接插按钮，
-                        # 我们依赖 rerun 后，在右侧或者新的一行显示。
-                        # 为了演示方便，我们暂时不存库共鸣事件，仅刷新显示节点)
-                
-                # 刷新页面，让右侧的节点卡片显示出来
-                st.rerun()
-
-    # --- 2. 右侧：批注流 ---
-    with col_insight:
-        # 只显示与当前屏幕上的对话匹配的节点
-        # 倒序遍历聊天记录，找到有节点的
-        
-        # 为了美观，我们只显示最近生成的几个节点，或者匹配到的
-        st.caption("🧩 深度批注")
-        
-        # 我们可以显示所有历史节点，或者只显示和当前对话有关的
-        # 这里显示所有历史节点的折叠板，按时间倒序
-        for node in reversed(history_nodes):
-            with st.expander(f"✨ #{node['id']} {node['care_point'][:6]}...", expanded=False):
-                st.caption(f"Logic: {node.get('logic_score', 0.5)}")
-                st.write(f"**Structure:** {node['meaning_layer']}")
-                st.info(f"💡 {node['insight']}")
+        # --- 左列：聊天气泡 + 删除按钮 ---
+        with col_chat:
+            c_msg, c_del = st.columns([0.9, 0.1])
+            with c_msg:
+                # 区分用户和AI的样式
+                with st.chat_message(
