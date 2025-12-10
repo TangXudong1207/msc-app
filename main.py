@@ -63,20 +63,16 @@ def get_nickname(username):
 
 # --- 🧠 引擎 A：正常聊天 (ChatBot) ---
 def get_normal_response(history_messages):
-    """
-    像个正常人一样聊天，不要总是分析意义。
-    """
     try:
-        # 转换 Streamlit 历史格式为 OpenAI 格式
         api_messages = [{"role": "system", "content": "你是一个温暖、智慧的对话伙伴。请用自然、流畅的语言与用户交流。不要输出JSON，就像朋友聊天一样。"}]
         for msg in history_messages:
-            if msg["role"] != "system": # 过滤掉系统消息
+            if msg["role"] != "system":
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
         
         response = client.chat.completions.create(
             model=TARGET_MODEL,
             messages=api_messages,
-            temperature=0.8, # 温度高一点，更活泼
+            temperature=0.8,
             stream=True 
         )
         return response
@@ -85,9 +81,6 @@ def get_normal_response(history_messages):
 
 # --- 🧠 引擎 B：意义分析 (MSC Analyst) ---
 def analyze_meaning_background(text):
-    """
-    在后台默默分析，只有“有料”的时候才返回 JSON
-    """
     prompt = f"""
     任务：判断用户的这句话是否有深层意义。
     输入："{text}"
@@ -122,13 +115,17 @@ def get_embedding(text):
 
 def save_node(username, content, data, vector):
     try:
+        # 🛡️ 兼容性修正：确保 logic_score 有值
+        logic = data.get('logic_score')
+        if logic is None: logic = 0.5
+
         insert_data = {
             "username": username, "content": content,
             "care_point": data.get('care_point', '未命名'),
             "meaning_layer": data.get('meaning_layer', '暂无结构'),
             "insight": data.get('insight', '生成中断'),
             "mode": "日常", "vector": json.dumps(vector),
-            "logic_score": data.get('logic_score', 0.5),
+            "logic_score": logic,
             "keywords": json.dumps([]) 
         }
         supabase.table('nodes').insert(insert_data).execute()
@@ -141,15 +138,19 @@ def get_recent_nodes(username, limit=5):
         return res.data
     except: return []
 
-# --- 🎨 侧边栏小地图 ---
+# --- 🎨 侧边栏小地图 (修正版) ---
 def render_mini_map(nodes):
     if not nodes: return
     graph_nodes = []
     graph_links = []
     for i, node in enumerate(nodes):
+        # 🌟 修复点：处理旧数据中 logic_score 为 None 的情况
+        logic = node.get('logic_score')
+        if logic is None: logic = 0.5 # 默认值
+
         graph_nodes.append({
             "name": str(node['id']),
-            "symbolSize": 10 + (node['logic_score'] * 10),
+            "symbolSize": 10 + (logic * 10),
             "value": node['care_point']
         })
         if i > 0:
@@ -167,7 +168,7 @@ def render_mini_map(nodes):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v15.0 Dual Stream", layout="wide")
+st.set_page_config(page_title="MSC v15.1 Fix", layout="wide")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
@@ -188,7 +189,7 @@ if not st.session_state.logged_in:
                     st.session_state.username = u
                     st.session_state.nickname = res[0]['nickname']
                     st.session_state.messages = [] 
-                    st.session_state.new_node = None # 用于触发右侧更新
+                    st.session_state.new_node = None 
                     st.rerun()
                 else: st.error("账号或密码错误")
         with tab2:
@@ -199,9 +200,8 @@ if not st.session_state.logged_in:
                 if add_user(nu, np_pass, nn): st.success("注册成功，请登录")
                 else: st.error("注册失败")
 
-# --- 主界面 (双流布局) ---
+# --- 主界面 ---
 else:
-    # 侧边栏：全局导航
     with st.sidebar:
         st.caption(f"当前用户: {st.session_state.nickname}")
         if st.button("退出"):
@@ -209,71 +209,54 @@ else:
             st.rerun()
         st.divider()
         st.caption("🌐 全局拓扑")
-        # 这里放全局地图
         history = get_recent_nodes(st.session_state.username, limit=20)
         render_mini_map(history)
 
-    # 主区域：左7右3
     col_chat, col_insight = st.columns([0.7, 0.3], gap="large")
 
-    # === 左侧：聊天流 ===
     with col_chat:
         st.subheader("💬 对话")
         
-        # 显示历史聊天
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # 输入框
         if prompt := st.chat_input("说点什么..."):
-            # 1. 显示用户消息
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # 2. 生成正常回复 (流式)
             with st.chat_message("assistant"):
                 stream = get_normal_response(st.session_state.messages)
                 response_text = st.write_stream(stream)
             
-            # 保存助手回复
             st.session_state.messages.append({"role": "assistant", "content": response_text})
             
-            # 3. 触发后台意义分析 (Trigger)
             with st.spinner("⚡ 正在后台解析结构..."):
                 analysis = analyze_meaning_background(prompt)
                 
                 if analysis.get("valid", False):
-                    # 如果有意义，存库
                     vec = get_embedding(prompt)
                     save_node(st.session_state.username, prompt, analysis, vec)
-                    # 标记有新节点，强制刷新页面以更新右侧
                     st.session_state.new_node = analysis
                     st.rerun()
                 else:
-                    # 如果只是闲聊，什么都不做
                     pass
 
-    # === 右侧：意义流 (Annotation) ===
     with col_insight:
         st.subheader("🧩 意义注释")
         
-        # 获取最近生成的节点
         recent_nodes = get_recent_nodes(st.session_state.username, limit=5)
         
         if not recent_nodes:
             st.info("这里是你的思想副驾驶。\n\n当你聊到有深度的内容时，我会在这里为你做笔记。")
         
         for node in recent_nodes:
-            # 这里的 UI 设计成“浓缩卡片”
-            # 使用 expander 实现“点击展开详情”
             with st.expander(f"✨ {node['care_point']}", expanded=False):
                 st.markdown(f"**Insight:** {node['insight']}")
                 st.caption(f"Structure: {node['meaning_layer']}")
                 st.caption(f"Time: {node['created_at'][:16]}")
                 
-        # 如果刚刚生成了新节点，放个烟花庆祝一下
         if st.session_state.get("new_node"):
             st.toast(f"捕获新意义：{st.session_state.new_node['care_point']}")
-            st.session_state.new_node = None # 清除标记
+            st.session_state.new_node = None
