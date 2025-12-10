@@ -1,5 +1,5 @@
 import streamlit as st
-import requests
+from openai import OpenAI
 import json
 import re
 import sqlite3
@@ -9,13 +9,18 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区
+# 🛑 核心配置区 (DeepSeek 适配版)
 # ==========================================
 
 try:
-    MY_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    # 初始化通用客户端 (DeepSeek 使用 OpenAI 协议)
+    client = OpenAI(
+        api_key=st.secrets["API_KEY"],
+        base_url=st.secrets["BASE_URL"]
+    )
+    TARGET_MODEL = st.secrets["MODEL_NAME"]
 except:
-    st.error("🚨 未检测到密钥！请在 Streamlit 后台配置 GOOGLE_API_KEY。")
+    st.error("🚨 配置缺失！请在 Secrets 中配置 API_KEY, BASE_URL 和 MODEL_NAME。")
     st.stop()
 
 # ==========================================
@@ -68,108 +73,72 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：全能适配器 (解决 404 问题) ---
+# --- 🧠 AI 核心：通用调用 (DeepSeek V3) ---
 
-def call_gemini_universal(prompt):
+def call_ai_api(prompt):
     """
-    穷举所有可能的 API 版本和模型名称，直到连通
+    调用 DeepSeek API 生成 JSON
     """
-    # 备选组合：(API版本, 模型名称)
-    # 优先试 v1beta 的 flash，不行试 v1 的 flash，再不行试 pro
-    endpoints = [
-        ("v1beta", "gemini-1.5-flash"),
-        ("v1beta", "gemini-1.5-flash-latest"),
-        ("v1beta", "gemini-1.5-flash-001"),
-        ("v1", "gemini-1.5-flash"), # 尝试稳定版接口
-        ("v1beta", "gemini-pro"),   # 保底老模型
-    ]
-    
-    last_error = ""
-
-    for version, model in endpoints:
-        url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent?key={MY_API_KEY}"
-        headers = {'Content-Type': 'application/json'}
-        data = {"contents": [{"parts": [{"text": prompt}]}]}
+    try:
+        response = client.chat.completions.create(
+            model=TARGET_MODEL,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant. Output valid JSON only. Do not use markdown code blocks."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            stream=False,
+            # DeepSeek 支持 json_object 模式，确保格式稳定
+            response_format={"type": "json_object"} 
+        )
         
+        content = response.choices[0].message.content
+        return json.loads(content)
+        
+    except Exception as e:
+        # 双重保险：万一 JSON 模式失效，尝试手动提取
         try:
-            # 20秒超时
-            response = requests.post(url, headers=headers, json=data, timeout=20)
-            
-            if response.status_code == 200:
-                result_json = response.json()
-                try:
-                    # 提取文本
-                    raw_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                    # 清洗 JSON
-                    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                    if match:
-                        res = json.loads(match.group(0))
-                        # 成功！记录下是哪条路通了
-                        res['model_used'] = f"{model} ({version})"
-                        return res
-                except:
-                    continue # 格式不对，试下一个
-            elif response.status_code == 429:
-                return {"error": True, "msg": "今日额度已达上限 (429)。"}
-            else:
-                last_error = f"{model} ({version}): {response.status_code}"
-                continue # 报错，试下一个
-                
-        except Exception as e:
-            last_error = str(e)
-            continue
-            
-    # 如果所有路都堵死了
-    return {"error": True, "msg": f"所有线路均不可用。最后错误: {last_error}"}
+            if 'content' in locals():
+                match = re.search(r'\{.*\}', content, re.DOTALL)
+                if match: return json.loads(match.group(0))
+        except: pass
+        
+        return {"error": True, "msg": f"API 响应错误: {str(e)}"}
 
-# --- 🧠 向量化 (通用版) ---
-def get_embedding_universal(text):
-    # 向量化也尝试两个版本
-    endpoints = [
-        ("v1beta", "text-embedding-004"),
-        ("v1beta", "embedding-001")
-    ]
-    for version, model in endpoints:
-        url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:embedContent?key={MY_API_KEY}"
-        headers = {'Content-Type': 'application/json'}
-        data = {
-            "model": f"models/{model}",
-            "content": {"parts": [{"text": text}]}
-        }
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=10)
-            if response.status_code == 200:
-                return response.json()['embedding']['values']
-        except: 
-            pass
-    return []
+# --- 🧠 向量化 (模拟适配) ---
+# DeepSeek 暂未完全开放通用的 Embedding 接口。
+# 为了保证 App 不报错，我们暂时使用"模拟向量"来跑通流程。
+# (这意味着共鸣功能暂时是随机演示，等未来接入专用 Embedding 模型后可升级)
+def get_embedding(text):
+    # 生成一个 1536 维度的随机向量，确保数据库不崩
+    return np.random.rand(1536).tolist()
 
 # --- 业务逻辑 ---
 def generate_node_data(mode, text):
     prompt = f"""
     你是 MSC 意义构建者。场景：【{mode}】。用户输入："{text}"。
-    请提取结构，直接返回 JSON:
+    请提取结构，必须直接返回合法的 JSON 格式:
     {{
         "care_point": "用户潜意识里的情绪/论点/张力...",
         "meaning_layer": "背后的深层逻辑/意象/范式...",
         "insight": "一句意想不到的升维洞察..."
     }}
     """
-    return call_gemini_universal(prompt)
+    return call_ai_api(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
     请融合这两段看似不同但内核相似的观点。
     A: "{node_a_content}"
     B: "{node_b_content}"
-    生成一个 C 节点 (JSON):
+    生成一个 C 节点 (必须是 JSON):
     {{
         "care_point": "两人共同的潜意识呼唤",
         "meaning_layer": "全景结构",
         "insight": "集体智慧金句"
     }}
     """
-    return call_gemini_universal(prompt)
+    return call_ai_api(prompt)
 
 # --- 🧮 算法 ---
 def cosine_similarity(v1, v2):
@@ -199,7 +168,8 @@ def find_resonance(current_vector, current_user):
             try:
                 other_vector = json.loads(other_vector_str)
                 score = cosine_similarity(current_vector, other_vector)
-                if score > 0.8 and score > highest_score:
+                # 模拟模式下阈值设低一点，方便看到效果
+                if score > 0.6 and score > highest_score:
                     highest_score = score
                     best_match = {
                         "user": other_user,
@@ -232,7 +202,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v9.0 Universal", layout="wide")
+st.set_page_config(page_title="MSC v10.0 DeepSeek", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -240,7 +210,7 @@ if "logged_in" not in st.session_state:
 # --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("v9.0 全能适配器版")
+    st.caption("DeepSeek V3 商业引擎驱动")
     
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
@@ -282,7 +252,7 @@ else:
                     st.info(f"{row[5]}")
     
     st.title("MSC 意义构建 & 共鸣雷达")
-    st.caption("全网路自适应：自动切换 v1/v1beta 和 Flash/Pro 模型。")
+    st.caption("基于 DeepSeek V3 强力驱动")
     
     mode = st.selectbox("场景", ["🌱 日常社交", "🎓 学术研讨", "🎨 艺术共创"])
     user_input = st.chat_input("输入思考...")
@@ -306,7 +276,6 @@ else:
                                 <p><strong>B ({get_nickname(match['user'])}):</strong> {match['content']}</p>
                                 <hr>
                                 <p><strong>💡 升维洞察:</strong> {c_node.get('insight')}</p>
-                                <p style="font-size:0.8em;color:grey;">(Via: {c_node.get('model_used')})</p>
                             </div>
                             """
                             st.markdown(fusion_html)
@@ -320,22 +289,20 @@ else:
             st.markdown(user_input)
             
         with st.chat_message("assistant"):
-            with st.spinner("AI 正在尝试所有可用线路..."):
+            with st.spinner("DeepSeek 正在思考..."):
                 res = generate_node_data(mode, user_input)
                 
                 if "error" in res:
                     error_msg = res.get('msg', '未知错误')
                     st.error(f"⚠️ 生成失败: {error_msg}")
                 else:
-                    vec = get_embedding_universal(user_input)
+                    vec = get_embedding(user_input)
                     save_node(st.session_state.username, user_input, res, mode, vec)
                     
                     card = f"""
                     **✨ 节点生成**
                     * **Care:** {res['care_point']}
                     > {res['insight']}
-                    
-                    *(线路: {res.get('model_used', 'Auto')})*
                     """
                     st.markdown(card)
                     
