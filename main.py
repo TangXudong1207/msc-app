@@ -2,6 +2,8 @@ import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
+import pydeck as pdk # 引入 PyDeck 做 3D
+import pandas as pd  # 引入 Pandas 处理数据
 import json
 import re
 import hashlib
@@ -35,10 +37,6 @@ except Exception as e:
 # --- 🛠️ 基础设施 ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
-
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text: return True
-    return False
 
 def add_user(username, password, nickname):
     try:
@@ -166,7 +164,7 @@ def call_ai_api(prompt):
     try:
         response = client.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
+            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
             temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
@@ -194,22 +192,32 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点。
-    2. 提取 MSC 结构。
-    3. 【雷达评分】Care,Curiosity,Reflection,Coherence,Empathy,Agency,Aesthetic (0-10)。
+    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
+    2. 提取 Topic Tags (表层话题)。
+    3. 提取 Meaning Tags (深层价值)。
+    4. 提取 Care Point (简短关切)。
+    5. 提取 Meaning Layer (结构分析)。
+    6. 提取 Insight (升维洞察)。
+    
     返回 JSON:
     {{
         "valid": true,
-        "care_point": "...", "meaning_layer": "...", "insight": "...",
-        "logic_score": 0.8, "keywords": [],
-        "radar_scores": {{ "Care": 7 ... }}
+        "care_point": "...",
+        "meaning_layer": "...",
+        "insight": "...",
+        "logic_score": 0.8,
+        "keywords": ["tag1", "tag2"], 
+        "topic_tags": ["topic1", "topic2"],
+        "existential_q": false
     }}
     """
     return call_ai_api(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
-    融合 A: "{node_a_content}" B: "{node_b_content}"。
+    任务：基于 Deep Meaning 共鸣进行融合。
+    A: "{node_a_content}"
+    B: "{node_b_content}"
     返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
     """
     return call_ai_api(prompt)
@@ -235,28 +243,22 @@ def find_resonance(current_vector, current_user):
         return best_match
     except: return None
 
-# --- 🌍 2D 地球渲染 (ECharts 地图版) ---
+# --- 🌍 2D 地球渲染 (修复参数) ---
 def render_2d_world_map(nodes):
-    """
-    2D 夜景地球：直观、清晰、深色风格
-    """
-    # 模拟全球数据点
     map_data = []
-    # 添加一个北京的基准点作为示例，确保有数据显示
-    map_data.append({"name": "MSC Center", "value": [116.4, 39.9, 100]}) 
+    # 添加几个基准点，确保地图加载
+    map_data.append({"name": "MSC HQ", "value": [121.4, 31.2, 100]}) 
     
     for _ in range(len(nodes) + 20): 
-        # 随机分布在主要城市区域
-        lon = np.random.uniform(-120, 140) 
-        lat = np.random.uniform(10, 60)
+        lon = np.random.uniform(-150, 150) 
+        lat = np.random.uniform(-40, 60)
         val = np.random.randint(10, 100)
-        # 🌟 核心修复：强制转 float/int
         map_data.append({"name": "Node", "value": [float(lon), float(lat), int(val)]})
 
     option = {
-        "backgroundColor": "#000",
+        "backgroundColor": "#080b10",
         "title": {
-            "text": "🌍 MSC 全球共鸣",
+            "text": "🌍 全球意义分布",
             "left": "center",
             "textStyle": {"color": "#fff"}
         },
@@ -265,7 +267,7 @@ def render_2d_world_map(nodes):
             "roam": True,
             "label": {"emphasis": {"show": False}},
             "itemStyle": {
-                "normal": {"areaColor": "#0d1b2a", "borderColor": "#1b263b"}, # 深蓝海洋风格
+                "normal": {"areaColor": "#1a2639", "borderColor": "#2c3e50"}, 
                 "emphasis": {"areaColor": "#2a9d8f"}
             }
         },
@@ -276,23 +278,21 @@ def render_2d_world_map(nodes):
                 "coordinateSystem": "geo",
                 "data": map_data,
                 "symbolSize": 5,
-                "label": {"normal": {"show": False}, "emphasis": {"show": False}},
                 "itemStyle": {
-                    "emphasis": {"borderColor": "#fff", "borderWidth": 1},
-                    "color": "#ffd60a" # 亮黄色节点
+                    "color": "#ffd60a", # 亮黄
+                    "shadowBlur": 10,
+                    "shadowColor": "#ffd60a"
                 }
             }
         ]
     }
-    st_echarts(options=option, height="500px", map="world")
+    # 🌟 修复：移除 map="world" 参数，因为 option 已经包含了 map 配置
+    st_echarts(options=option, height="500px")
 
-# --- 🌌 3D 星河渲染 (ECharts GL 修复版) ---
+# --- 🌌 3D 星河渲染 (PyDeck 原生版 - 解决白屏) ---
 def render_3d_galaxy(nodes):
-    """
-    3D 意义星河：强制类型转换 + 纯黑背景
-    """
-    if len(nodes) < 5:
-        st.info("🌌 星辰汇聚中，请再多生成几个节点...")
+    if len(nodes) < 3:
+        st.info("🌌 星河正在汇聚，请多生成几个节点...")
         return
 
     vectors, labels = [], []
@@ -306,48 +306,46 @@ def render_3d_galaxy(nodes):
     
     if not vectors: return
 
-    # PCA 降维
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
-    
-    # 聚类 (模拟星云颜色)
-    n_clusters = min(3, len(vectors))
-    kmeans = KMeans(n_clusters=n_clusters)
-    clusters = kmeans.fit_predict(vectors)
-    
-    scatter_data = []
-    colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff"]
-    
+    coords = coords / np.max(np.abs(coords)) * 100 
+
+    df_data = []
     for i, (x, y, z) in enumerate(coords):
-        cluster_id = int(clusters[i]) # 🌟 核心修复：强制转 int
-        scatter_data.append({
-            "name": labels[i],
-            # 🌟 核心修复：强制转 float，防止 Marshall 报错
-            "value": [float(x), float(y), float(z), cluster_id], 
-            "itemStyle": {"color": colors[cluster_id % len(colors)]}
+        df_data.append({
+            "position": [x, y, z],
+            "care": labels[i],
+            # 赛博朋克配色：青色和紫色交替
+            "color": [0, 255, 242] if i%2==0 else [255, 0, 212] 
         })
+    
+    df = pd.DataFrame(df_data)
 
-    option = {
-        "backgroundColor": "#000", # 纯黑背景
-        "grid3D": {
-            "viewControl": {"autoRotate": True, "projection": "perspective"},
-            "axisLine": {"lineStyle": {"color": "#fff"}}, # 白色坐标轴
-            "splitLine": {"show": False}
-        },
-        "series": [{
-            "type": "scatter3D",
-            "data": scatter_data,
-            "symbolSize": 8,
-            "label": {
-                "show": True, 
-                "formatter": "{b}", # 显示 Care Point
-                "textStyle": {"color": "white", "fontSize": 10, "backgroundColor": "rgba(0,0,0,0.5)"}
-            }
-        }]
-    }
-    st_echarts(options=option, height="600px")
+    point_cloud = pdk.Layer(
+        "PointCloudLayer",
+        data=df,
+        get_position="position",
+        get_normal=[0, 1, 0],
+        get_color="color",
+        point_size=8,
+        pickable=True, 
+    )
 
-# --- 侧边栏小地图 ---
+    view_state = pdk.ViewState(
+        target=[0, 0, 0],
+        zoom=3,
+        rotation_orbit=30,
+        pitch=45
+    )
+
+    st.pydeck_chart(pdk.Deck(
+        map_style=None, # 无地图背景，纯黑
+        initial_view_state=view_state,
+        layers=[point_cloud],
+        tooltip={"html": "<b>{care}</b>", "style": {"backgroundColor": "black", "color": "white"}}
+    ))
+
+# --- 侧边栏 ---
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
@@ -395,7 +393,7 @@ def view_fullscreen_map(nodes):
 @st.dialog("🌍 MSC World · 上帝视角", width="large")
 def view_msc_world():
     global_nodes = get_global_nodes()
-    tab1, tab2 = st.tabs(["🌍 地球夜景 (2D Map)", "🌌 意义星河 (3D Galaxy)"])
+    tab1, tab2 = st.tabs(["🌍 地球夜景", "🌌 意义星河"])
     with tab1: render_2d_world_map(global_nodes)
     with tab2: render_3d_galaxy(global_nodes)
 
@@ -403,7 +401,7 @@ def view_msc_world():
 # 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v23.1 2D Earth", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v23.2 Visual Fix", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
@@ -435,6 +433,8 @@ else:
     chat_history = get_active_chats(st.session_state.username)
     nodes_map = get_active_nodes_map(st.session_state.username)
     all_nodes_list = get_all_nodes_for_map(st.session_state.username)
+    
+    # 获取用户画像
     user_profile = get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
@@ -453,6 +453,7 @@ else:
         c1, c2 = st.columns(2)
         if c1.button("🗑️ 回收站"): st.toast("功能维护中...")
         if c2.button("退出"): st.session_state.logged_in = False; st.rerun()
+        
         st.divider()
         render_cyberpunk_map(all_nodes_list, height="200px")
         if st.button("🔭 全屏", use_container_width=True): view_fullscreen_map(all_nodes_list)
