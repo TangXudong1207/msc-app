@@ -1,7 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
-from streamlit_echarts import st_echarts # 🌟 新增：引入ECharts绘图库
+from streamlit_echarts import st_echarts
 import json
 import re
 import hashlib
@@ -30,7 +30,7 @@ except Exception as e:
 
 # ==========================================
 
-# --- 🛠️ 基础设施 --- (保持不变)
+# --- 🛠️ 基础设施 ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -61,7 +61,7 @@ def get_nickname(username):
         return username
     except: return username
 
-# --- 🧠 AI 核心 --- (保持不变)
+# --- 🧠 AI 核心 ---
 def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
@@ -142,112 +142,113 @@ def save_node(username, content, data, mode, vector):
 
 def get_user_nodes(username):
     try:
-        res = supabase.table('nodes').select("*").eq('username', username).order('id', desc=False).execute() # 按时间正序排列用于画图
+        res = supabase.table('nodes').select("*").eq('username', username).order('id', desc=False).execute()
         return res.data
     except: return []
 
-# --- 🎨 赛博朋克地图渲染器 (新功能) ---
-def render_cyberpunk_map(nodes):
+# --- 🎨 赛博朋克地图渲染器 (升级版：支持动态高度) ---
+def render_cyberpunk_map(nodes, height="300px", is_fullscreen=False):
     if not nodes:
-        st.caption("暂无数据，快去生成第一个节点吧！")
+        st.caption("暂无数据，思想宇宙等待大爆炸...")
         return
 
-    # 1. 准备数据节点 (Nodes)
     graph_nodes = []
     graph_links = []
     categories = [{"name": "日常"}, {"name": "学术"}, {"name": "艺术"}]
     
+    # 字体大小根据是否全屏调整
+    label_size = 14 if is_fullscreen else 10
+    symbol_size = 30 if is_fullscreen else 15
+    repulsion = 1000 if is_fullscreen else 200 # 全屏时斥力更大，散得更开
+
     for i, node in enumerate(nodes):
-        # 截取 Care Point 作为节点名字
-        short_care = node['care_point'][:6] + "..." if len(node['care_point']) > 6 else node['care_point']
+        short_care = node['care_point'][:8] + "..." if len(node['care_point']) > 8 else node['care_point']
         
-        # 根据模式决定颜色类别
         cat_idx = 0
         if "学术" in node['mode']: cat_idx = 1
         elif "艺术" in node['mode']: cat_idx = 2
         
         graph_nodes.append({
-            "name": f"#{node['id']}", # 节点显示ID
+            "name": f"#{node['id']}", 
             "id": str(node['id']),
-            "symbolSize": 20,
+            "symbolSize": symbol_size,
             "category": cat_idx,
-            "value": node['insight'], # 鼠标悬停显示 Insight
-            "label": {"show": True, "position": "right", "color": "#fff"}, # 只有ID
-            # 存一些元数据，为了tooltip
-            "full_care": node['care_point'] 
+            "value": node['insight'],
+            # 全屏模式下，直接显示 Care Point
+            "label": {
+                "show": True, 
+                "position": "right", 
+                "color": "#fff",
+                "fontSize": label_size,
+                "formatter": short_care if is_fullscreen else "{b}"
+            }
         })
         
-        # 2. 准备连线 (Links) - 简单的线性时间演化
         if i > 0:
             prev_node = nodes[i-1]
             graph_links.append({
                 "source": str(prev_node['id']),
                 "target": str(node['id']),
-                "lineStyle": {"curveness": 0.2}
+                "lineStyle": {
+                    "curveness": 0.2,
+                    "color": "#00d2ff" if i % 2 == 0 else "#ff00d4", # 赛博霓虹配色
+                    "width": 2 if is_fullscreen else 1
+                }
             })
 
-    # 3. ECharts 配置项 (赛博朋克风)
     option = {
-        "backgroundColor": "#0e1117", # 与 Streamlit 深色模式融合
+        "backgroundColor": "#0e1117",
         "title": {
-            "text": "🧠 思想拓扑",
-            "subtext": "Evolution of Thought",
-            "textStyle": {"color": "#00d2ff"},
-            "left": "center"
+            "text": "🌌 思想星云" if is_fullscreen else "",
+            "left": "center",
+            "textStyle": {"color": "#fff"}
         },
         "tooltip": {
             "trigger": "item",
-            "formatter": "{b}: {c}" # 显示 ID 和 Insight
-        },
-        "legend": {
-            "data": ["日常", "学术", "艺术"],
-            "textStyle": {"color": "#ccc"},
-            "bottom": 0
+            "formatter": "{b}: {c}",
+            "backgroundColor": "rgba(50,50,50,0.7)",
+            "textStyle": {"color": "#fff"}
         },
         "series": [
             {
                 "type": "graph",
-                "layout": "force", # 力引导布局
+                "layout": "force",
                 "data": graph_nodes,
                 "links": graph_links,
                 "categories": categories,
-                "roam": True, # 允许缩放和平移
-                "label": {
-                    "position": "right",
-                    "formatter": "{b}" 
-                },
-                "lineStyle": {
-                    "color": "source",
-                    "curveness": 0.3,
-                    "width": 2
-                },
+                "roam": True,
+                "lineStyle": {"curveness": 0.3},
                 "force": {
-                    "repulsion": 300, # 斥力，防止节点挤在一起
-                    "edgeLength": 50
+                    "repulsion": repulsion,
+                    "edgeLength": [50, 200]
                 },
-                # 炫光效果
                 "itemStyle": {
                     "shadowBlur": 10,
-                    "shadowColor": "rgba(0, 255, 255, 0.5)"
+                    "shadowColor": "rgba(255, 255, 255, 0.5)"
                 }
             }
         ]
     }
     
-    # 渲染图表 (高度300px，适合侧边栏)
-    st_echarts(options=option, height="400px")
+    st_echarts(options=option, height=height)
+
+# --- 🖥️ 全屏弹窗函数 (Dialog) ---
+@st.dialog("🔭 思想星云 · 全景视图", width="large")
+def view_fullscreen_map(nodes):
+    st.caption("拖动节点以探索您的思维结构...")
+    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
 
 # ==========================================
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v12.0 Cyberpunk", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v13.0 Fullscreen", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("DeepSeek + Supabase + CyberMap")
+    st.caption("v13.0 全屏星云版")
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
@@ -270,7 +271,7 @@ if not st.session_state.logged_in:
             else: st.error("已存在")
 
 else:
-    # --- 侧边栏：思想地图 ---
+    # --- 侧边栏 ---
     with st.sidebar:
         st.write(f"👋 **{st.session_state.nickname}**")
         if st.button("退出"):
@@ -280,25 +281,28 @@ else:
         
         st.divider()
         
-        # 🌟 这里的旧列表被替换成了酷炫的地图！
+        # 获取历史数据
         history = get_user_nodes(st.session_state.username)
+        
         if history:
-            # 调用地图渲染函数
-            render_cyberpunk_map(history)
+            # 1. 渲染迷你地图
+            render_cyberpunk_map(history, height="250px", is_fullscreen=False)
+            
+            # 2. 🔥 全屏按钮
+            if st.button("🔍 全屏沉浸模式 (Full View)", use_container_width=True):
+                view_fullscreen_map(history)
             
             st.markdown("---")
-            st.caption("📜 **详细列表**")
-            # 保留折叠列表以便查看详细文字
-            # 倒序显示，让最新的在最上面
             for row in reversed(history):
                 with st.expander(f"#{row['id']} {row['care_point'][:8]}..."):
                     st.caption(f"{row['created_at'][:16]}")
                     st.write(f"**原话:** {row['content']}")
                     st.success(f"💡 {row['insight']}")
+        else:
+            st.info("暂无思想节点")
     
     # --- 主界面 ---
     st.title("MSC 意义构建 & 共鸣雷达")
-    st.caption("基于拓扑地图的思想进化系统")
     
     mode = st.selectbox("场景", ["🌱 日常社交", "🎓 学术研讨", "🎨 艺术共创"])
     user_input = st.chat_input("输入思考...")
@@ -361,4 +365,4 @@ else:
                     
                     st.session_state.messages.append(msg_payload)
                     time.sleep(1)
-                    st.rerun() # 强制刷新，让侧边栏地图更新
+                    st.rerun()
