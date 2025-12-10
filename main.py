@@ -8,8 +8,8 @@ import hashlib
 import time
 import numpy as np
 from datetime import datetime
-from sklearn.decomposition import PCA # 🌟 新增：用于把高维思想降维成3D坐标
-from sklearn.cluster import KMeans    # 🌟 新增：用于寻找星云聚类
+from sklearn.decomposition import PCA 
+from sklearn.cluster import KMeans    
 
 # ==========================================
 # 🛑 核心配置区
@@ -44,7 +44,11 @@ def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False
-        data = {"username": username, "password": make_hashes(password), "nickname": nickname}
+        default_radar = {
+            "Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0,
+            "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0
+        }
+        data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
         return True
     except: return False
@@ -62,6 +66,25 @@ def get_nickname(username):
         if res.data: return res.data[0]['nickname']
         return username
     except: return username
+
+def get_user_profile(username):
+    try:
+        res = supabase.table('users').select("nickname, radar_profile").eq('username', username).execute()
+        if res.data: return res.data[0]
+    except: pass
+    return {"nickname": username, "radar_profile": None}
+
+# --- 🏆 游戏化：段位计算 ---
+def calculate_rank(radar_data):
+    if not radar_data: return "倔强青铜 III", "🥉"
+    total_score = sum(radar_data.values())
+    if total_score < 25: return "倔强青铜", "🥉"
+    elif total_score < 30: return "秩序白银", "🥈"
+    elif total_score < 38: return "荣耀黄金", "🥇"
+    elif total_score < 46: return "尊贵铂金", "💎"
+    elif total_score < 54: return "永恒钻石", "💠"
+    elif total_score < 62: return "至尊星耀", "✨"
+    else: return "最强王者", "👑"
 
 # --- 💾 数据库操作 ---
 def save_chat(username, role, content):
@@ -113,10 +136,8 @@ def get_all_nodes_for_map(username):
         return res.data
     except: return []
 
-# 新增：获取全网所有节点（为了构建大星空）
 def get_global_nodes():
     try:
-        # 限制取最新的200个节点，防止计算量过大炸内存
         res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
         return res.data
     except: return []
@@ -206,21 +227,16 @@ def find_resonance(current_vector, current_user):
         return best_match
     except: return None
 
-# --- 🌍 3D 地球与星空渲染 (上帝视角) ---
+# --- 🌍 3D 地球与星空渲染 (修复版) ---
 
 def render_3d_earth(nodes):
-    """
-    地球夜景模式：模拟节点在全球的分布
-    """
-    # 模拟数据：因为没有真实IP，我们随机生成一些世界主要城市的坐标
-    # 格式：[经度, 纬度, 亮度]
     data = []
-    for _ in range(len(nodes) + 10): # 基础点 + 节点点
-        # 随机分布在北半球主要区域，模拟人类活动
+    for _ in range(len(nodes) + 10): 
         lon = np.random.uniform(-130, 150) 
         lat = np.random.uniform(-30, 60)
         value = np.random.randint(10, 100)
-        data.append([lon, lat, value])
+        # 🌟 修复：明确转换为 Python float，防止 numpy 类型报错
+        data.append([float(lon), float(lat), int(value)])
 
     option = {
         "backgroundColor": "#000",
@@ -238,21 +254,17 @@ def render_3d_earth(nodes):
             "coordinateSystem": "globe",
             "data": data,
             "symbolSize": 5,
-            "itemStyle": {"color": "#ffaa00", "opacity": 0.8}, # 金色灯光
+            "itemStyle": {"color": "#ffaa00", "opacity": 0.8}, 
             "blendMode": "lighter"
         }]
     }
     st_echarts(options=option, height="500px")
 
 def render_3d_galaxy(nodes):
-    """
-    意义星河模式：使用 PCA 降维，展示语义结构
-    """
     if len(nodes) < 5:
         st.warning("🌌 星辰数量不足，无法聚合成星系。请多生成几个意义节点（至少5个）。")
         return
 
-    # 1. 准备向量数据
     vectors = []
     labels = []
     
@@ -266,28 +278,22 @@ def render_3d_galaxy(nodes):
     
     if not vectors: return
 
-    # 2. 核心数学：PCA 降维 (1536维 -> 3维)
-    # 这就是把“意义”变成“空间坐标”的过程
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
     
-    # 3. 核心数学：K-Means 聚类 (寻找星云中心)
-    # 我们假设有 3 个主要星云 (Hope, Responsibility, etc.)
     n_clusters = min(3, len(vectors))
     kmeans = KMeans(n_clusters=n_clusters)
     clusters = kmeans.fit_predict(vectors)
     
-    # 4. 构建图表数据
     scatter_data = []
-    
-    # 颜色映射
     colors = ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff"]
     
     for i, (x, y, z) in enumerate(coords):
-        cluster_id = clusters[i]
+        cluster_id = int(clusters[i]) # 🌟 修复：转为 int
         scatter_data.append({
             "name": labels[i],
-            "value": [x, y, z, cluster_id], # 第4维是颜色分类
+            # 🌟 修复：全部转为 float
+            "value": [float(x), float(y), float(z), cluster_id], 
             "itemStyle": {"color": colors[cluster_id % len(colors)]}
         })
 
@@ -314,8 +320,8 @@ def render_3d_galaxy(nodes):
             "data": scatter_data,
             "symbolSize": 10,
             "label": {
-                "show": True, # 显示关键词！
-                "formatter": "{b}", # 显示 Care Point
+                "show": True, 
+                "formatter": "{b}",
                 "textStyle": {"color": "white", "fontSize": 10, "backgroundColor": "rgba(0,0,0,0.5)"}
             }
         }]
@@ -323,16 +329,44 @@ def render_3d_galaxy(nodes):
     st_echarts(options=option, height="600px")
 
 # --- 侧边栏小地图 ---
+def render_radar_chart(radar_dict, height="200px"):
+    keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
+    scores = [radar_dict.get(k, 3.0) for k in keys]
+    
+    option = {
+        "backgroundColor": "transparent",
+        "radar": {
+            "indicator": [{"name": k, "max": 10} for k in keys],
+            "splitNumber": 4,
+            "axisName": {"color": "#bbb"},
+            "splitLine": {"lineStyle": {"color": ["#333", "#444", "#555", "#666"]}},
+            "splitArea": {"show": False}
+        },
+        "series": [{
+            "type": "radar",
+            "data": [{
+                "value": scores,
+                "name": "Meta-Humanity",
+                "areaStyle": {"color": "rgba(0, 255, 242, 0.4)"},
+                "lineStyle": {"color": "#00fff2", "width": 2},
+                "itemStyle": {"color": "#fff"}
+            }]
+        }]
+    }
+    st_echarts(options=option, height=height)
+
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
-    # ... (保持原样，省略以节省空间) ...
     if not nodes: return
     graph_nodes, graph_links = [], []
+    symbol_base = 30 if is_fullscreen else 15
+    repulsion = 1000 if is_fullscreen else 300
+
     for i, node in enumerate(nodes):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
         graph_nodes.append({
             "name": str(node['id']), "id": str(node['id']),
-            "symbolSize": (30 if is_fullscreen else 15) * (0.8 + logic),
+            "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
             "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
             "vector": json.loads(node['vector']) if node.get('vector') else None,
@@ -350,7 +384,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
                 elif score > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
     option = {
         "backgroundColor": "#0e1117",
-        "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
+        "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": repulsion, "gravity": 0.05}, "itemStyle": {"shadowBlur": 10}}]
     }
     st_echarts(options=option, height=height)
 
@@ -360,27 +394,18 @@ def view_fullscreen_map(nodes):
 
 @st.dialog("🌍 MSC World · 上帝视角", width="large")
 def view_msc_world():
-    # 1. 获取全网数据
     global_nodes = get_global_nodes()
-    
     tab1, tab2 = st.tabs(["🌍 地球夜景 (Earth)", "🌌 意义星河 (Galaxy)"])
-    
-    with tab1:
-        st.caption("这里展示了全球 MSC 节点的活跃分布（模拟数据）。")
-        render_3d_earth(global_nodes)
-    
-    with tab2:
-        st.caption("这是全人类意义的拓扑结构。相似的思想汇聚成星云，孤独的思想成为孤星。")
-        if len(global_nodes) > 3:
-            render_3d_galaxy(global_nodes)
-        else:
-            st.info("星系正在坍缩中... 需要更多数据才能形成星云。")
+    with tab1: render_3d_earth(global_nodes)
+    with tab2: 
+        if len(global_nodes) > 3: render_3d_galaxy(global_nodes)
+        else: st.info("星系正在坍缩中... 需要更多数据")
 
 # ==========================================
 # 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v22.0 World", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v22.1 Fixed", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
@@ -412,24 +437,34 @@ else:
     chat_history = get_active_chats(st.session_state.username)
     nodes_map = get_active_nodes_map(st.session_state.username)
     all_nodes_list = get_all_nodes_for_map(st.session_state.username)
+    
+    # 获取用户画像
+    user_profile = get_user_profile(st.session_state.username)
+    raw_radar = user_profile.get('radar_profile')
+    if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
+    elif isinstance(raw_radar, dict): radar_dict = raw_radar
+    else: radar_dict = {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
 
     with st.sidebar:
-        st.write(f"👋 **{st.session_state.nickname}**")
-        c1, c2 = st.columns(2)
+        # 🌟 修复：雷达图回来了！
+        rank_name, rank_icon = calculate_rank(radar_dict)
+        st.markdown(f"## {rank_icon} {st.session_state.nickname}")
+        render_radar_chart(radar_dict)
         
-        # 🌟 核心入口：MSC World
+        # 🌟 MSC World 入口
         if st.button("🌍 MSC World", use_container_width=True, type="primary"):
             view_msc_world()
             
+        c1, c2 = st.columns(2)
+        if c1.button("🗑️ 回收站"): st.toast("功能维护中...")
         if c2.button("退出"): st.session_state.logged_in = False; st.rerun()
         
         st.divider()
-        st.caption("我的小宇宙")
         render_cyberpunk_map(all_nodes_list, height="200px")
         if st.button("🔭 全屏", use_container_width=True): view_fullscreen_map(all_nodes_list)
 
     st.subheader("💬 意义流")
-    # ... (Chat logic same as before) ...
+    # ... (Chat UI logic) ...
     for msg in chat_history:
         col_chat, col_node = st.columns([0.65, 0.35], gap="small")
         with col_chat:
