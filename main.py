@@ -9,7 +9,7 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区
+# 🛑 核心配置区 (v8.1 修正版)
 # ==========================================
 
 try:
@@ -266,4 +266,70 @@ else:
     st.caption("当你的思想与他人重叠度 > 80% 时，系统将自动连接你们。")
     
     mode = st.selectbox("场景", ["🌱 日常社交", "🎓 学术研讨", "🎨 艺术共创"])
-    user_input =
+    user_input = st.chat_input("输入思考...")
+    
+    if "messages" not in st.session_state: st.session_state.messages = []
+    
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if "fusion_data" in msg:
+                match = msg["fusion_data"]
+                btn_key = f"btn_merge_{msg['id']}"
+                if st.button(f"⚡ 发现共鸣 ({match['score']}%)：与 {get_nickname(match['user'])} 合并？", key=btn_key):
+                    with st.spinner("正在融合..."):
+                        c_node = generate_fusion(msg["my_content"], match["content"])
+                        if "error" not in c_node:
+                            fusion_html = f"""
+                            <div style="background-color:#E8F5E9;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;">
+                                <h4>🧬 融合成功：集体智慧节点</h4>
+                                <p><strong>A ({st.session_state.nickname}):</strong> {msg['my_content']}</p>
+                                <p><strong>B ({get_nickname(match['user'])}):</strong> {match['content']}</p>
+                                <hr>
+                                <p><strong>💡 升维洞察:</strong> {c_node.get('insight')}</p>
+                            </div>
+                            """
+                            st.markdown(fusion_html)
+                            st.session_state.messages.append({"role": "assistant", "content": fusion_html})
+                        else:
+                            st.error(f"融合失败: {c_node.get('msg', '未知错误')}")
+
+    if user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("AI 正在思考..."):
+                res = generate_node_data(mode, user_input)
+                
+                if "error" in res:
+                    error_msg = res.get('msg', '未知错误')
+                    st.error(f"⚠️ 生成失败: {error_msg}")
+                else:
+                    vec = get_embedding_http(user_input)
+                    save_node(st.session_state.username, user_input, res, mode, vec)
+                    
+                    card = f"""
+                    **✨ 节点生成**
+                    * **Care:** {res['care_point']}
+                    > {res['insight']}
+                    """
+                    st.markdown(card)
+                    
+                    match = find_resonance(vec, st.session_state.username)
+                    
+                    msg_payload = {"role": "assistant", "content": card}
+                    
+                    if match:
+                        msg_id = int(time.time())
+                        msg_payload["fusion_data"] = match
+                        msg_payload["my_content"] = user_input
+                        msg_payload["id"] = msg_id
+                        
+                        st.success(f"🔔 滴！监测到与用户 **{get_nickname(match['user'])}** 的思想重叠度高达 **{match['score']}%**！")
+                        st.button(f"⚡ 发现共鸣 ({match['score']}%)：与 {get_nickname(match['user'])} 合并？", key=f"btn_merge_{msg_id}")
+                    
+                    st.session_state.messages.append(msg_payload)
+                    time.sleep(1)
+                    st.rerun()
