@@ -5,4 +5,5 @@ openai
 supabase
 streamlit-echarts
 scikit-learn
-pydeck
+plotly
+pandas
