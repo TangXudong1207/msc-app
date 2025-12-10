@@ -24,7 +24,7 @@ except:
 
 # ==========================================
 
-# --- 🛠️ 基础设施：数据库管理 ---
+# --- 🛠️ 基础设施 ---
 def init_db():
     conn = sqlite3.connect('msc.db', check_same_thread=False)
     c = conn.cursor()
@@ -72,13 +72,14 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心 ---
+# --- 🧠 AI 核心 (更新了 System Prompt) ---
 def call_ai_api(prompt):
     try:
         response = client.chat.completions.create(
             model=TARGET_MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant. Output valid JSON only."},
+                # 🌟 这里加了一句狠话：Do not use placeholder text!
+                {"role": "system", "content": "You are a profound philosopher and social connector. Output valid JSON only. Do not use placeholder text from the prompt instructions; generate specific, unique content based on the input."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -97,29 +98,42 @@ def call_ai_api(prompt):
 def get_embedding(text):
     return np.random.rand(1536).tolist()
 
-# --- 业务逻辑 ---
+# --- 📝 业务逻辑 (Prompt 大修) ---
 def generate_node_data(mode, text):
+    # 🌟 修改了 Prompt，把说明文字移到了 JSON 结构外面，防止 AI 抄袭
     prompt = f"""
-    你是 MSC 意义构建者。场景：【{mode}】。用户输入："{text}"。
-    请提取结构，必须直接返回合法的 JSON 格式:
+    场景模式：【{mode}】
+    用户输入："{text}"
+    
+    请深入分析用户的话，提取以下三个维度的内容：
+    1. care_point: 挖掘用户潜意识里真正焦虑、渴望或在乎的核心点。
+    2. meaning_layer: 分析这件事背后的社会结构、心理机制或哲学隐喻。
+    3. insight: 给出一句反直觉的、能让人豁然开朗的升维洞察金句。
+
+    请直接返回 JSON 格式：
     {{
-        "care_point": "用户潜意识里的情绪/论点/张力...",
-        "meaning_layer": "背后的深层逻辑/意象/范式...",
-        "insight": "一句意想不到的升维洞察..."
+        "care_point": "在此处填入你的分析...",
+        "meaning_layer": "在此处填入你的分析...",
+        "insight": "在此处填入你的洞察..."
     }}
     """
     return call_ai_api(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
+    # 🌟 修改了融合 Prompt
     prompt = f"""
-    请融合这两段看似不同但内核相似的观点。
-    A: "{node_a_content}"
-    B: "{node_b_content}"
-    生成一个 C 节点 (必须是 JSON):
+    任务：融合两个人的观点，创造集体智慧。
+    
+    用户 A 说: "{node_a_content}"
+    用户 B 说: "{node_b_content}"
+    
+    请分析两者的共鸣点，并生成一个新的 C 节点。
+    
+    请直接返回 JSON 格式：
     {{
-        "care_point": "两人共同的潜意识呼唤",
-        "meaning_layer": "全景结构",
-        "insight": "集体智慧金句"
+        "care_point": "在此处填入两人共同的深层诉求...",
+        "meaning_layer": "在此处填入结合后的全景视角...",
+        "insight": "在此处填入一句超越两人现有认知的全新洞察..."
     }}
     """
     return call_ai_api(prompt)
@@ -184,7 +198,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v10.1 UI Fix", layout="wide")
+st.set_page_config(page_title="MSC v10.2 Smart Prompt", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -238,10 +252,8 @@ else:
     
     if "messages" not in st.session_state: st.session_state.messages = []
     
-    # 🌟 修复部分：渲染历史消息时，开启 HTML 支持
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            # 这里加了 unsafe_allow_html=True，乱码就会变回漂亮的卡片
             st.markdown(msg["content"], unsafe_allow_html=True)
             
             if "fusion_data" in msg:
@@ -251,7 +263,6 @@ else:
                     with st.spinner("正在融合..."):
                         c_node = generate_fusion(msg["my_content"], match["content"])
                         if "error" not in c_node:
-                            # 生成漂亮的 HTML 卡片
                             fusion_html = f"""
                             <div style="background-color:#E8F5E9;padding:20px;border-radius:10px;border-left:5px solid #2E7D32;margin-top:10px;">
                                 <h4 style="color:#2E7D32;margin:0;">🧬 融合成功：集体智慧节点</h4>
@@ -264,9 +275,7 @@ else:
                                 </div>
                             </div>
                             """
-                            # 这里也加了 unsafe_allow_html=True
                             st.markdown(fusion_html, unsafe_allow_html=True)
-                            # 存入历史记录
                             st.session_state.messages.append({"role": "assistant", "content": fusion_html})
                         else:
                             st.error(f"融合失败: {c_node.get('msg', '未知错误')}")
