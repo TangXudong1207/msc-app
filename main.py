@@ -9,7 +9,7 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区 (v8.1 修正版)
+# 🛑 核心配置区
 # ==========================================
 
 try:
@@ -17,9 +17,6 @@ try:
 except:
     st.error("🚨 未检测到密钥！请在 Streamlit 后台配置 GOOGLE_API_KEY。")
     st.stop()
-
-# 🌟 强制锁定：只用这个额度最大(1500次/天)的模型
-TARGET_MODEL = "gemini-1.5-flash"
 
 # ==========================================
 
@@ -71,58 +68,80 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：HTTP 直连 + 强制锁定 ---
+# --- 🧠 AI 核心：全能适配器 (解决 404 问题) ---
 
-def call_gemini_http(prompt):
+def call_gemini_universal(prompt):
     """
-    直接连接指定模型，不进行自动寻路
+    穷举所有可能的 API 版本和模型名称，直到连通
     """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{TARGET_MODEL}:generateContent?key={MY_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    data = {"contents": [{"parts": [{"text": prompt}]}]}
+    # 备选组合：(API版本, 模型名称)
+    # 优先试 v1beta 的 flash，不行试 v1 的 flash，再不行试 pro
+    endpoints = [
+        ("v1beta", "gemini-1.5-flash"),
+        ("v1beta", "gemini-1.5-flash-latest"),
+        ("v1beta", "gemini-1.5-flash-001"),
+        ("v1", "gemini-1.5-flash"), # 尝试稳定版接口
+        ("v1beta", "gemini-pro"),   # 保底老模型
+    ]
     
-    try:
-        # 30秒超时
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        
-        if response.status_code == 200:
-            result_json = response.json()
-            try:
-                # 提取文本
-                raw_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                # 清洗 JSON
-                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                if match:
-                    res = json.loads(match.group(0))
-                    res['model_used'] = TARGET_MODEL
-                    return res
-                else:
-                    return {"error": True, "msg": "数据格式清洗失败"}
-            except:
-                return {"error": True, "msg": "API 返回结构异常"}
-        elif response.status_code == 429:
-             return {"error": True, "msg": "今日额度已达上限 (429)，请明天再试。"}
-        else:
-            return {"error": True, "msg": f"HTTP {response.status_code}: {response.text}"}
-            
-    except Exception as e:
-        return {"error": True, "msg": f"网络层错误: {str(e)}"}
+    last_error = ""
 
-# --- 🧠 向量化 (HTTP 版) ---
-def get_embedding_http(text):
-    # 向量模型通常比较稳定，但也锁定一个
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={MY_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    data = {
-        "model": "models/text-embedding-004",
-        "content": {"parts": [{"text": text}]}
-    }
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=10)
-        if response.status_code == 200:
-            return response.json()['embedding']['values']
-    except: 
-        pass
+    for version, model in endpoints:
+        url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:generateContent?key={MY_API_KEY}"
+        headers = {'Content-Type': 'application/json'}
+        data = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        try:
+            # 20秒超时
+            response = requests.post(url, headers=headers, json=data, timeout=20)
+            
+            if response.status_code == 200:
+                result_json = response.json()
+                try:
+                    # 提取文本
+                    raw_text = result_json['candidates'][0]['content']['parts'][0]['text']
+                    # 清洗 JSON
+                    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                    if match:
+                        res = json.loads(match.group(0))
+                        # 成功！记录下是哪条路通了
+                        res['model_used'] = f"{model} ({version})"
+                        return res
+                except:
+                    continue # 格式不对，试下一个
+            elif response.status_code == 429:
+                return {"error": True, "msg": "今日额度已达上限 (429)。"}
+            else:
+                last_error = f"{model} ({version}): {response.status_code}"
+                continue # 报错，试下一个
+                
+        except Exception as e:
+            last_error = str(e)
+            continue
+            
+    # 如果所有路都堵死了
+    return {"error": True, "msg": f"所有线路均不可用。最后错误: {last_error}"}
+
+# --- 🧠 向量化 (通用版) ---
+def get_embedding_universal(text):
+    # 向量化也尝试两个版本
+    endpoints = [
+        ("v1beta", "text-embedding-004"),
+        ("v1beta", "embedding-001")
+    ]
+    for version, model in endpoints:
+        url = f"https://generativelanguage.googleapis.com/{version}/models/{model}:embedContent?key={MY_API_KEY}"
+        headers = {'Content-Type': 'application/json'}
+        data = {
+            "model": f"models/{model}",
+            "content": {"parts": [{"text": text}]}
+        }
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+            if response.status_code == 200:
+                return response.json()['embedding']['values']
+        except: 
+            pass
     return []
 
 # --- 业务逻辑 ---
@@ -136,7 +155,7 @@ def generate_node_data(mode, text):
         "insight": "一句意想不到的升维洞察..."
     }}
     """
-    return call_gemini_http(prompt)
+    return call_gemini_universal(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
@@ -150,7 +169,7 @@ def generate_fusion(node_a_content, node_b_content):
         "insight": "集体智慧金句"
     }}
     """
-    return call_gemini_http(prompt)
+    return call_gemini_universal(prompt)
 
 # --- 🧮 算法 ---
 def cosine_similarity(v1, v2):
@@ -213,7 +232,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v8.1 Final", layout="wide")
+st.set_page_config(page_title="MSC v9.0 Universal", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -221,7 +240,7 @@ if "logged_in" not in st.session_state:
 # --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("v8.1 稳定版")
+    st.caption("v9.0 全能适配器版")
     
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
@@ -263,7 +282,7 @@ else:
                     st.info(f"{row[5]}")
     
     st.title("MSC 意义构建 & 共鸣雷达")
-    st.caption("当你的思想与他人重叠度 > 80% 时，系统将自动连接你们。")
+    st.caption("全网路自适应：自动切换 v1/v1beta 和 Flash/Pro 模型。")
     
     mode = st.selectbox("场景", ["🌱 日常社交", "🎓 学术研讨", "🎨 艺术共创"])
     user_input = st.chat_input("输入思考...")
@@ -287,6 +306,7 @@ else:
                                 <p><strong>B ({get_nickname(match['user'])}):</strong> {match['content']}</p>
                                 <hr>
                                 <p><strong>💡 升维洞察:</strong> {c_node.get('insight')}</p>
+                                <p style="font-size:0.8em;color:grey;">(Via: {c_node.get('model_used')})</p>
                             </div>
                             """
                             st.markdown(fusion_html)
@@ -300,20 +320,22 @@ else:
             st.markdown(user_input)
             
         with st.chat_message("assistant"):
-            with st.spinner("AI 正在思考..."):
+            with st.spinner("AI 正在尝试所有可用线路..."):
                 res = generate_node_data(mode, user_input)
                 
                 if "error" in res:
                     error_msg = res.get('msg', '未知错误')
                     st.error(f"⚠️ 生成失败: {error_msg}")
                 else:
-                    vec = get_embedding_http(user_input)
+                    vec = get_embedding_universal(user_input)
                     save_node(st.session_state.username, user_input, res, mode, vec)
                     
                     card = f"""
                     **✨ 节点生成**
                     * **Care:** {res['care_point']}
                     > {res['insight']}
+                    
+                    *(线路: {res.get('model_used', 'Auto')})*
                     """
                     st.markdown(card)
                     
