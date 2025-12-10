@@ -333,4 +333,43 @@ else:
             c_msg, c_del = st.columns([0.9, 0.1])
             with c_msg:
                 # 区分用户和AI的样式
-                with st.chat_message(
+                with st.chat_message(msg['role']):
+                    st.markdown(msg['content'])
+            with c_del:
+                # 只允许删除用户自己的消息
+                if msg['role'] == 'user':
+                    if st.button("✕", key=f"del_{msg['id']}", help="删除此条对话及关联节点"):
+                        if soft_delete_chat_and_node(msg['id'], msg['content'], st.session_state.username):
+                            st.rerun()
+
+        # --- 右列：意义卡片 (批注) ---
+        with col_node:
+            # 只有当这句话生成过节点，且节点未被删除时，才显示
+            if msg['role'] == 'user' and msg['content'] in nodes_map:
+                node = nodes_map[msg['content']]
+                # 渲染卡片
+                st.info(f"✨ **{node['care_point']}**\n\n💡 {node['insight']}")
+                
+    # --- 底部输入 ---
+    if prompt := st.chat_input("输入..."):
+        # 1. 存对话
+        save_chat(st.session_state.username, "user", prompt)
+        
+        # 2. 生成回复
+        full_history = chat_history + [{'role':'user', 'content':prompt}]
+        stream = get_normal_response(full_history)
+        reply_text = st.write_stream(stream) # 这里会在底部临时显示流式
+        save_chat(st.session_state.username, "assistant", reply_text)
+        
+        # 3. 异步分析
+        analysis = analyze_meaning_background(prompt)
+        if analysis.get("valid", False):
+            vec = get_embedding(prompt)
+            save_node(st.session_state.username, prompt, analysis, "日常", vec)
+            
+            # 共鸣逻辑
+            match = find_resonance(vec, st.session_state.username)
+            if match:
+                st.toast(f"🔔 发现共鸣：{match['user']}", icon="⚡")
+        
+        st.rerun()
