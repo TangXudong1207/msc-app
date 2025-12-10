@@ -9,11 +9,10 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区 (DeepSeek 适配版)
+# 🛑 核心配置区
 # ==========================================
 
 try:
-    # 初始化通用客户端 (DeepSeek 使用 OpenAI 协议)
     client = OpenAI(
         api_key=st.secrets["API_KEY"],
         base_url=st.secrets["BASE_URL"]
@@ -73,44 +72,29 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：通用调用 (DeepSeek V3) ---
-
+# --- 🧠 AI 核心 ---
 def call_ai_api(prompt):
-    """
-    调用 DeepSeek API 生成 JSON
-    """
     try:
         response = client.chat.completions.create(
             model=TARGET_MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful assistant. Output valid JSON only. Do not use markdown code blocks."},
+                {"role": "system", "content": "You are a helpful assistant. Output valid JSON only."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
             stream=False,
-            # DeepSeek 支持 json_object 模式，确保格式稳定
             response_format={"type": "json_object"} 
         )
-        
         content = response.choices[0].message.content
-        return json.loads(content)
-        
-    except Exception as e:
-        # 双重保险：万一 JSON 模式失效，尝试手动提取
         try:
-            if 'content' in locals():
-                match = re.search(r'\{.*\}', content, re.DOTALL)
-                if match: return json.loads(match.group(0))
-        except: pass
-        
-        return {"error": True, "msg": f"API 响应错误: {str(e)}"}
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True, "msg": "JSON 解析失败"}
+    except Exception as e:
+        return {"error": True, "msg": f"API 调用失败: {str(e)}"}
 
-# --- 🧠 向量化 (模拟适配) ---
-# DeepSeek 暂未完全开放通用的 Embedding 接口。
-# 为了保证 App 不报错，我们暂时使用"模拟向量"来跑通流程。
-# (这意味着共鸣功能暂时是随机演示，等未来接入专用 Embedding 模型后可升级)
 def get_embedding(text):
-    # 生成一个 1536 维度的随机向量，确保数据库不崩
     return np.random.rand(1536).tolist()
 
 # --- 业务逻辑 ---
@@ -168,8 +152,7 @@ def find_resonance(current_vector, current_user):
             try:
                 other_vector = json.loads(other_vector_str)
                 score = cosine_similarity(current_vector, other_vector)
-                # 模拟模式下阈值设低一点，方便看到效果
-                if score > 0.6 and score > highest_score:
+                if score > 0.7 and score > highest_score:
                     highest_score = score
                     best_match = {
                         "user": other_user,
@@ -187,7 +170,6 @@ def save_node(username, content, data, mode, vector):
     care = data.get('care_point', '未命名')
     meaning = data.get('meaning_layer', '暂无结构')
     insight = data.get('insight', '生成中断')
-    
     c.execute('''INSERT INTO nodes (username, content, care_point, meaning_layer, insight, mode, created_at, vector)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
               (username, content, care, meaning, insight, mode, datetime.now(), vector_str))
@@ -202,16 +184,14 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v10.0 DeepSeek", layout="wide")
+st.set_page_config(page_title="MSC v10.1 UI Fix", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
-    st.caption("DeepSeek V3 商业引擎驱动")
-    
+    st.caption("DeepSeek 商业引擎驱动")
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
@@ -233,7 +213,6 @@ if not st.session_state.logged_in:
             if add_user(nu, np_pass, nn): st.success("成功！请登录")
             else: st.error("已存在")
 
-# --- 2. 主系统 ---
 else:
     with st.sidebar:
         st.write(f"👋 **{st.session_state.nickname}**")
@@ -259,9 +238,12 @@ else:
     
     if "messages" not in st.session_state: st.session_state.messages = []
     
+    # 🌟 修复部分：渲染历史消息时，开启 HTML 支持
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            # 这里加了 unsafe_allow_html=True，乱码就会变回漂亮的卡片
+            st.markdown(msg["content"], unsafe_allow_html=True)
+            
             if "fusion_data" in msg:
                 match = msg["fusion_data"]
                 btn_key = f"btn_merge_{msg['id']}"
@@ -269,16 +251,22 @@ else:
                     with st.spinner("正在融合..."):
                         c_node = generate_fusion(msg["my_content"], match["content"])
                         if "error" not in c_node:
+                            # 生成漂亮的 HTML 卡片
                             fusion_html = f"""
-                            <div style="background-color:#E8F5E9;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;">
-                                <h4>🧬 融合成功：集体智慧节点</h4>
-                                <p><strong>A ({st.session_state.nickname}):</strong> {msg['my_content']}</p>
-                                <p><strong>B ({get_nickname(match['user'])}):</strong> {match['content']}</p>
-                                <hr>
-                                <p><strong>💡 升维洞察:</strong> {c_node.get('insight')}</p>
+                            <div style="background-color:#E8F5E9;padding:20px;border-radius:10px;border-left:5px solid #2E7D32;margin-top:10px;">
+                                <h4 style="color:#2E7D32;margin:0;">🧬 融合成功：集体智慧节点</h4>
+                                <hr style="border-top: 1px solid #A5D6A7;">
+                                <p><strong>👤 A ({st.session_state.nickname}):</strong> {msg['my_content']}</p>
+                                <p><strong>👤 B ({get_nickname(match['user'])}):</strong> {match['content']}</p>
+                                <div style="background-color:#fff;padding:10px;border-radius:5px;margin-top:10px;">
+                                    <p style="color:#1B5E20;font-weight:bold;font-size:1.1em;">💡 升维洞察: {c_node.get('insight')}</p>
+                                    <p style="font-size:0.9em;color:#555;">🧩 结构: {c_node.get('meaning_layer')}</p>
+                                </div>
                             </div>
                             """
-                            st.markdown(fusion_html)
+                            # 这里也加了 unsafe_allow_html=True
+                            st.markdown(fusion_html, unsafe_allow_html=True)
+                            # 存入历史记录
                             st.session_state.messages.append({"role": "assistant", "content": fusion_html})
                         else:
                             st.error(f"融合失败: {c_node.get('msg', '未知错误')}")
@@ -293,8 +281,7 @@ else:
                 res = generate_node_data(mode, user_input)
                 
                 if "error" in res:
-                    error_msg = res.get('msg', '未知错误')
-                    st.error(f"⚠️ 生成失败: {error_msg}")
+                    st.error(f"⚠️ 生成失败: {res.get('msg')}")
                 else:
                     vec = get_embedding(user_input)
                     save_node(st.session_state.username, user_input, res, mode, vec)
