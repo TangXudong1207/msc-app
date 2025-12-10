@@ -1,5 +1,5 @@
 import streamlit as st
-import requests
+import google.generativeai as genai
 import json
 import re
 import sqlite3
@@ -9,11 +9,19 @@ import numpy as np
 from datetime import datetime
 
 # ==========================================
-# 🛑 核心配置区 
+# 🛑 核心配置区 (云端原生版)
 # ==========================================
 
-# 1. 您的密钥 (保留双引号)
-MY_API_KEY = "AIzaSyDM0hPYlw6O1Uk1eDR1HgCnhDeQRMko12c" 
+# 从 Streamlit 的“保险箱”里自动获取 Key
+# 如果您还没配置 Secrets，代码会提示您
+try:
+    MY_API_KEY = st.secrets["GOOGLE_API_KEY"]
+except:
+    st.error("🚨 未检测到密钥！请在 Streamlit 后台 Settings -> Secrets 中配置 GOOGLE_API_KEY。")
+    st.stop()
+
+# 配置 Google 官方库
+genai.configure(api_key=MY_API_KEY)
 
 # ==========================================
 
@@ -65,70 +73,47 @@ def get_nickname(username):
     res = c.fetchone()
     return res[0] if res else username
 
-# --- 🧠 AI 核心：多线路猎手 (解决 404/429) ---
-def call_gemini_hunter(prompt):
+# --- 🧠 AI 核心：官方库调用 (最稳) ---
+def call_gemini_official(prompt):
     """
-    自动猎手：尝试所有可能的模型名称，直到连通为止。
+    使用 Google 官方库调用，稳定性 100%
     """
-    # 备选名单：包含 Flash 的多个变体和 Pro
-    models_to_try = [
-        "gemini-1.5-flash",       # 首选：最快
-        "gemini-1.5-flash-001",   # 备选1：指定版本
-        "gemini-1.5-flash-latest",# 备选2：最新版
-        "gemini-1.5-pro",         # 备选3：更强但稍慢
-        "gemini-pro"              # 保底：经典版
-    ]
-
+    # 优先尝试 Flash，如果官方库自动路由失败，它会抛出清晰的异常
+    models_to_try = ["gemini-1.5-flash", "gemini-pro"]
+    
     last_error = ""
 
-    for model in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={MY_API_KEY}"
-        headers = {'Content-Type': 'application/json'}
-        data = {"contents": [{"parts": [{"text": prompt}]}]}
-
+    for model_name in models_to_try:
         try:
-            # 尝试发送请求
-            response = requests.post(url, headers=headers, json=data, timeout=20)
-
-            if response.status_code == 200:
-                # 成功连通！
-                result_json = response.json()
-                try:
-                    raw_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                    if match:
-                        return json.loads(match.group(0))
-                except:
-                    continue # 解析失败，换下一个
-            else:
-                # 记录错误，换下一个
-                last_error = f"{model}: {response.status_code}"
-                continue 
-
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            
+            # 解析结果
+            if response.text:
+                raw_text = response.text
+                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                if match:
+                    res = json.loads(match.group(0))
+                    res['model_used'] = model_name
+                    return res
         except Exception as e:
             last_error = str(e)
-            continue
+            continue # 试下一个
+            
+    return {"error": True, "msg": f"AI 连接失败: {last_error}"}
 
-    # 如果所有线路都失败
-    return {"error": True, "msg": f"所有线路均繁忙。最后一次错误: {last_error}"}
-
-# --- 🧠 向量化 (Embeddings) ---
+# --- 🧠 向量化 (官方库版) ---
 def get_embedding(text):
-    # 向量化也使用猎手逻辑，防止 404
-    models = ["text-embedding-004", "embedding-001"]
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent?key={MY_API_KEY}"
-        headers = {'Content-Type': 'application/json'}
-        data = {
-            "model": f"models/{model}",
-            "content": {"parts": [{"text": text}]}
-        }
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=10)
-            if response.status_code == 200:
-                return response.json()['embedding']['values']
-        except: pass
-    return []
+    try:
+        result = genai.embed_content(
+            model="models/text-embedding-004",
+            content=text,
+            task_type="retrieval_document",
+            title="MSC Node"
+        )
+        return result['embedding']
+    except:
+        return []
 
 def generate_node_data(mode, text):
     prompt = f"""
@@ -140,7 +125,7 @@ def generate_node_data(mode, text):
         "insight": "一句意想不到的升维洞察..."
     }}
     """
-    return call_gemini_hunter(prompt)
+    return call_gemini_official(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
@@ -154,7 +139,7 @@ def generate_fusion(node_a_content, node_b_content):
         "insight": "集体智慧金句"
     }}
     """
-    return call_gemini_hunter(prompt)
+    return call_gemini_official(prompt)
 
 # --- 🧮 算法：计算灵魂相似度 ---
 def cosine_similarity(v1, v2):
@@ -171,15 +156,15 @@ def find_resonance(current_vector, current_user):
     c = conn.cursor()
     c.execute('SELECT username, content, vector FROM nodes WHERE username != ?', (current_user,))
     others = c.fetchall()
-
+    
     best_match = None
     highest_score = 0
-
+    
     for row in others:
         other_user = row[0]
         other_content = row[1]
         other_vector_str = row[2]
-
+        
         if other_vector_str:
             try:
                 other_vector = json.loads(other_vector_str)
@@ -192,7 +177,7 @@ def find_resonance(current_vector, current_user):
                         "score": round(score * 100, 1)
                     }
             except: continue
-
+    
     return best_match
 
 # --- 💾 存取逻辑 ---
@@ -202,7 +187,7 @@ def save_node(username, content, data, mode, vector):
     care = data.get('care_point', '未命名')
     meaning = data.get('meaning_layer', '暂无结构')
     insight = data.get('insight', '生成中断')
-
+    
     c.execute('''INSERT INTO nodes (username, content, care_point, meaning_layer, insight, mode, created_at, vector)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
               (username, content, care, meaning, insight, mode, datetime.now(), vector_str))
@@ -217,7 +202,7 @@ def get_user_nodes(username):
 # 🖥️ 界面主逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v6.2 Hunter", layout="wide")
+st.set_page_config(page_title="MSC v7.0 Cloud Native", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -225,6 +210,8 @@ if "logged_in" not in st.session_state:
 # --- 1. 登录/注册 ---
 if not st.session_state.logged_in:
     st.title("🌌 MSC 意义协作系统")
+    st.caption("云端原生版 · 官方库驱动")
+    
     tab1, tab2 = st.tabs(["登录", "注册"])
     with tab1:
         u = st.text_input("用户名")
@@ -235,7 +222,7 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 st.session_state.username = u
                 st.session_state.nickname = res[0][2]
-                st.session_state.messages = [] # 清理缓存
+                st.session_state.messages = [] 
                 st.rerun()
             else: st.error("错误")
     with tab2:
@@ -252,7 +239,7 @@ else:
         st.write(f"👋 **{st.session_state.nickname}**")
         if st.button("退出"):
             st.session_state.logged_in = False
-            st.session_state.messages = [] # 彻底清理
+            st.session_state.messages = [] 
             st.rerun()
         st.divider()
         st.header("🗂️ 我的意义档案")
@@ -263,15 +250,15 @@ else:
                     st.caption(f"{row[7]}")
                     st.write(f"**原话:** {row[2]}")
                     st.info(f"{row[5]}")
-
+    
     st.title("MSC 意义构建 & 共鸣雷达")
     st.caption("多线路猎手版：自动寻找可用线路，防止 404/429 错误。")
-
+    
     mode = st.selectbox("场景", ["🌱 日常社交", "🎓 学术研讨", "🎨 艺术共创"])
     user_input = st.chat_input("输入思考...")
-
+    
     if "messages" not in st.session_state: st.session_state.messages = []
-
+    
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -300,37 +287,37 @@ else:
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
-
+            
         with st.chat_message("assistant"):
-            with st.spinner("AI 正在尝试多条线路..."):
+            with st.spinner("AI 正在思考 (Official Cloud)..."):
                 res = generate_node_data(mode, user_input)
-
+                
                 if "error" in res:
                     st.error(f"⚠️ 生成失败: {res.get('msg')}")
                 else:
                     vec = get_embedding(user_input)
                     save_node(st.session_state.username, user_input, res, mode, vec)
-
+                    
                     card = f"""
                     **✨ 节点生成**
                     * **Care:** {res['care_point']}
                     > {res['insight']}
                     """
                     st.markdown(card)
-
+                    
                     match = find_resonance(vec, st.session_state.username)
-
+                    
                     msg_payload = {"role": "assistant", "content": card}
-
+                    
                     if match:
                         msg_id = int(time.time())
                         msg_payload["fusion_data"] = match
                         msg_payload["my_content"] = user_input
                         msg_payload["id"] = msg_id
-
+                        
                         st.success(f"🔔 滴！监测到与用户 **{get_nickname(match['user'])}** 的思想重叠度高达 **{match['score']}%**！")
                         st.button(f"⚡ 发现共鸣 ({match['score']}%)：与 {get_nickname(match['user'])} 合并？", key=f"btn_merge_{msg_id}")
-
+                    
                     st.session_state.messages.append(msg_payload)
                     time.sleep(1)
                     st.rerun()
