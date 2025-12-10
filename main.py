@@ -2,8 +2,9 @@ import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
-import pydeck as pdk # 引入 PyDeck 做 3D
-import pandas as pd  # 引入 Pandas 处理数据
+import plotly.express as px  # 🌟 新增：可视化王者 Plotly
+import plotly.graph_objects as go
+import pandas as pd
 import json
 import re
 import hashlib
@@ -37,6 +38,10 @@ except Exception as e:
 # --- 🛠️ 基础设施 ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
+
+def check_hashes(password, hashed_text):
+    if make_hashes(password) == hashed_text: return True
+    return False
 
 def add_user(username, password, nickname):
     try:
@@ -192,32 +197,22 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
+    1. 判断是否生成节点。
+    2. 提取 MSC 结构。
+    3. 【雷达评分】Care,Curiosity,Reflection,Coherence,Empathy,Agency,Aesthetic (0-10)。
     返回 JSON:
     {{
         "valid": true,
-        "care_point": "...",
-        "meaning_layer": "...",
-        "insight": "...",
-        "logic_score": 0.8,
-        "keywords": ["tag1", "tag2"], 
-        "topic_tags": ["topic1", "topic2"],
-        "existential_q": false
+        "care_point": "...", "meaning_layer": "...", "insight": "...",
+        "logic_score": 0.8, "keywords": [],
+        "radar_scores": {{ "Care": 7 ... }}
     }}
     """
     return call_ai_api(prompt)
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
-    任务：基于 Deep Meaning 共鸣进行融合。
-    A: "{node_a_content}"
-    B: "{node_b_content}"
+    融合 A: "{node_a_content}" B: "{node_b_content}"。
     返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
     """
     return call_ai_api(prompt)
@@ -243,109 +238,115 @@ def find_resonance(current_vector, current_user):
         return best_match
     except: return None
 
-# --- 🌍 2D 地球渲染 (修复参数) ---
+# --- 🌍 2D 地球渲染 (Plotly 版 - 稳如泰山) ---
 def render_2d_world_map(nodes):
+    """
+    使用 Plotly 渲染 2D 夜景地图
+    """
+    # 模拟数据：生成集中在美国的坐标 (Lat 30~50, Lon -120~-70)
     map_data = []
-    # 添加几个基准点，确保地图加载
-    map_data.append({"name": "MSC HQ", "value": [121.4, 31.2, 100]}) 
     
-    for _ in range(len(nodes) + 20): 
-        lon = np.random.uniform(-150, 150) 
-        lat = np.random.uniform(-40, 60)
-        val = np.random.randint(10, 100)
-        map_data.append({"name": "Node", "value": [float(lon), float(lat), int(val)]})
+    # 模拟全球其他地方的微光
+    for _ in range(10):
+        map_data.append({"lat": np.random.uniform(-30, 60), "lon": np.random.uniform(-150, 150), "size": 3, "label": "User"})
 
-    option = {
-        "backgroundColor": "#080b10",
-        "title": {
-            "text": "🌍 全球意义分布",
-            "left": "center",
-            "textStyle": {"color": "#fff"}
-        },
-        "geo": {
-            "map": "world",
-            "roam": True,
-            "label": {"emphasis": {"show": False}},
-            "itemStyle": {
-                "normal": {"areaColor": "#1a2639", "borderColor": "#2c3e50"}, 
-                "emphasis": {"areaColor": "#2a9d8f"}
-            }
-        },
-        "series": [
-            {
-                "name": "Nodes",
-                "type": "scatter",
-                "coordinateSystem": "geo",
-                "data": map_data,
-                "symbolSize": 5,
-                "itemStyle": {
-                    "color": "#ffd60a", # 亮黄
-                    "shadowBlur": 10,
-                    "shadowColor": "#ffd60a"
-                }
-            }
-        ]
-    }
-    # 🌟 修复：移除 map="world" 参数，因为 option 已经包含了 map 配置
-    st_echarts(options=option, height="500px")
+    # 模拟美国节点的活跃
+    for _ in range(len(nodes) + 5):
+        map_data.append({
+            "lat": np.random.uniform(30, 50), 
+            "lon": np.random.uniform(-120, -70), 
+            "size": np.random.uniform(5, 10),
+            "label": "Active Node"
+        })
+        
+    df = pd.DataFrame(map_data)
 
-# --- 🌌 3D 星河渲染 (PyDeck 原生版 - 解决白屏) ---
+    fig = px.scatter_geo(
+        df,
+        lat="lat",
+        lon="lon",
+        size="size",
+        hover_name="label",
+        projection="natural earth",
+        template="plotly_dark", # 深色夜景模式
+        color_discrete_sequence=["#00d2ff"] # 赛博青
+    )
+    
+    fig.update_geos(
+        showcountries=True, countrycolor="#444",
+        showcoastlines=True, coastlinecolor="#444",
+        showland=True, landcolor="#0e1117", # 深色陆地
+        showocean=True, oceancolor="#000", # 黑色海洋
+        showlakes=False
+    )
+    
+    fig.update_layout(
+        margin={"r":0,"t":0,"l":0,"b":0},
+        paper_bgcolor="#000",
+        height=500
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+# --- 🌌 3D 星河渲染 (Plotly 版 - 绝对不白屏) ---
 def render_3d_galaxy(nodes):
+    """
+    使用 Plotly 渲染 3D 意义星云
+    """
     if len(nodes) < 3:
-        st.info("🌌 星河正在汇聚，请多生成几个节点...")
+        st.info("🌌 星河正在汇聚，请再多生成几个节点...")
         return
 
-    vectors, labels = [], []
-    for node in nodes:
+    vectors, labels, sizes, colors = [], [], [], []
+    
+    for i, node in enumerate(nodes):
         if node['vector']:
             try:
                 v = json.loads(node['vector'])
                 vectors.append(v)
                 labels.append(node['care_point'])
+                # 大小和颜色随机一点，模拟星星
+                sizes.append(np.random.randint(5, 15))
+                colors.append(i % 3) # 分类颜色
             except: pass
     
     if not vectors: return
 
+    # PCA 降维
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
-    coords = coords / np.max(np.abs(coords)) * 100 
-
-    df_data = []
-    for i, (x, y, z) in enumerate(coords):
-        df_data.append({
-            "position": [x, y, z],
-            "care": labels[i],
-            # 赛博朋克配色：青色和紫色交替
-            "color": [0, 255, 242] if i%2==0 else [255, 0, 212] 
-        })
     
-    df = pd.DataFrame(df_data)
+    df = pd.DataFrame(coords, columns=['x', 'y', 'z'])
+    df['label'] = labels
+    df['size'] = sizes
+    df['cluster'] = colors
 
-    point_cloud = pdk.Layer(
-        "PointCloudLayer",
-        data=df,
-        get_position="position",
-        get_normal=[0, 1, 0],
-        get_color="color",
-        point_size=8,
-        pickable=True, 
+    fig = px.scatter_3d(
+        df, x='x', y='y', z='z',
+        color='cluster',
+        size='size',
+        hover_name='label',
+        template="plotly_dark", # 深色模式
+        opacity=0.8
     )
-
-    view_state = pdk.ViewState(
-        target=[0, 0, 0],
-        zoom=3,
-        rotation_orbit=30,
-        pitch=45
+    
+    # 去掉坐标轴，只留星星
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(visible=False),
+            yaxis=dict(visible=False),
+            zaxis=dict(visible=False),
+            bgcolor='black' # 纯黑背景
+        ),
+        paper_bgcolor="black",
+        margin={"r":0,"t":0,"l":0,"b":0},
+        height=600,
+        showlegend=False
     )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.pydeck_chart(pdk.Deck(
-        map_style=None, # 无地图背景，纯黑
-        initial_view_state=view_state,
-        layers=[point_cloud],
-        tooltip={"html": "<b>{care}</b>", "style": {"backgroundColor": "black", "color": "white"}}
-    ))
-
-# --- 侧边栏 ---
+# --- 侧边栏小地图 ---
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
@@ -393,7 +394,7 @@ def view_fullscreen_map(nodes):
 @st.dialog("🌍 MSC World · 上帝视角", width="large")
 def view_msc_world():
     global_nodes = get_global_nodes()
-    tab1, tab2 = st.tabs(["🌍 地球夜景", "🌌 意义星河"])
+    tab1, tab2 = st.tabs(["🌍 地球夜景 (2D)", "🌌 意义星河 (3D)"])
     with tab1: render_2d_world_map(global_nodes)
     with tab2: render_3d_galaxy(global_nodes)
 
@@ -401,7 +402,7 @@ def view_msc_world():
 # 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v23.2 Visual Fix", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v24.0 Plotly", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
@@ -433,8 +434,6 @@ else:
     chat_history = get_active_chats(st.session_state.username)
     nodes_map = get_active_nodes_map(st.session_state.username)
     all_nodes_list = get_all_nodes_for_map(st.session_state.username)
-    
-    # 获取用户画像
     user_profile = get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
@@ -446,14 +445,12 @@ else:
         st.markdown(f"## {rank_icon} {st.session_state.nickname}")
         render_radar_chart(radar_dict)
         
-        # 🌟 入口
         if st.button("🌍 MSC World", use_container_width=True, type="primary"):
             view_msc_world()
             
         c1, c2 = st.columns(2)
         if c1.button("🗑️ 回收站"): st.toast("功能维护中...")
         if c2.button("退出"): st.session_state.logged_in = False; st.rerun()
-        
         st.divider()
         render_cyberpunk_map(all_nodes_list, height="200px")
         if st.button("🔭 全屏", use_container_width=True): view_fullscreen_map(all_nodes_list)
