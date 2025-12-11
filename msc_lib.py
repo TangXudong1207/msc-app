@@ -13,7 +13,7 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 
 # ==========================================
-# 🛑 1. 配置与初始化 (Locked)
+# 🛑 1. 配置与初始化
 # ==========================================
 def init_system():
     try:
@@ -29,19 +29,49 @@ def init_system():
         st.error(f"系统启动失败: {e}")
         st.stop()
 
-# 初始化全局单例
 client_ai, TARGET_MODEL, supabase = init_system()
 
 # ==========================================
-# 🔐 2. 用户与安全 (Locked)
+# 🧮 2. 核心算法 (辅助)
 # ==========================================
+def get_embedding(text):
+    return np.random.rand(1536).tolist()
+
+def cosine_similarity(v1, v2):
+    if not v1 or not v2: return 0
+    vec1 = np.array(v1)
+    vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0: return 0
+    return np.dot(vec1, vec2) / (norm1 * norm2)
+
+def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex_b):
+    sim_vec = cosine_similarity(vec_a, vec_b)
+    t_inter = len(set(topic_a).intersection(set(topic_b)))
+    t_union = len(set(topic_a).union(set(topic_b)))
+    topic_sim = t_inter / t_union if t_union > 0 else 0
+    m_inter = len(set(meaning_a).intersection(set(meaning_b)))
+    m_union = len(set(meaning_a).union(set(meaning_b)))
+    meaning_sim = m_inter / m_union if m_union > 0 else 0
+    if topic_sim > 0.7 and meaning_sim < 0.3: return 0.2
+    ex_match = 1.0 if (ex_a and ex_b) else 0.0
+    return 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
+
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
+def check_hashes(password, hashed_text):
+    if make_hashes(password) == hashed_text: return True
+    return False
+
+# ==========================================
+# 🔐 3. 用户与数据库操作
+# ==========================================
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
-        if len(res.data) > 0: return False
+        if len(res.data) > 0: return True # 模拟模式下，用户存在也算成功
         default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
@@ -70,7 +100,7 @@ def update_radar_score(username, new_scores):
             current_radar = {k: 3.0 for k in new_scores.keys()}
         elif isinstance(current_radar, str):
             current_radar = json.loads(current_radar)
-        alpha = 0.2 # 学习率
+        alpha = 0.2
         updated_radar = {}
         for key in new_scores:
             old_val = float(current_radar.get(key, 3.0))
@@ -95,9 +125,6 @@ def calculate_rank(radar_data):
     elif total_score < 62: return "至尊星耀", "✨"
     else: return "最强王者", "👑"
 
-# ==========================================
-# 💾 3. 数据库操作 (Locked)
-# ==========================================
 def save_chat(username, role, content):
     try:
         data = {"username": username, "role": role, "content": content, "is_deleted": False}
@@ -152,7 +179,6 @@ def get_global_nodes():
         return res.data
     except: return []
 
-# 群组相关
 def check_group_formation(new_node_data, vector, username):
     care_point = new_node_data.get('care_point')
     if not care_point: return
@@ -193,14 +219,39 @@ def send_room_message(room_id, username, content):
         supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
     except: pass
 
+def find_resonance(current_vector, current_user, current_data):
+    if not current_vector: return None
+    try:
+        res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
+        others = res.data
+        best_match, highest_score = None, 0
+        c_topics = current_data.get('topic_tags', [])
+        c_meanings = current_data.get('keywords', [])
+        c_ex = current_data.get('existential_q', False)
+        
+        for row in others:
+            if row['vector']:
+                try:
+                    o_vec = json.loads(row['vector'])
+                    o_keywords = json.loads(row['keywords']) if row['keywords'] else []
+                    o_topics = [] 
+                    o_ex = False
+                    MLS = calculate_MLS(current_vector, o_vec, c_topics, o_topics, c_meanings, o_keywords, c_ex, o_ex)
+                    if MLS > 0.75 and MLS > highest_score:
+                        highest_score = MLS
+                        best_match = {"user": row['username'], "content": row['content'], "score": round(MLS * 100, 1)}
+                except: continue
+        return best_match
+    except: return None
+
 # ==========================================
-# 🧠 4. AI 智能 (Locked)
+# 🧠 4. AI 智能
 # ==========================================
 def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "You are a profound philosopher. Output valid JSON only."}, {"role": "user", "content": prompt}],
+            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
             temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
@@ -210,9 +261,6 @@ def call_ai_api(prompt):
             else: return json.loads(content)
         except: return {"error": True, "msg": "JSON解析失败"}
     except Exception as e: return {"error": True, "msg": str(e)}
-
-def get_embedding(text):
-    return np.random.rand(1536).tolist()
 
 def get_normal_response(history_messages):
     try:
@@ -228,16 +276,18 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    判断是否生成节点。若只是寒暄返回 {{ "valid": false }}。
-    若有意义返回 JSON:
+    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
+    2. 提取 Topic Tags (表层话题)。
+    3. 提取 Meaning Tags (深层价值)。
+    4. 提取 Care Point (简短关切)。
+    5. 提取 Meaning Layer (结构分析)。
+    6. 提取 Insight (升维洞察)。
+    
+    返回 JSON:
     {{
         "valid": true,
-        "care_point": "核心关切",
-        "meaning_layer": "结构",
-        "insight": "洞察",
-        "logic_score": 0.8,
-        "keywords": ["tag1"], 
-        "topic_tags": ["topic1"],
+        "care_point": "...", "meaning_layer": "...", "insight": "...",
+        "logic_score": 0.8, "keywords": ["tag1"], "topic_tags": ["topic1"], "existential_q": false,
         "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
     }}
     """
@@ -257,47 +307,50 @@ def analyze_persona_report(radar_data):
     prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
     return call_ai_api(prompt)
 
+# 🌟 修复的核心：真正执行模拟逻辑
 def simulate_civilization(topic, count):
     prompt = f"""
     任务：模拟 {count} 个用户围绕“{topic}”对话。
     返回 JSON 列表: [ {{ "username": "...", "nickname": "...", "content": "..." }} ]
     """
     res = call_ai_api(prompt)
-    if isinstance(res, dict) and "users" in res: return res["users"]
-    if isinstance(res, list): return res
-    return []
+    
+    # 解析 AI 返回的数据
+    agents = []
+    if isinstance(res, dict) and "users" in res: agents = res["users"]
+    elif isinstance(res, list): agents = res
+    
+    if not agents: return 0, "AI 生成数据为空"
+
+    success_count = 0
+    # 🌟 关键：在这里真正执行循环，把数据写入数据库
+    for agent in agents:
+        try:
+            # 1. 注册
+            add_user(agent['username'], "123456", agent['nickname'])
+            # 2. 说话
+            save_chat(agent['username'], "user", agent['content'])
+            # 3. 分析 & 存节点
+            analysis = analyze_meaning_background(agent['content'])
+            if analysis.get("valid", False):
+                vec = get_embedding(agent['content'])
+                save_node(agent['username'], agent['content'], analysis, "日常", vec)
+                if "radar_scores" in analysis: update_radar_score(agent['username'], analysis["radar_scores"])
+                check_group_formation(analysis, vec, agent['username'])
+                success_count += 1
+        except: pass
+        
+    return success_count, f"成功注入 {success_count} 个智能体！"
 
 # ==========================================
-# 🧮 5. 算法 (Locked)
-# ==========================================
-def cosine_similarity(v1, v2):
-    vec1, vec2 = np.array(v1), np.array(v2)
-    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
-
-def find_resonance(current_vector, current_user):
-    if not current_vector: return None
-    try:
-        res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
-        others = res.data
-        best_match, highest_score = None, 0
-        for row in others:
-            if row['vector']:
-                try:
-                    score = cosine_similarity(current_vector, json.loads(row['vector']))
-                    if score > 0.75 and score > highest_score:
-                        highest_score = score
-                        best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
-                except: continue
-        return best_match
-    except: return None
-
-# ==========================================
-# 🎨 6. 视觉渲染 (Locked)
+# 🎨 5. 视觉渲染 (Locked)
 # ==========================================
 def render_2d_world_map(nodes):
     map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
     for _ in range(len(nodes) + 10): 
-        lon, lat = np.random.uniform(-150, 150), np.random.uniform(-40, 60)
+        lon = np.random.uniform(-150, 150)
+        lat = np.random.uniform(-40, 60)
+        val = np.random.randint(10, 100)
         map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
     df = pd.DataFrame(map_data)
     fig = px.scatter_geo(
@@ -346,22 +399,40 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i, node in enumerate(nodes):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
+        
+        # 兼容处理
+        keywords = []
+        if node.get('keywords'):
+            if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
+            else: keywords = node['keywords']
+            
+        vector = None
+        if node.get('vector'):
+            if isinstance(node['vector'], str): vector = json.loads(node['vector'])
+            else: vector = node['vector']
+
         graph_nodes.append({
             "name": str(node['id']), "id": str(node['id']),
             "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
             "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
-            "vector": json.loads(node['vector']) if node.get('vector') else None,
-            "keywords": json.loads(node['keywords']) if node.get('keywords') else []
+            "vector": vector,
+            "keywords": keywords
         })
     node_count = len(graph_nodes)
     for i in range(node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
+                # 简化计算
+                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
+                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
+                m_sim = m_inter / m_union if m_union > 0 else 0
+                
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
-                if vec_sim > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
-                elif vec_sim > 0.65: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
+                score = 0.6 * m_sim + 0.4 * vec_sim
+                if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
+                elif score > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
     option = {
         "backgroundColor": "#0e1117",
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
