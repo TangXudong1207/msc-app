@@ -9,9 +9,7 @@ import json
 import re
 import hashlib
 import time
-import numpy as np
-from sklearn.decomposition import PCA 
-from sklearn.cluster import KMeans
+from datetime import datetime, timedelta, timezone
 
 # 🛑 配置与初始化
 def init_system():
@@ -27,6 +25,7 @@ client_ai, TARGET_MODEL, supabase = init_system()
 # 🧮 算法
 def get_embedding(text): return np.random.rand(1536).tolist()
 def cosine_similarity(v1, v2):
+    import numpy as np
     if not v1 or not v2: return 0
     vec1, vec2 = np.array(v1), np.array(v2)
     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
@@ -85,10 +84,32 @@ def update_radar_score(username, new_scores):
         supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
     except: pass
 
-# --- 消息与通知 (新增核心功能) ---
+# --- 🌟 在线状态核心 (新增) ---
+def update_heartbeat(username):
+    """更新用户最后在线时间"""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        supabase.table('users').update({"last_seen": now_iso}).eq("username", username).execute()
+    except: pass
+
+def check_is_online(last_seen_str):
+    """判断是否在线 (5分钟内活跃)"""
+    if not last_seen_str: return False
+    try:
+        # 解析时间字符串
+        last_seen = datetime.fromisoformat(last_seen_str.replace('Z', '+00:00'))
+        # 获取当前 UTC 时间
+        now = datetime.now(timezone.utc)
+        # 判读差值
+        diff = now - last_seen
+        return diff.total_seconds() < 300 # 300秒 = 5分钟
+    except: return False
+
+# --- 消息与通知 ---
 def get_all_users(current_user):
     try:
-        res = supabase.table('users').select("username, nickname").neq('username', current_user).execute()
+        # 获取 users 表，包含 last_seen
+        res = supabase.table('users').select("username, nickname, last_seen").neq('username', current_user).execute()
         return res.data
     except: return []
 
@@ -110,12 +131,8 @@ def send_direct_message(sender, receiver, content):
     except: return False
 
 def get_unread_counts(current_user):
-    """获取未读消息统计"""
     try:
-        # 统计发给 current_user 且 is_read 为 false 的消息
         res = supabase.table('direct_messages').select("sender").eq('receiver', current_user).eq('is_read', False).execute()
-        
-        # 统计每个发送者有多少条未读
         counts = {}
         total = 0
         for row in res.data:
@@ -126,16 +143,24 @@ def get_unread_counts(current_user):
     except: return 0, {}
 
 def mark_messages_read(sender, receiver):
-    """将 sender 发给 receiver 的消息标记为已读"""
     try:
         supabase.table('direct_messages').update({"is_read": True})\
             .eq('sender', sender).eq('receiver', receiver).eq('is_read', False).execute()
     except: pass
 
+# --- 🌟 修复：找回丢失的 AI 聊天记录函数 ---
+def get_active_chats(username, limit=50):
+    """获取与AI的对话历史"""
+    try:
+        res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(limit).execute()
+        return list(reversed(res.data))
+    except: return []
+
 # --- 节点存取 ---
 def save_node(username, content, data, mode, vector):
     try:
-        logic = data.get('logic_score', 0.5)
+        logic = data.get('logic_score')
+        if logic is None: logic = 0.5
         keywords = data.get('keywords', [])
         insert_data = {
             "username": username, "content": content,
@@ -174,7 +199,7 @@ def soft_delete_chat_and_node(chat_id, content, username):
         return True
     except: return False
 
-# --- 群组 (保留基本功能) ---
+# --- 群组 ---
 def check_group_formation(new_node_data, vector, username):
     care = new_node_data.get('care_point')
     if not care: return
@@ -246,6 +271,17 @@ def call_ai_api(prompt):
             else: return json.loads(content)
         except: return {"error": True, "msg": "JSON解析失败"}
     except Exception as e: return {"error": True, "msg": str(e)}
+
+def get_normal_response(history_messages):
+    try:
+        api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
+        for msg in history_messages:
+            api_messages.append({"role": msg["role"], "content": msg["content"]})
+        response = client_ai.chat.completions.create(
+            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
+        )
+        return response
+    except Exception as e: return f"Error: {e}"
 
 def analyze_meaning_background(text):
     prompt = f"""
