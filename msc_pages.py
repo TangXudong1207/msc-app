@@ -5,7 +5,7 @@ import json
 import streamlit_antd_components as sac
 
 # ==========================================
-# 🔐 登录页
+# 🔐 页面：极简登录
 # ==========================================
 def render_login_page():
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -45,49 +45,44 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 🤖 页面：AI 伴侣 (严格对齐版)
+# 🤖 页面：AI 伴侣 (修复版)
 # ==========================================
 def render_ai_page(username):
-    # 顶部留白
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
     
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
-    # 🌟 核心：逐行渲染
     for msg in chat_history:
-        # 定义一行：左92%(对话)，右8%(圆点)
         c_msg, c_dot = st.columns([0.92, 0.08])
         
         with c_msg:
-            # 使用 avatar=None，配合 main.py 的 CSS 隐藏默认头像
             if msg['role'] == 'user':
                 st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
             else:
                 st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         
         with c_dot:
-            # 只有用户发送的、且有意义的消息，才在同一行显示圆点
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map[msg['content']]
-                # 包裹在 div 里以便 CSS 控制垂直居中
                 st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                 with st.popover("●", help="Deep Meaning"):
-                    st.caption(f"MSC Score: {node.get('m_score', 0):.2f}")
+                    # 🌟 修复点：强制类型转换，防止 None 报错
+                    raw_score = node.get('m_score')
+                    score_val = float(raw_score) if raw_score is not None else 0.0
+                    
+                    st.caption(f"MSC Score: {score_val:.2f}")
                     st.markdown(f"**{node['care_point']}**")
                     st.info(node['insight'])
                     st.caption(f"Structure: {node['meaning_layer']}")
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # 底部输入
     if prompt := st.chat_input("Input..."):
         msc.save_chat(username, "user", prompt)
         
-        # 乐观更新
         with st.container():
              st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
-        # AI 回复
         full_history = chat_history + [{'role':'user', 'content':prompt}]
         try:
             resp = msc.get_normal_response(full_history)
@@ -95,52 +90,52 @@ def render_ai_page(username):
             msc.save_chat(username, "assistant", reply)
         except: pass
         
-        # 意义分析
         with st.spinner(""):
             analysis = msc.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
                 vec = msc.get_embedding(prompt)
                 msc.save_node(username, prompt, analysis, "AI对话", vec)
                 if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
+                st.toast("Meaning Captured", icon="🌱")
         
         time.sleep(0.5)
         st.rerun()
 
 # ==========================================
-# 💬 页面：好友社交 (严格对齐版)
+# 💬 页面：好友社交
 # ==========================================
 def render_friends_page(username, unread_counts):
     col_list, col_chat = st.columns([0.3, 0.7])
     
-    # 1. 好友列表
     with col_list:
         st.caption("CONTACTS")
         users = msc.get_all_users(username)
         if users:
             for u in users:
                 is_online = msc.check_is_online(u.get('last_seen'))
-                color = "#4CAF50" if is_online else "#DDD"
                 unread = unread_counts.get(u['username'], 0)
-                label = f"{u['nickname']}"
-                if unread > 0: label += f" 🔴 {unread}"
+                # 状态点和红点
+                status_char = "🟢" if is_online else "⚪"
+                label = f"{status_icon} {u['nickname']}" if 'status_icon' in locals() else f"{u['nickname']}"
+                # 重新构建 label
+                final_label = f"{status_char} {u['nickname']}"
+                if unread > 0: final_label += f" 🔴 {unread}"
                 
-                if st.button(label, key=f"f_{u['username']}", use_container_width=True):
+                if st.button(final_label, key=f"f_{u['username']}", use_container_width=True):
                     st.session_state.current_chat_partner = u['username']
                     msc.mark_messages_read(u['username'], username)
                     st.rerun()
         else:
             st.caption("No friends yet.")
 
-    # 2. 聊天窗口
     with col_chat:
         partner = st.session_state.current_chat_partner
         if partner:
-            # 顶部栏
-            c_name, c_switch = st.columns([0.8, 0.2])
-            with c_name: st.markdown(f"**{partner}**")
-            with c_switch: 
+            c1, c2 = st.columns([0.8, 0.2])
+            with c1: st.markdown(f"**{partner}**")
+            with c2: 
                 if st.button("🤖", help="AI Observer"):
-                    # 简化处理，实际可复用 msc.get_ai_interjection
+                    # 简化占位
                     pass 
 
             history = msc.get_direct_messages(username, partner)
@@ -148,7 +143,6 @@ def render_friends_page(username, unread_counts):
 
             with st.container(height=500, border=False):
                 for msg in history:
-                    # 🌟 核心：逐行渲染，确保对齐
                     c_msg, c_dot = st.columns([0.92, 0.08])
                     
                     with c_msg:
@@ -160,7 +154,6 @@ def render_friends_page(username, unread_counts):
                             st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
                     
                     with c_dot:
-                        # 只有我自己发的、有意义的消息，才在同一行显示点
                         if msg['sender'] == username and msg['content'] in my_nodes:
                             node = my_nodes[msg['content']]
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
@@ -175,8 +168,6 @@ def render_friends_page(username, unread_counts):
                     if analysis.get("valid", False):
                         vec = msc.get_embedding(prompt)
                         msc.save_node(username, prompt, analysis, "私聊", vec)
-                        match = msc.find_resonance(vec, username, analysis)
-                        if match: st.toast("Resonance!", icon="⚡")
                 st.rerun()
         else:
             st.info("👈 Select a friend")
