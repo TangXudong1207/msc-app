@@ -40,10 +40,8 @@ def get_embedding(text):
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
-    vec1 = np.array(v1)
-    vec2 = np.array(v2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
+    vec1 = np.array(v1); vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1); norm2 = np.linalg.norm(vec2)
     if norm1 == 0 or norm2 == 0: return 0
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
@@ -61,10 +59,6 @@ def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex
 
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
-
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text: return True
-    return False
 
 # ==========================================
 # 🔐 3. 用户与数据库操作
@@ -97,39 +91,31 @@ def update_radar_score(username, new_scores):
     try:
         user_data = get_user_profile(username)
         current_radar = user_data.get('radar_profile')
-        if not current_radar:
-            current_radar = {k: 3.0 for k in new_scores.keys()}
-        elif isinstance(current_radar, str):
-            current_radar = json.loads(current_radar)
+        if not current_radar: current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str): current_radar = json.loads(current_radar)
         alpha = 0.2
         updated_radar = {}
         for key in new_scores:
-            old_val = float(current_radar.get(key, 3.0))
-            input_val = float(new_scores.get(key, 0))
-            if input_val > 1.0:
-                updated_val = old_val * (1 - alpha) + input_val * alpha
-                updated_radar[key] = round(min(10.0, updated_val), 2)
-            else:
-                updated_radar[key] = old_val
+            old_val = float(current_radar.get(key, 3.0)); input_val = float(new_scores.get(key, 0))
+            if input_val > 1.0: updated_radar[key] = round(min(10.0, old_val*(1-alpha)+input_val*alpha), 2)
+            else: updated_radar[key] = old_val
         supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
     except: pass
 
 def calculate_rank(radar_data):
     if not radar_data: return "倔强青铜 III", "🥉"
     if isinstance(radar_data, str): radar_data = json.loads(radar_data)
-    total_score = sum(radar_data.values())
-    if total_score < 25: return "倔强青铜", "🥉"
-    elif total_score < 30: return "秩序白银", "🥈"
-    elif total_score < 38: return "荣耀黄金", "🥇"
-    elif total_score < 46: return "尊贵铂金", "💎"
-    elif total_score < 54: return "永恒钻石", "💠"
-    elif total_score < 62: return "至尊星耀", "✨"
+    total = sum(radar_data.values())
+    if total < 25: return "倔强青铜", "🥉"
+    elif total < 30: return "秩序白银", "🥈"
+    elif total < 38: return "荣耀黄金", "🥇"
+    elif total < 46: return "尊贵铂金", "💎"
+    elif total < 54: return "永恒钻石", "💠"
+    elif total < 62: return "至尊星耀", "✨"
     else: return "最强王者", "👑"
 
 def save_chat(username, role, content):
-    try:
-        data = {"username": username, "role": role, "content": content, "is_deleted": False}
-        supabase.table('chats').insert(data).execute()
+    try: supabase.table('chats').insert({"username": username, "role": role, "content": content, "is_deleted": False}).execute()
     except: pass
 
 def get_active_chats(username, limit=50):
@@ -145,16 +131,9 @@ def soft_delete_chat_and_node(chat_id, content, username):
         return True
     except: return False
 
-def restore_item(table, item_id):
-    try:
-        supabase.table(table).update({"is_deleted": False}).eq("id", item_id).execute()
-        return True
-    except: return False
-
 def save_node(username, content, data, mode, vector):
     try:
-        logic = data.get('logic_score')
-        if logic is None: logic = 0.5
+        logic = data.get('logic_score', 0.5)
         keywords = data.get('keywords', [])
         insert_data = {
             "username": username, "content": content,
@@ -166,8 +145,7 @@ def save_node(username, content, data, mode, vector):
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
-    except Exception as e: st.error(f"Save Node Error: {e}")
-    return False
+    except: return False
 
 def get_active_nodes_map(username):
     try:
@@ -181,8 +159,7 @@ def get_all_nodes_for_map(username):
         return res.data
     except: return []
 
-def get_user_nodes(username):
-    return get_all_nodes_for_map(username)
+def get_user_nodes(username): return get_all_nodes_for_map(username)
 
 def get_global_nodes():
     try:
@@ -190,44 +167,36 @@ def get_global_nodes():
         return res.data
     except: return []
 
+# 群组逻辑
 def check_group_formation(new_node_data, vector, username):
-    care_point = new_node_data.get('care_point')
-    if not care_point: return
+    care = new_node_data.get('care_point')
+    if not care: return
     try:
-        res = supabase.table('nodes').select("*").ilike('care_point', f"%{care_point}%").execute()
-        unique_users = set([row['username'] for row in res.data])
-        if len(unique_users) >= 3:
-            room_name = f"🌌 {care_point} · 星团"
-            existing = supabase.table('rooms').select("*").eq('name', room_name).execute()
-            if not existing.data:
-                supabase.table('rooms').insert({
-                    "name": room_name, "type": "Gravity", "trigger_keyword": care_point,
-                    "description": f"由 {len(unique_users)} 位探索者的共同意义汇聚而成。"
-                }).execute()
+        res = supabase.table('nodes').select("*").ilike('care_point', f"%{care}%").execute()
+        users = set([row['username'] for row in res.data])
+        if len(users) >= 3:
+            rname = f"🌌 {care} · 星团"
+            exist = supabase.table('rooms').select("*").eq('name', rname).execute()
+            if not exist.data:
+                supabase.table('rooms').insert({"name": rname, "type": "Gravity", "trigger_keyword": care, "description": f"由 {len(users)} 位探索者汇聚。"}).execute()
     except: pass
 
 def get_available_rooms():
-    try:
-        res = supabase.table('rooms').select("*").order('created_at', desc=True).execute()
-        return res.data
+    try: return supabase.table('rooms').select("*").order('created_at', desc=True).execute().data
     except: return []
 
-def join_room(room_id, username):
+def join_room(rid, user):
     try:
-        check = supabase.table('room_members').select("*").eq('room_id', room_id).eq('username', username).execute()
-        if not check.data:
-            supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
+        chk = supabase.table('room_members').select("*").eq('room_id', rid).eq('username', user).execute()
+        if not chk.data: supabase.table('room_members').insert({"room_id": rid, "username": user}).execute()
     except: pass
 
-def get_room_messages(room_id):
-    try:
-        res = supabase.table('room_chats').select("*").eq('room_id', room_id).order('created_at', desc=False).execute()
-        return res.data
+def get_room_messages(rid):
+    try: return supabase.table('room_chats').select("*").eq('room_id', rid).order('created_at', desc=False).execute().data
     except: return []
 
-def send_room_message(room_id, username, content):
-    try:
-        supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
+def send_room_message(rid, user, content):
+    try: supabase.table('room_chats').insert({"room_id": rid, "username": user, "content": content}).execute()
     except: pass
 
 def find_resonance(current_vector, current_user, current_data):
@@ -261,7 +230,7 @@ def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
+            messages=[{"role": "system", "content": "Output valid JSON only. No markdown."}, {"role": "user", "content": prompt}],
             temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
@@ -275,28 +244,15 @@ def call_ai_api(prompt):
 def get_normal_response(history_messages):
     try:
         api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
-        for msg in history_messages:
-            api_messages.append({"role": msg["role"], "content": msg["content"]})
-        response = client_ai.chat.completions.create(
-            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
-        )
-        return response
+        for msg in history_messages: api_messages.append({"role": msg["role"], "content": msg["content"]})
+        return client_ai.chat.completions.create(model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True)
     except Exception as e: return f"Error: {e}"
 
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
-    返回 JSON:
-    {{
-        "valid": true,
-        "care_point": "...", "meaning_layer": "...", "insight": "...",
+    返回 JSON: {{
+        "valid": true, "care_point": "...", "meaning_layer": "...", "insight": "...",
         "logic_score": 0.8, "keywords": ["tag1"], "topic_tags": ["topic1"], "existential_q": false,
         "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
     }}
@@ -305,90 +261,70 @@ def analyze_meaning_background(text):
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
-    任务：融合 A 和 B。
-    A: "{node_a_content}"
-    B: "{node_b_content}"
+    任务：融合 A: "{node_a_content}" 和 B: "{node_b_content}"。
     返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
     """
     return call_ai_api(prompt)
 
 def analyze_persona_report(radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
+    prompt = f"任务：画像分析。数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
     return call_ai_api(prompt)
 
 def generate_daily_question(username, radar_data):
-    recent_nodes = get_user_nodes(username)
-    context = ""
-    if recent_nodes:
-        last_3 = recent_nodes[-3:] if len(recent_nodes) >=3 else recent_nodes
-        context = f"用户最近关注点：{[n['care_point'] for n in last_3]}"
-    radar_str = json.dumps(radar_data, ensure_ascii=False)
+    recent = get_user_nodes(username)
+    ctx = ""
+    if recent: ctx = f"关注点：{[n['care_point'] for n in recent[-3:]]}"
+    prompt = f"生成每日追问。用户：{json.dumps(radar_data)}。{ctx}。输出 JSON: {{ 'question': '...' }}"
+    res = call_ai_api(prompt)
+    return res.get("question", "今天感觉如何？")
+
+# 🌟 修复：补全 simulate_civilization 函数
+def simulate_civilization(topic, count):
     prompt = f"""
-    任务：为用户生成一个【每日意义追问】。
-    用户元人性雷达：{radar_str}
-    {context}
-    要求：短小精悍（20字以内），直击灵魂。
-    返回 JSON: {{ "question": "..." }}
+    Task: Simulate {count} distinct users discussing "{topic}".
+    Return JSON object: {{ "users": [ {{ "username": "u1", "nickname": "A", "content": "..." }} ] }}
     """
     res = call_ai_api(prompt)
-    if "question" in res: return res["question"]
-    return "今天，什么事情让你感到'活着'？"
-
-# 🌟 新增：批量生成剧本
-def generate_simulation_script(topic, count):
-    prompt = f"""
-    Task: Write a script for {count} distinct users discussing "{topic}".
-    Format: A JSON object with key "script", which is a list of objects.
-    Each object must have: "username", "nickname", "content".
+    agents = []
+    if isinstance(res, dict) and "users" in res: agents = res["users"]
+    elif isinstance(res, list): agents = res
+    elif isinstance(res, dict): 
+        for val in res.values(): 
+            if isinstance(val, list): agents = val; break
+            
+    if not agents: return 0, "生成失败"
     
-    Example:
-    {{
-        "script": [
-            {{ "username": "u1", "nickname": "A", "content": "..." }},
-            {{ "username": "u2", "nickname": "B", "content": "..." }}
-        ]
-    }}
-    """
-    res = call_ai_api(prompt)
-    if isinstance(res, dict) and "script" in res: return res["script"]
-    if isinstance(res, list): return res # 兼容处理
-    return []
-
-# 🌟 新增：执行单步模拟
-def process_simulation_turn(agent):
-    try:
-        # 随机后缀防重名
-        uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
-        add_user(uid, "123456", agent.get('nickname', 'SimBot'))
-        save_chat(uid, "user", agent['content'])
-        
-        analysis = analyze_meaning_background(agent['content'])
-        # 仿真模式强制有效，除非完全失败
-        if "error" in analysis: 
-             analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
-        else:
-             analysis["valid"] = True
-             
-        vec = get_embedding(agent['content'])
-        save_node(uid, agent['content'], analysis, "日常", vec)
-        if "radar_scores" in analysis: update_radar_score(uid, analysis["radar_scores"])
-        check_group_formation(analysis, vec, uid)
-        return True
-    except: return False
+    cnt = 0
+    for agent in agents:
+        try:
+            uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
+            add_user(uid, "123456", agent.get('nickname', 'SimBot'))
+            save_chat(uid, "user", agent['content'])
+            analysis = analyze_meaning_background(agent['content'])
+            if "error" in analysis: 
+                analysis = {"valid": True, "care_point": "仿真点", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
+            else: analysis["valid"] = True
+            
+            vec = get_embedding(agent['content'])
+            save_node(uid, agent['content'], analysis, "日常", vec)
+            if "radar_scores" in analysis: update_radar_score(uid, analysis["radar_scores"])
+            check_group_formation(analysis, vec, uid)
+            cnt += 1
+            time.sleep(0.2)
+        except: pass
+    return cnt, f"成功注入 {cnt} 个智能体"
 
 # ==========================================
-# 🎨 5. 视觉渲染 (Locked)
+# 🎨 5. 视觉渲染
 # ==========================================
 def render_2d_world_map(nodes):
     map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
     for _ in range(len(nodes) + 15): 
         lon = np.random.uniform(-150, 150)
         lat = np.random.uniform(-40, 60)
-        val = np.random.randint(10, 100)
         map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
     df = pd.DataFrame(map_data)
-    # Plotly 渲染
     fig = go.Figure(data=go.Scattergeo(
         lon = [d['value'][0] for d in map_data],
         lat = [d['value'][1] for d in map_data],
@@ -437,37 +373,23 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     graph_nodes, graph_links = [], []
     symbol_base = 30 if is_fullscreen else 15
     for i, node in enumerate(nodes):
-        logic = node.get('logic_score')
-        if logic is None: logic = 0.5
-        keywords = []
-        if node.get('keywords'):
-            if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
-            else: keywords = node['keywords']
-        vector = None
-        if node.get('vector'):
-            if isinstance(node['vector'], str): vector = json.loads(node['vector'])
-            else: vector = node['vector']
-
+        logic = node.get('logic_score', 0.5)
         graph_nodes.append({
             "name": str(node['id']), "id": str(node['id']),
             "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
             "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
-            "vector": vector,
-            "keywords": keywords
+            "vector": json.loads(node['vector']) if node.get('vector') else None,
+            "keywords": json.loads(node['keywords']) if node.get('keywords') else []
         })
     node_count = len(graph_nodes)
     for i in range(node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
-                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
-                m_sim = m_inter / m_union if m_union > 0 else 0
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
-                score = 0.6 * m_sim + 0.4 * vec_sim
-                if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
-                elif score > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
+                if vec_sim > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
+                elif vec_sim > 0.65: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
     option = {
         "backgroundColor": "#0e1117",
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
