@@ -29,10 +29,11 @@ def init_system():
         st.error(f"系统启动失败: {e}")
         st.stop()
 
+# 🌟 全局变量名确认为 client_ai
 client_ai, TARGET_MODEL, supabase = init_system()
 
 # ==========================================
-# 🧮 2. 核心算法
+# 🧮 2. 核心算法 (辅助)
 # ==========================================
 def get_embedding(text):
     return np.random.rand(1536).tolist()
@@ -70,10 +71,8 @@ def check_hashes(password, hashed_text):
 # ==========================================
 def add_user(username, password, nickname):
     try:
-        # 模拟模式下：如果用户已存在，直接视为成功
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return True 
-        
         default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
@@ -266,7 +265,8 @@ def find_resonance(current_vector, current_user, current_data):
 # ==========================================
 def call_ai_api(prompt):
     try:
-        response = client.chat.completions.create(
+        # 🌟 修复点：把 client 改成 client_ai
+        response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
             messages=[{"role": "system", "content": "Output valid JSON only. Do not use markdown blocks."}, {"role": "user", "content": prompt}],
             temperature=0.7, stream=False, response_format={"type": "json_object"} 
@@ -284,7 +284,8 @@ def get_normal_response(history_messages):
         api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
         for msg in history_messages:
             api_messages.append({"role": msg["role"], "content": msg["content"]})
-        response = client.chat.completions.create(
+        # 🌟 修复点：把 client 改成 client_ai
+        response = client_ai.chat.completions.create(
             model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
         )
         return response
@@ -293,18 +294,16 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
-    返回 JSON:
+    判断是否生成节点。若只是寒暄返回 {{ "valid": false }}。
+    若有意义返回 JSON:
     {{
         "valid": true,
-        "care_point": "...", "meaning_layer": "...", "insight": "...",
-        "logic_score": 0.8, "keywords": ["tag1"], "topic_tags": ["topic1"], "existential_q": false,
+        "care_point": "核心关切",
+        "meaning_layer": "结构",
+        "insight": "洞察",
+        "logic_score": 0.8,
+        "keywords": ["tag1"], 
+        "topic_tags": ["topic1"],
         "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
     }}
     """
@@ -324,7 +323,6 @@ def analyze_persona_report(radar_data):
     prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
     return call_ai_api(prompt)
 
-# 🌟 修复的核心函数：仿真模拟器
 def simulate_civilization(topic, count):
     prompt = f"""
     Task: Simulate {count} distinct users discussing "{topic}".
@@ -341,7 +339,6 @@ def simulate_civilization(topic, count):
     """
     res = call_ai_api(prompt)
     
-    # 健壮性解析：无论AI怎么返回，都试图找到列表
     agents = []
     if isinstance(res, dict) and "users" in res:
         agents = res["users"]
@@ -349,39 +346,31 @@ def simulate_civilization(topic, count):
         agents = res
     
     if not agents: 
-        # 如果解析失败，返回原始错误信息以便调试
-        return 0, f"AI生成格式异常，Raw: {str(res)}"
+        return 0, f"AI生成格式异常: {str(res)}"
 
     success_count = 0
     for agent in agents:
         try:
-            # 1. 注册 (加时间戳防止重名)
-            uid = agent.get('username', 'bot') + str(int(time.time()))[-3:]
+            # 随机后缀防重名
+            uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
             add_user(uid, "123456", agent.get('nickname', 'Bot'))
+            save_chat(uid, "user", agent['content'])
             
-            # 2. 说话
-            content = agent.get('content', '')
-            if content:
-                save_chat(uid, "user", content)
-                
-                # 3. 分析 (仿真模式下，强制 valid=True，保证生成节点)
-                analysis = analyze_meaning_background(content)
-                if "error" in analysis: # 如果AI分析失败，手动构造
-                    analysis = {
-                        "valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", 
-                        "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []
-                    }
-                else:
-                    analysis["valid"] = True # 强行设为 True
-                
-                vec = get_embedding(content)
-                save_node(uid, content, analysis, "日常", vec)
-                
-                if "radar_scores" in analysis: 
-                    update_radar_score(uid, analysis["radar_scores"])
-                
-                check_group_formation(analysis, vec, uid)
-                success_count += 1
+            analysis = analyze_meaning_background(agent['content'])
+            # 仿真模式强制 valid
+            if "error" in analysis:
+                analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
+            else:
+                analysis["valid"] = True
+            
+            vec = get_embedding(agent['content'])
+            save_node(uid, agent['content'], analysis, "日常", vec)
+            
+            if "radar_scores" in analysis: 
+                update_radar_score(uid, analysis["radar_scores"])
+            
+            check_group_formation(analysis, vec, uid)
+            success_count += 1
         except Exception as e: print(f"Sim error: {e}")
         
     return success_count, f"成功注入 {success_count} 个智能体！"
@@ -444,7 +433,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
         
-        # 兼容处理
         keywords = []
         if node.get('keywords'):
             if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
@@ -468,11 +456,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                # 简化计算
-                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
-                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
-                m_sim = m_inter / m_union if m_union > 0 else 0
-                
+                m_sim = len(set(na['keywords']).intersection(set(nb['keywords']))) / (len(set(na['keywords']).union(set(nb['keywords']))) or 1)
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
                 score = 0.6 * m_sim + 0.4 * vec_sim
                 if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
