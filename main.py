@@ -1,97 +1,63 @@
 import streamlit as st
-import streamlit_antd_components as sac # 🌟 UI 革命的核心库
+import streamlit_antd_components as sac
 import msc_lib as msc
 import time
 import json
 
 # ==========================================
-# 🎨 1. 注入 Ant Design 风格增强 CSS
+# 🎨 注入 Google Studio 风格 CSS
 # ==========================================
 def inject_custom_css():
     st.markdown("""
     <style>
-        /* 隐藏原生汉堡菜单和页脚，更像 App */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        .stApp { background-color: #FFFFFF; font-family: 'Roboto', sans-serif; color: #1F1F1F; }
+        [data-testid="stSidebar"] { background-color: #F8F9FA; border-right: 1px solid #E0E0E0; }
+        h1, h2, h3 { font-family: 'Roboto', sans-serif; font-weight: 500; color: #202124; letter-spacing: -0.5px; }
+        .stButton button { background-color: #FFFFFF; border: 1px solid #DADCE0; color: #1A73E8; border-radius: 24px; padding: 0.5rem 1.5rem; font-weight: 500; transition: all 0.2s ease; }
+        .stButton button:hover { background-color: #F1F3F4; border-color: #DADCE0; color: #174EA6; box-shadow: 0 1px 2px rgba(60,64,67,0.3); }
+        .stButton button[kind="primary"] { background-color: #1A73E8; color: white; border: none; }
+        .stButton button[kind="primary"]:hover { background-color: #185ABC; }
         
-        /* 全局字体优化 */
-        .stApp {
-            background-color: #ffffff;
-        }
-
-        /* 优化聊天区域的内边距 */
-        .stChatMessage {
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        
-        /* 意义卡片精致化 */
-        .meaning-card {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 16px;
-            margin-bottom: 12px;
-            transition: all 0.3s;
-            position: relative;
-            overflow: hidden;
-        }
-        .meaning-card:hover {
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-            transform: translateY(-2px);
-            border-color: #3b82f6;
-        }
-        .card-tag {
-            font-size: 0.75rem;
-            font-weight: 700;
-            padding: 2px 8px;
+        /* 优化后的意义卡片 (HTML版) - 仅在展开时显示 */
+        .meaning-card-inner {
+            background-color: #F8F9FA;
+            border-left: 3px solid #1A73E8;
+            padding: 10px;
             border-radius: 4px;
-            background: #eff6ff;
-            color: #3b82f6;
-            margin-bottom: 8px;
-            display: inline-block;
+            font-size: 0.9em;
+            margin-top: 5px;
         }
-        .card-body {
-            font-size: 0.95rem;
-            color: #374151;
-            line-height: 1.6;
+        .card-insight { font-style: italic; color: #1A73E8; margin-bottom: 5px; font-weight: 500; }
+        .card-structure { color: #5F6368; font-size: 0.85em; }
+        
+        /* 每日追问卡片 */
+        .daily-card {
+            background: linear-gradient(135deg, #e8f0fe 0%, #ffffff 100%);
+            border: 1px solid #d2e3fc;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
         }
-        .card-insight {
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px dashed #e5e7eb;
-            font-style: italic;
-            color: #6b7280;
-            font-size: 0.9rem;
-        }
+        .daily-title { color: #174ea6; font-size: 0.8em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .daily-question { color: #202124; font-size: 1.1em; font-weight: 500; line-height: 1.4; }
     </style>
     """, unsafe_allow_html=True)
 
-# ==========================================
-# 🖥️ 主界面逻辑
-# ==========================================
-
-st.set_page_config(page_title="MSC v34.0 UI Revolution", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v35.0 Daily Growth", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
-# --- 场景 1: 登录注册 (使用原生组件保持简单稳定性) ---
+# --- 场景 1: 登录注册 ---
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1,1.5,1])
     with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        # 使用 SAC 的警告框做标题背景
-        sac.alert(label="MSC 意义协作系统", description="Intelligent Humanism OS · v34.0", icon="stars", color="blue", radius="lg")
-        
-        tab = sac.tabs([
-            sac.TabsItem('登录', icon='box-arrow-in-right'),
-            sac.TabsItem('注册', icon='person-plus-fill'),
-        ], align='center', variant='outline')
-        
+        st.markdown("<h1 style='text-align: center; color: #1A73E8;'>🔷 MSC</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #5F6368;'>智能人文主义 · 意义协作系统</p>", unsafe_allow_html=True)
+        st.divider()
+        tab = sac.tabs([sac.TabsItem('登录', icon='box-arrow-in-right'), sac.TabsItem('注册', icon='person-plus-fill')], align='center', variant='outline')
         if tab == '登录':
             u = st.text_input("用户名")
             p = st.text_input("密码", type='password')
@@ -109,60 +75,59 @@ if not st.session_state.logged_in:
             np = st.text_input("新密码", type='password')
             nn = st.text_input("昵称")
             if st.button("创建身份", use_container_width=True):
-                if msc.add_user(nu, np, nn): 
-                    sac.alert("注册成功，请切换至登录页", color='success')
-                else: 
-                    sac.alert("注册失败，用户可能已存在", color='error')
+                if msc.add_user(nu, np, nn): sac.alert("注册成功，请切换至登录页", color='success')
+                else: sac.alert("注册失败", color='error')
 
-# --- 场景 2: 主应用 (UI 革命) ---
+# --- 场景 2: 主应用 ---
 else:
-    # 数据加载
     chat_history = msc.get_active_chats(st.session_state.username)
     nodes_map = msc.get_active_nodes_map(st.session_state.username)
     all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
     user_profile = msc.get_user_profile(st.session_state.username)
-    
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
-    
     rank_name, rank_icon = msc.calculate_rank(radar_dict)
 
-    # --- 侧边栏：专业级导航 ---
+    # --- 侧边栏 ---
     with st.sidebar:
-        # 用户信息卡片
         sac.result(label=st.session_state.nickname, description=f"{rank_icon} {rank_name}", status="success")
         
-        # 雷达图
+        # 🌟 新功能：每日追问
+        if "daily_q" not in st.session_state:
+            st.session_state.daily_q = None
+            
+        if st.session_state.daily_q is None:
+            if st.button("📅 生成今日追问", use_container_width=True):
+                with st.spinner("读取灵魂中..."):
+                    q = msc.generate_daily_question(st.session_state.username, radar_dict)
+                    st.session_state.daily_q = q
+                    st.rerun()
+        else:
+            st.markdown(f"""
+            <div class="daily-card">
+                <div class="daily-title">DAILY INQUIRY</div>
+                <div class="daily-question">{st.session_state.daily_q}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 换一个"): 
+                st.session_state.daily_q = None
+                st.rerun()
+
         msc.render_radar_chart(radar_dict, height="200px")
         
-        # 核心导航菜单 (SAC Menu)
         menu = sac.menu([
             sac.MenuItem('控制台', icon='house-fill'),
-            sac.MenuItem('实验室', icon='box-seam', children=[
-                sac.MenuItem('画像分析', icon='person-bounding-box'),
-                sac.MenuItem('虚拟文明', icon='robot'),
-            ]),
-            sac.MenuItem('世界观', icon='globe', children=[
-                sac.MenuItem('MSC World', icon='earth'),
-                sac.MenuItem('全屏星云', icon='stars'),
-            ]),
-            sac.MenuItem('系统', type='group', children=[
-                sac.MenuItem('回收站', icon='trash'),
-                sac.MenuItem('退出登录', icon='box-arrow-right'),
-            ]),
+            sac.MenuItem('实验室', icon='box-seam', children=[sac.MenuItem('画像分析', icon='person-bounding-box'), sac.MenuItem('虚拟文明', icon='robot')]),
+            sac.MenuItem('世界观', icon='globe', children=[sac.MenuItem('MSC World', icon='earth'), sac.MenuItem('全屏星云', icon='stars')]),
+            sac.MenuItem('系统', type='group', children=[sac.MenuItem('回收站', icon='trash'), sac.MenuItem('退出登录', icon='box-arrow-right')]),
         ], index=0, format_func='title', open_all=True)
-
-        # 侧边栏底部的小地图
+        
         st.divider()
         st.caption("Mini Map")
         msc.render_cyberpunk_map(all_nodes_list, height="180px")
 
-    # --- 菜单逻辑响应 ---
-    if menu == '退出登录':
-        st.session_state.logged_in = False
-        st.rerun()
-        
+    if menu == '退出登录': st.session_state.logged_in = False; st.rerun()
     elif menu == '画像分析':
         @st.dialog("🧬 深度画像", width="large")
         def show_persona():
@@ -172,7 +137,6 @@ else:
                     sac.alert(label="静态画像", description=res.get('static_portrait'), color='info', icon='person')
                     sac.alert(label="动态成长", description=res.get('dynamic_growth'), color='success', icon='graph-up-arrow')
         show_persona()
-        
     elif menu == '虚拟文明':
         @st.dialog("🧪 仿真实验室")
         def show_sim():
@@ -182,53 +146,29 @@ else:
                     cnt, msg = msc.simulate_civilization(topic, 3)
                     sac.alert(msg, color='success')
         show_sim()
-
     elif menu == 'MSC World':
         @st.dialog("🌍 MSC World", width="large")
         def show_world():
             global_nodes = msc.get_global_nodes()
-            # SAC 分段控制器替代 Tabs
-            seg = sac.segmented(
-                items=[
-                    sac.SegmentedItem(label='地球夜景', icon='globe'),
-                    sac.SegmentedItem(label='意义星河', icon='stars'),
-                    sac.SegmentedItem(label='全球脉动', icon='activity'),
-                ], align='center', use_container_width=True
-            )
+            seg = sac.segmented(items=[sac.SegmentedItem(label='地球夜景', icon='globe'), sac.SegmentedItem(label='意义星河', icon='stars')], align='center', use_container_width=True)
             if seg == '地球夜景': msc.render_2d_world_map(global_nodes)
             elif seg == '意义星河': msc.render_3d_galaxy(global_nodes)
-            elif seg == '全球脉动':
-                st.info("📡 实时监听全球信号...")
-                # 这里可以展示全球流，为了代码简洁暂略
         show_world()
-
     elif menu == '全屏星云':
         @st.dialog("🔭 浩荡宇宙", width="large")
-        def show_full():
-            msc.render_cyberpunk_map(all_nodes_list, height="600px", is_fullscreen=True)
+        def show_full(): msc.render_cyberpunk_map(all_nodes_list, height="600px", is_fullscreen=True)
         show_full()
 
-    # --- 主对话区 (仅当菜单在'控制台'时显示) ---
     if menu == '控制台':
-        # 顶部模式切换 (SAC Segmented)
-        mode = sac.segmented(
-            items=[
-                sac.SegmentedItem(label='日常社交', icon='cup-hot'),
-                sac.SegmentedItem(label='学术研讨', icon='book'),
-                sac.SegmentedItem(label='艺术共创', icon='palette'),
-            ], size='sm', align='center'
-        )
-        
-        st.write("") # Spacer
+        mode = sac.segmented(items=[sac.SegmentedItem(label='日常社交', icon='cup-hot'), sac.SegmentedItem(label='学术研讨', icon='book'), sac.SegmentedItem(label='艺术共创', icon='palette')], size='sm', align='center')
+        st.write("") 
 
-        # 逐行对齐渲染
+        # 🌟 修复：注释式UI（Mobile Friendly）
         for msg in chat_history:
             col_chat, col_node = st.columns([0.65, 0.35], gap="medium")
-            
             with col_chat:
                 c_msg, c_del = st.columns([0.92, 0.08])
                 with c_msg:
-                    # 针对不同角色使用不同头像
                     avatar = "🧑‍💻" if msg['role']=='user' else "🤖"
                     with st.chat_message(msg['role'], avatar=avatar):
                         st.markdown(msg['content'], unsafe_allow_html=True)
@@ -236,44 +176,32 @@ else:
                     if msg['role'] == 'user':
                         if st.button("✕", key=f"del_{msg['id']}", help="删除"):
                             if msc.soft_delete_chat_and_node(msg['id'], msg['content'], st.session_state.username): st.rerun()
-
             with col_node:
                 if msg['role'] == 'user' and msg['content'] in nodes_map:
                     node = nodes_map[msg['content']]
-                    logic_score = node.get('logic_score', 0.5)
-                    
-                    # HTML 智能卡片渲染
-                    card_html = f"""
-                    <div class="meaning-card">
-                        <div class="card-tag">M-SCORE: {logic_score}</div>
-                        <div class="card-body">
-                            <strong>{node['care_point']}</strong>
-                            <div class="card-insight">{node['insight']}</div>
+                    # 🌟 核心改进：默认折叠，只显示一行小标题，不占地方
+                    with st.expander(f"✨ 发现意义：{node['care_point'][:8]}...", expanded=False):
+                        html = f"""
+                        <div class="meaning-card-inner">
+                            <div class="card-insight">“{node['insight']}”</div>
+                            <div class="card-structure">{node['meaning_layer']}</div>
                         </div>
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
+                        """
+                        st.markdown(html, unsafe_allow_html=True)
 
-        # 底部输入
         if prompt := st.chat_input("输入思考..."):
             msc.save_chat(st.session_state.username, "user", prompt)
-            
             full_history = chat_history + [{'role':'user', 'content':prompt}]
             stream = msc.get_normal_response(full_history)
             reply_text = st.write_stream(stream)
             msc.save_chat(st.session_state.username, "assistant", reply_text)
-            
             with st.spinner("⚡ 意义计算中..."):
                 analysis = msc.analyze_meaning_background(prompt)
                 if analysis.get("valid", False):
                     vec = msc.get_embedding(prompt)
-                    # 传入当前选择的 mode
                     msc.save_node(st.session_state.username, prompt, analysis, mode, vec)
-                    
                     if "radar_scores" in analysis: msc.update_radar_score(st.session_state.username, analysis["radar_scores"])
                     match = msc.find_resonance(vec, st.session_state.username, analysis)
-                    if match: 
-                        sac.alert(f"发现共鸣！与 {match['user']} (MLS={match['score']})", color='success', icon='lightning-charge')
-                    
+                    if match: sac.alert(f"发现共鸣！与 {match['user']} (MLS={match['score']})", color='success', icon='lightning-charge')
                     msc.check_group_formation(analysis, vec, st.session_state.username)
             st.rerun()
