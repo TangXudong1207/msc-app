@@ -4,7 +4,7 @@ from supabase import create_client, Client
 from streamlit_echarts import st_echarts
 import pydeck as pdk
 import plotly.express as px
-import plotly.graph_objects as go  # 🌟 引入手动挡绘图库
+import plotly.graph_objects as go
 import pandas as pd
 import json
 import re
@@ -24,7 +24,6 @@ def init_system():
             base_url=st.secrets["BASE_URL"]
         )
         model = st.secrets["MODEL_NAME"]
-        
         supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         return client, model, supabase
     except Exception as e:
@@ -237,11 +236,9 @@ def find_resonance(current_vector, current_user, current_data):
         res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
         others = res.data
         best_match, highest_score = None, 0
-        
         c_topics = current_data.get('topic_tags', [])
         c_meanings = current_data.get('keywords', [])
         c_ex = current_data.get('existential_q', False)
-        
         for row in others:
             if row['vector']:
                 try:
@@ -289,6 +286,13 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
+    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
+    2. 提取 Topic Tags (表层话题)。
+    3. 提取 Meaning Tags (深层价值)。
+    4. 提取 Care Point (简短关切)。
+    5. 提取 Meaning Layer (结构分析)。
+    6. 提取 Insight (升维洞察)。
+    
     返回 JSON:
     {{
         "valid": true,
@@ -313,37 +317,6 @@ def analyze_persona_report(radar_data):
     prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
     return call_ai_api(prompt)
 
-def simulate_civilization(topic, count):
-    prompt = f"""
-    Task: Simulate {count} distinct users discussing "{topic}".
-    Return JSON: {{ "users": [ {{ "username": "u1", "nickname": "A", "content": "..." }} ] }}
-    """
-    res = call_ai_api(prompt)
-    agents = []
-    if isinstance(res, dict) and "users" in res: agents = res["users"]
-    elif isinstance(res, list): agents = res
-    elif isinstance(res, dict): 
-        for val in res.values(): 
-            if isinstance(val, list): agents = val; break
-    if not agents: return 0, f"AI生成格式异常"
-    success_count = 0
-    for agent in agents:
-        try:
-            uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
-            add_user(uid, "123456", agent.get('nickname', 'SimBot'))
-            save_chat(uid, "user", agent['content'])
-            analysis = analyze_meaning_background(agent['content'])
-            if "error" in analysis: analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
-            else: analysis["valid"] = True
-            vec = get_embedding(agent['content'])
-            save_node(uid, agent['content'], analysis, "日常", vec)
-            if "radar_scores" in analysis: update_radar_score(uid, analysis["radar_scores"])
-            check_group_formation(analysis, vec, uid)
-            success_count += 1
-            time.sleep(0.2)
-        except: pass
-    return success_count, f"成功注入 {success_count} 个智能体！"
-
 def generate_daily_question(username, radar_data):
     recent_nodes = get_user_nodes(username)
     context = ""
@@ -362,62 +335,70 @@ def generate_daily_question(username, radar_data):
     if "question" in res: return res["question"]
     return "今天，什么事情让你感到'活着'？"
 
-# ==========================================
-# 🎨 5. 视觉渲染 (v39.0 稳如泰山版)
-# ==========================================
+# 🌟 新增：批量生成剧本
+def generate_simulation_script(topic, count):
+    prompt = f"""
+    Task: Write a script for {count} distinct users discussing "{topic}".
+    Format: A JSON object with key "script", which is a list of objects.
+    Each object must have: "username", "nickname", "content".
+    
+    Example:
+    {{
+        "script": [
+            {{ "username": "u1", "nickname": "A", "content": "..." }},
+            {{ "username": "u2", "nickname": "B", "content": "..." }}
+        ]
+    }}
+    """
+    res = call_ai_api(prompt)
+    if isinstance(res, dict) and "script" in res: return res["script"]
+    if isinstance(res, list): return res # 兼容处理
+    return []
 
+# 🌟 新增：执行单步模拟
+def process_simulation_turn(agent):
+    try:
+        # 随机后缀防重名
+        uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
+        add_user(uid, "123456", agent.get('nickname', 'SimBot'))
+        save_chat(uid, "user", agent['content'])
+        
+        analysis = analyze_meaning_background(agent['content'])
+        # 仿真模式强制有效，除非完全失败
+        if "error" in analysis: 
+             analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
+        else:
+             analysis["valid"] = True
+             
+        vec = get_embedding(agent['content'])
+        save_node(uid, agent['content'], analysis, "日常", vec)
+        if "radar_scores" in analysis: update_radar_score(uid, analysis["radar_scores"])
+        check_group_formation(analysis, vec, uid)
+        return True
+    except: return False
+
+# ==========================================
+# 🎨 5. 视觉渲染 (Locked)
+# ==========================================
 def render_2d_world_map(nodes):
-    """
-    使用 Plotly Graph Objects 渲染，最稳定的写法
-    """
-    # 模拟数据
-    lats, lons, texts, sizes = [], [], [], []
-    
-    # 1. 添加基准点
-    lats.append(39.9); lons.append(116.4); texts.append("HQ"); sizes.append(15)
-    
-    # 2. 添加节点
-    for _ in range(len(nodes) + 10):
-        lats.append(float(np.random.uniform(-40, 60)))
-        lons.append(float(np.random.uniform(-130, 150)))
-        texts.append("Node")
-        sizes.append(float(np.random.randint(5, 10)))
-
+    map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
+    for _ in range(len(nodes) + 15): 
+        lon = np.random.uniform(-150, 150)
+        lat = np.random.uniform(-40, 60)
+        val = np.random.randint(10, 100)
+        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
+    df = pd.DataFrame(map_data)
+    # Plotly 渲染
     fig = go.Figure(data=go.Scattergeo(
-        lon = lons,
-        lat = lats,
-        text = texts,
+        lon = [d['value'][0] for d in map_data],
+        lat = [d['value'][1] for d in map_data],
         mode = 'markers',
-        marker = dict(
-            size = sizes,
-            opacity = 0.8,
-            autocolorscale = False,
-            symbol = 'circle',
-            line = dict(
-                width=1,
-                color='rgba(102, 102, 102)'
-            ),
-            color = '#ffd60a', # 亮黄色
-        )
+        marker = dict(size=5, color='#ffd60a', opacity=0.8)
     ))
-
     fig.update_layout(
-        geo = dict(
-            scope='world',
-            projection_type='natural earth',
-            showland = True,
-            landcolor = "rgb(20, 20, 20)",
-            subunitcolor = "rgb(50, 50, 50)",
-            countrycolor = "rgb(50, 50, 50)",
-            countrywidth = 0.5,
-            subunitwidth = 0.5,
-            bgcolor = "black", # 纯黑背景
-        ),
-        margin={"r":0,"t":0,"l":0,"b":0},
-        paper_bgcolor="black",
-        height=500
+        geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"),
+        margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500
     )
-    
     st.plotly_chart(fig, use_container_width=True)
 
 def render_3d_galaxy(nodes):
@@ -480,7 +461,9 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                m_sim = len(set(na['keywords']).intersection(set(nb['keywords']))) / (len(set(na['keywords']).union(set(nb['keywords']))) or 1)
+                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
+                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
+                m_sim = m_inter / m_union if m_union > 0 else 0
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
                 score = 0.6 * m_sim + 0.4 * vec_sim
                 if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
