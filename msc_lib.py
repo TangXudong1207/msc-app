@@ -71,7 +71,7 @@ def check_hashes(password, hashed_text):
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
-        if len(res.data) > 0: return True # 模拟模式下，用户存在也算成功
+        if len(res.data) > 0: return True # 模拟模式下存在即成功
         default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
@@ -159,7 +159,8 @@ def save_node(username, content, data, mode, vector):
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
-    except: return False
+    except Exception as e: st.error(f"Save Node Error: {e}")
+    return False
 
 def get_active_nodes_map(username):
     try:
@@ -225,6 +226,7 @@ def find_resonance(current_vector, current_user, current_data):
         res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
         others = res.data
         best_match, highest_score = None, 0
+        
         c_topics = current_data.get('topic_tags', [])
         c_meanings = current_data.get('keywords', [])
         c_ex = current_data.get('existential_q', False)
@@ -236,7 +238,14 @@ def find_resonance(current_vector, current_user, current_data):
                     o_keywords = json.loads(row['keywords']) if row['keywords'] else []
                     o_topics = [] 
                     o_ex = False
-                    MLS = calculate_MLS(current_vector, o_vec, c_topics, o_topics, c_meanings, o_keywords, c_ex, o_ex)
+                    
+                    MLS = calculate_MLS(
+                        current_vector, o_vec,
+                        c_topics, o_topics,
+                        c_meanings, o_keywords,
+                        c_ex, o_ex
+                    )
+                    
                     if MLS > 0.75 and MLS > highest_score:
                         highest_score = MLS
                         best_match = {"user": row['username'], "content": row['content'], "score": round(MLS * 100, 1)}
@@ -245,7 +254,7 @@ def find_resonance(current_vector, current_user, current_data):
     except: return None
 
 # ==========================================
-# 🧠 4. AI 智能
+# 🧠 4. AI 智能 (核心逻辑)
 # ==========================================
 def call_ai_api(prompt):
     try:
@@ -276,18 +285,16 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
-    返回 JSON:
+    判断是否生成节点。若只是寒暄返回 {{ "valid": false }}。
+    若有意义返回 JSON:
     {{
         "valid": true,
-        "care_point": "...", "meaning_layer": "...", "insight": "...",
-        "logic_score": 0.8, "keywords": ["tag1"], "topic_tags": ["topic1"], "existential_q": false,
+        "care_point": "核心关切",
+        "meaning_layer": "结构",
+        "insight": "洞察",
+        "logic_score": 0.8,
+        "keywords": ["tag1"], 
+        "topic_tags": ["topic1"],
         "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
     }}
     """
@@ -307,38 +314,51 @@ def analyze_persona_report(radar_data):
     prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
     return call_ai_api(prompt)
 
-# 🌟 修复的核心：真正执行模拟逻辑
 def simulate_civilization(topic, count):
+    # 🌟 修正：明确要求返回 'users' 键，适配 JSON Mode
     prompt = f"""
-    任务：模拟 {count} 个用户围绕“{topic}”对话。
-    返回 JSON 列表: [ {{ "username": "...", "nickname": "...", "content": "..." }} ]
+    Task: Simulate {count} distinct users discussing "{topic}".
+    Create realistic, profound personas.
+    
+    Return a JSON object:
+    {{
+        "users": [
+            {{ "username": "user1", "nickname": "Philosopher_A", "content": "..." }},
+            {{ "username": "user2", "nickname": "Artist_B", "content": "..." }}
+        ]
+    }}
     """
     res = call_ai_api(prompt)
     
-    # 解析 AI 返回的数据
+    # 健壮性解析
     agents = []
-    if isinstance(res, dict) and "users" in res: agents = res["users"]
-    elif isinstance(res, list): agents = res
+    if isinstance(res, dict) and "users" in res:
+        agents = res["users"]
+    elif isinstance(res, list):
+        agents = res
     
-    if not agents: return 0, "AI 生成数据为空"
+    if not agents: return 0, f"AI生成格式异常: {str(res)}"
 
     success_count = 0
-    # 🌟 关键：在这里真正执行循环，把数据写入数据库
     for agent in agents:
         try:
-            # 1. 注册
-            add_user(agent['username'], "123456", agent['nickname'])
-            # 2. 说话
-            save_chat(agent['username'], "user", agent['content'])
-            # 3. 分析 & 存节点
+            # 自动添加随机后缀防止重名
+            clean_username = agent['username'] + str(int(time.time()))[-4:]
+            
+            add_user(clean_username, "123456", agent['nickname'])
+            save_chat(clean_username, "user", agent['content'])
+            
+            # 分析
             analysis = analyze_meaning_background(agent['content'])
             if analysis.get("valid", False):
                 vec = get_embedding(agent['content'])
-                save_node(agent['username'], agent['content'], analysis, "日常", vec)
-                if "radar_scores" in analysis: update_radar_score(agent['username'], analysis["radar_scores"])
-                check_group_formation(analysis, vec, agent['username'])
+                save_node(clean_username, agent['content'], analysis, "日常", vec)
+                if "radar_scores" in analysis: 
+                    update_radar_score(clean_username, analysis["radar_scores"])
+                
+                check_group_formation(analysis, vec, clean_username)
                 success_count += 1
-        except: pass
+        except Exception as e: print(f"Sim error: {e}")
         
     return success_count, f"成功注入 {success_count} 个智能体！"
 
