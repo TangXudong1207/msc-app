@@ -138,17 +138,6 @@ def get_active_chats(username, limit=50):
         return list(reversed(res.data))
     except: return []
 
-# 🌟 新增：获取全球最新动态（不限用户）
-def get_global_stream(limit=20):
-    try:
-        # 获取最新的20条用户发言（排除AI回复）
-        res = supabase.table('chats').select("*").eq('role', 'user').eq('is_deleted', False).order('id', desc=True).limit(limit).execute()
-        
-        # 为了显示昵称，我们需要再查一下用户表（简单起见，这里先只显示用户名，或者再做一次查询）
-        # 优化：返回数据
-        return res.data
-    except: return []
-
 def soft_delete_chat_and_node(chat_id, content, username):
     try:
         supabase.table('chats').update({"is_deleted": True}).eq("id", chat_id).execute()
@@ -337,30 +326,15 @@ def analyze_persona_report(radar_data):
 def simulate_civilization(topic, count):
     prompt = f"""
     Task: Simulate {count} distinct users discussing "{topic}".
-    Create realistic, profound personas.
-    
-    IMPORTANT: Return a JSON object with a 'users' key containing a list.
-    Example:
-    {{
-        "users": [
-            {{ "username": "u1", "nickname": "A", "content": "..." }},
-            {{ "username": "u2", "nickname": "B", "content": "..." }}
-        ]
-    }}
+    Return JSON: {{ "users": [ {{ "username": "u1", "nickname": "A", "content": "..." }} ] }}
     """
     res = call_ai_api(prompt)
-    
     agents = []
-    if isinstance(res, dict) and "users" in res:
-        agents = res["users"]
-    elif isinstance(res, list):
-        agents = res
-    elif isinstance(res, dict):
-        for val in res.values():
-            if isinstance(val, list):
-                agents = val
-                break
-    
+    if isinstance(res, dict) and "users" in res: agents = res["users"]
+    elif isinstance(res, list): agents = res
+    elif isinstance(res, dict): 
+        for val in res.values(): 
+            if isinstance(val, list): agents = val; break
     if not agents: return 0, f"AI生成格式异常"
 
     success_count = 0
@@ -369,106 +343,82 @@ def simulate_civilization(topic, count):
             uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
             add_user(uid, "123456", agent.get('nickname', 'SimBot'))
             save_chat(uid, "user", agent['content'])
-            
             analysis = analyze_meaning_background(agent['content'])
-            if "error" in analysis:
-                analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
-            else:
-                analysis["valid"] = True
-            
+            if "error" in analysis: analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
+            else: analysis["valid"] = True
             vec = get_embedding(agent['content'])
             save_node(uid, agent['content'], analysis, "日常", vec)
-            
-            if "radar_scores" in analysis: 
-                update_radar_score(uid, analysis["radar_scores"])
-            
+            if "radar_scores" in analysis: update_radar_score(uid, analysis["radar_scores"])
             check_group_formation(analysis, vec, uid)
             success_count += 1
             time.sleep(0.2)
         except: pass
-        
     return success_count, f"成功注入 {success_count} 个智能体！"
 
+# 🌟 新增：生成每日追问
+def generate_daily_question(username, radar_data):
+    # 获取最近的节点作为上下文
+    recent_nodes = get_user_nodes(username)
+    context = ""
+    if recent_nodes:
+        context = f"用户最近关注点：{[n['care_point'] for n in recent_nodes[-3:]]}"
+    
+    radar_str = json.dumps(radar_data, ensure_ascii=False)
+    
+    prompt = f"""
+    任务：为用户生成一个【每日意义追问】。
+    用户元人性雷达：{radar_str}
+    {context}
+    
+    要求：
+    1. 问题要短小精悍（20字以内）。
+    2. 要针对用户当前的弱项维度进行温和挑战，或者针对强项进行深度挖掘。
+    3. 旨在触发用户思考，生成新的意义节点。
+    
+    返回 JSON: {{ "question": "..." }}
+    """
+    res = call_ai_api(prompt)
+    if "question" in res: return res["question"]
+    return "今天，什么事情让你感到'活着'？"
+
 # ==========================================
-# 🎨 5. 视觉渲染 (修复版)
+# 🎨 5. 视觉渲染 (Locked)
 # ==========================================
 def render_2d_world_map(nodes):
-    # 🌟 修复：直接构造简单的 List[Dict]，让 Plotly 自动处理
-    data_list = []
-    # 随机生成全球分布点
-    for _ in range(len(nodes) + 15):
-        data_list.append({
-            "lat": np.random.uniform(-40, 60),
-            "lon": np.random.uniform(-130, 150),
-            "size": np.random.randint(5, 12),
-            "label": "Active Node"
-        })
-    
-    if not data_list: return
-    
-    df = pd.DataFrame(data_list)
-    
+    map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
+    for _ in range(len(nodes) + 10): 
+        lon = np.random.uniform(-150, 150)
+        lat = np.random.uniform(-40, 60)
+        val = np.random.randint(10, 100)
+        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
+    df = pd.DataFrame(map_data)
     fig = px.scatter_geo(
-        df, lat="lat", lon="lon", size="size",
-        projection="natural earth",
-        template="plotly_dark",
-        color_discrete_sequence=["#ffd60a"] # 亮黄
+        df, lat="lat", lon="lon", size="size", hover_name="label",
+        projection="natural earth", template="plotly_dark", color_discrete_sequence=["#ffd60a"]
     )
-    
-    fig.update_geos(
-        showcountries=True, countrycolor="#444",
-        showland=True, landcolor="#0e1117",
-        showocean=True, oceancolor="#000",
-        showlakes=False
-    )
-    
-    fig.update_layout(
-        margin={"r":0,"t":0,"l":0,"b":0},
-        paper_bgcolor="#000",
-        height=500
-    )
-    
+    fig.update_geos(showcountries=True, countrycolor="#444", showland=True, landcolor="#0e1117", showocean=True, oceancolor="#000")
+    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="#000", height=500)
     st.plotly_chart(fig, use_container_width=True)
 
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: st.info("🌌 星河汇聚中..."); return
-    vectors, labels = [], []
-    for node in nodes:
+    vectors, labels, colors = [], [], []
+    for i, node in enumerate(nodes):
         if node['vector']:
             try:
                 v = json.loads(node['vector'])
                 vectors.append(v)
                 labels.append(node['care_point'])
+                colors.append(i % 3)
             except: pass
     if not vectors: return
-    
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
-    
     df = pd.DataFrame(coords, columns=['x', 'y', 'z'])
     df['label'] = labels
-    # 随机大小和颜色模拟星空
-    df['size'] = np.random.randint(3, 10, size=len(df))
-    
-    fig = px.scatter_3d(
-        df, x='x', y='y', z='z',
-        text='label', # 显示文字
-        size='size',
-        template="plotly_dark",
-        opacity=0.9,
-        color_discrete_sequence=["#00d2ff"]
-    )
-    
-    fig.update_layout(
-        scene=dict(
-            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
-            bgcolor='black'
-        ),
-        paper_bgcolor="black",
-        margin={"r":0,"t":0,"l":0,"b":0},
-        height=600,
-        showlegend=False
-    )
+    df['cluster'] = colors
+    fig = px.scatter_3d(df, x='x', y='y', z='z', color='cluster', hover_name='label', template="plotly_dark", opacity=0.8)
+    fig.update_layout(scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
 def render_radar_chart(radar_dict, height="200px"):
@@ -486,23 +436,39 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     graph_nodes, graph_links = [], []
     symbol_base = 30 if is_fullscreen else 15
     for i, node in enumerate(nodes):
-        logic = node.get('logic_score', 0.5)
+        logic = node.get('logic_score')
+        if logic is None: logic = 0.5
+        
+        keywords = []
+        if node.get('keywords'):
+            if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
+            else: keywords = node['keywords']
+            
+        vector = None
+        if node.get('vector'):
+            if isinstance(node['vector'], str): vector = json.loads(node['vector'])
+            else: vector = node['vector']
+
         graph_nodes.append({
             "name": str(node['id']), "id": str(node['id']),
             "symbolSize": symbol_base * (0.8 + logic),
             "value": node['care_point'],
             "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
-            "vector": json.loads(node['vector']) if node.get('vector') else None,
-            "keywords": json.loads(node['keywords']) if node.get('keywords') else []
+            "vector": vector,
+            "keywords": keywords
         })
     node_count = len(graph_nodes)
     for i in range(node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
+                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
+                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
+                m_sim = m_inter / m_union if m_union > 0 else 0
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
-                if vec_sim > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
-                elif vec_sim > 0.65: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
+                score = 0.6 * m_sim + 0.4 * vec_sim
+                if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
+                elif score > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
     option = {
         "backgroundColor": "#0e1117",
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
