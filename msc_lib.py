@@ -4,6 +4,7 @@ from supabase import create_client, Client
 from streamlit_echarts import st_echarts
 import pydeck as pdk
 import plotly.express as px
+import plotly.graph_objects as go  # 🌟 引入手动挡绘图库
 import pandas as pd
 import json
 import re
@@ -33,7 +34,7 @@ def init_system():
 client_ai, TARGET_MODEL, supabase = init_system()
 
 # ==========================================
-# 🧮 2. 核心算法 (辅助)
+# 🧮 2. 核心算法
 # ==========================================
 def get_embedding(text):
     return np.random.rand(1536).tolist()
@@ -181,9 +182,7 @@ def get_all_nodes_for_map(username):
         return res.data
     except: return []
 
-# 🌟 修复：明确定义 get_user_nodes 函数，供 AI 使用
 def get_user_nodes(username):
-    # 复用 get_all_nodes_for_map 的逻辑
     return get_all_nodes_for_map(username)
 
 def get_global_nodes():
@@ -238,9 +237,11 @@ def find_resonance(current_vector, current_user, current_data):
         res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
         others = res.data
         best_match, highest_score = None, 0
+        
         c_topics = current_data.get('topic_tags', [])
         c_meanings = current_data.get('keywords', [])
         c_ex = current_data.get('existential_q', False)
+        
         for row in others:
             if row['vector']:
                 try:
@@ -343,7 +344,6 @@ def simulate_civilization(topic, count):
         except: pass
     return success_count, f"成功注入 {success_count} 个智能体！"
 
-# 🌟 每日追问 (现在安全了)
 def generate_daily_question(username, radar_data):
     recent_nodes = get_user_nodes(username)
     context = ""
@@ -363,22 +363,61 @@ def generate_daily_question(username, radar_data):
     return "今天，什么事情让你感到'活着'？"
 
 # ==========================================
-# 🎨 5. 视觉渲染 (Locked)
+# 🎨 5. 视觉渲染 (v39.0 稳如泰山版)
 # ==========================================
+
 def render_2d_world_map(nodes):
-    map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
-    for _ in range(len(nodes) + 10): 
-        lon = np.random.uniform(-150, 150)
-        lat = np.random.uniform(-40, 60)
-        val = np.random.randint(10, 100)
-        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
-    df = pd.DataFrame(map_data)
-    fig = px.scatter_geo(
-        df, lat="lat", lon="lon", size="size", hover_name="label",
-        projection="natural earth", template="plotly_dark", color_discrete_sequence=["#ffd60a"]
+    """
+    使用 Plotly Graph Objects 渲染，最稳定的写法
+    """
+    # 模拟数据
+    lats, lons, texts, sizes = [], [], [], []
+    
+    # 1. 添加基准点
+    lats.append(39.9); lons.append(116.4); texts.append("HQ"); sizes.append(15)
+    
+    # 2. 添加节点
+    for _ in range(len(nodes) + 10):
+        lats.append(float(np.random.uniform(-40, 60)))
+        lons.append(float(np.random.uniform(-130, 150)))
+        texts.append("Node")
+        sizes.append(float(np.random.randint(5, 10)))
+
+    fig = go.Figure(data=go.Scattergeo(
+        lon = lons,
+        lat = lats,
+        text = texts,
+        mode = 'markers',
+        marker = dict(
+            size = sizes,
+            opacity = 0.8,
+            autocolorscale = False,
+            symbol = 'circle',
+            line = dict(
+                width=1,
+                color='rgba(102, 102, 102)'
+            ),
+            color = '#ffd60a', # 亮黄色
+        )
+    ))
+
+    fig.update_layout(
+        geo = dict(
+            scope='world',
+            projection_type='natural earth',
+            showland = True,
+            landcolor = "rgb(20, 20, 20)",
+            subunitcolor = "rgb(50, 50, 50)",
+            countrycolor = "rgb(50, 50, 50)",
+            countrywidth = 0.5,
+            subunitwidth = 0.5,
+            bgcolor = "black", # 纯黑背景
+        ),
+        margin={"r":0,"t":0,"l":0,"b":0},
+        paper_bgcolor="black",
+        height=500
     )
-    fig.update_geos(showcountries=True, countrycolor="#444", showland=True, landcolor="#0e1117", showocean=True, oceancolor="#000")
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="#000", height=500)
+    
     st.plotly_chart(fig, use_container_width=True)
 
 def render_3d_galaxy(nodes):
@@ -419,12 +458,10 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i, node in enumerate(nodes):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
-        
         keywords = []
         if node.get('keywords'):
             if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
             else: keywords = node['keywords']
-            
         vector = None
         if node.get('vector'):
             if isinstance(node['vector'], str): vector = json.loads(node['vector'])
@@ -443,9 +480,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
-                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
-                m_sim = m_inter / m_union if m_union > 0 else 0
+                m_sim = len(set(na['keywords']).intersection(set(nb['keywords']))) / (len(set(na['keywords']).union(set(nb['keywords']))) or 1)
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
                 score = 0.6 * m_sim + 0.4 * vec_sim
                 if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
