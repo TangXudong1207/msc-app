@@ -13,24 +13,36 @@ import numpy as np
 from sklearn.decomposition import PCA 
 from sklearn.cluster import KMeans
 
-# 🛑 配置与初始化
+# ==========================================
+# 🛑 1. 配置与初始化
+# ==========================================
 def init_system():
     try:
-        client = OpenAI(api_key=st.secrets["API_KEY"], base_url=st.secrets["BASE_URL"])
+        client = OpenAI(
+            api_key=st.secrets["API_KEY"],
+            base_url=st.secrets["BASE_URL"]
+        )
         model = st.secrets["MODEL_NAME"]
         supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         return client, model, supabase
-    except Exception as e: st.error(f"Error: {e}"); st.stop()
+    except Exception as e:
+        st.error(f"系统启动失败: {e}")
+        st.stop()
 
 client_ai, TARGET_MODEL, supabase = init_system()
 
-# 🧮 算法与工具
-def get_embedding(text): return np.random.rand(1536).tolist()
+# ==========================================
+# 🧮 2. 核心算法
+# ==========================================
+def get_embedding(text):
+    return np.random.rand(1536).tolist()
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
-    vec1, vec2 = np.array(v1), np.array(v2)
-    norm1, norm2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
+    vec1 = np.array(v1)
+    vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
     if norm1 == 0 or norm2 == 0: return 0
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
@@ -46,13 +58,20 @@ def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex
     ex_match = 1.0 if (ex_a and ex_b) else 0.0
     return 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
 
-def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest()
+def make_hashes(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
 
-# 🔐 用户与数据库
+def check_hashes(password, hashed_text):
+    if make_hashes(password) == hashed_text: return True
+    return False
+
+# ==========================================
+# 🔐 3. 用户与数据库
+# ==========================================
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
-        if len(res.data) > 0: return False
+        if len(res.data) > 0: return True 
         default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
@@ -77,15 +96,20 @@ def update_radar_score(username, new_scores):
     try:
         user_data = get_user_profile(username)
         current_radar = user_data.get('radar_profile')
-        if not current_radar: current_radar = {k: 3.0 for k in new_scores.keys()}
-        elif isinstance(current_radar, str): current_radar = json.loads(current_radar)
+        if not current_radar:
+            current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str):
+            current_radar = json.loads(current_radar)
         alpha = 0.2
         updated_radar = {}
         for key in new_scores:
             old_val = float(current_radar.get(key, 3.0))
             input_val = float(new_scores.get(key, 0))
-            if input_val > 1.0: updated_radar[key] = round(min(10.0, old_val*(1-alpha)+input_val*alpha), 2)
-            else: updated_radar[key] = old_val
+            if input_val > 1.0:
+                updated_val = old_val * (1 - alpha) + input_val * alpha
+                updated_radar[key] = round(min(10.0, updated_val), 2)
+            else:
+                updated_radar[key] = old_val
         supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
     except: pass
 
@@ -102,7 +126,9 @@ def calculate_rank(radar_data):
     else: return "最强王者", "👑"
 
 def save_chat(username, role, content):
-    try: supabase.table('chats').insert({"username": username, "role": role, "content": content, "is_deleted": False}).execute()
+    try:
+        data = {"username": username, "role": role, "content": content, "is_deleted": False}
+        supabase.table('chats').insert(data).execute()
     except: pass
 
 def get_active_chats(username, limit=50):
@@ -118,9 +144,16 @@ def soft_delete_chat_and_node(chat_id, content, username):
         return True
     except: return False
 
+def restore_item(table, item_id):
+    try:
+        supabase.table(table).update({"is_deleted": False}).eq("id", item_id).execute()
+        return True
+    except: return False
+
 def save_node(username, content, data, mode, vector):
     try:
-        logic = data.get('logic_score', 0.5)
+        logic = data.get('logic_score')
+        if logic is None: logic = 0.5
         keywords = data.get('keywords', [])
         insert_data = {
             "username": username, "content": content,
@@ -132,7 +165,8 @@ def save_node(username, content, data, mode, vector):
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
-    except: return False
+    except Exception as e: st.error(f"Save Node Error: {e}")
+    return False
 
 def get_active_nodes_map(username):
     try:
@@ -145,10 +179,6 @@ def get_all_nodes_for_map(username):
         res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
         return res.data
     except: return []
-
-# 🌟 将这个函数移动到 get_all_nodes_for_map 之后
-def get_user_nodes(username):
-    return get_all_nodes_for_map(username)
 
 def get_global_nodes():
     try:
@@ -181,7 +211,8 @@ def get_available_rooms():
 def join_room(room_id, username):
     try:
         check = supabase.table('room_members').select("*").eq('room_id', room_id).eq('username', username).execute()
-        if not check.data: supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
+        if not check.data:
+            supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
     except: pass
 
 def get_room_messages(room_id):
@@ -191,7 +222,8 @@ def get_room_messages(room_id):
     except: return []
 
 def send_room_message(room_id, username, content):
-    try: supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
+    try:
+        supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
     except: pass
 
 def find_resonance(current_vector, current_user, current_data):
@@ -218,7 +250,7 @@ def find_resonance(current_vector, current_user, current_data):
         return best_match
     except: return None
 
-# 🧠 AI 核心
+# --- 🧠 AI 核心 ---
 def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
@@ -248,6 +280,9 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
+    1. 判断是否生成节点。
+    2. 提取 MSC 结构。
+    3. 【雷达评分】Care,Curiosity,Reflection,Coherence,Empathy,Agency,Aesthetic (0-10)。
     返回 JSON:
     {{
         "valid": true,
@@ -303,47 +338,47 @@ def simulate_civilization(topic, count):
         except: pass
     return success_count, f"成功注入 {success_count} 个智能体！"
 
-# 🌟 每日追问 (修复版：确保 get_user_nodes 可用)
 def generate_daily_question(username, radar_data):
-    # 现在调用 get_user_nodes 没问题了，因为它在上面定义了
     recent_nodes = get_user_nodes(username)
     context = ""
     if recent_nodes:
         # 取最近3个节点的 care point
-        # recent_nodes[-3:] 获取最后三个，也就是最新的（如果列表是按时间正序）
-        # 这里假设 get_user_nodes 返回的是按时间正序
-        context = f"用户最近关注点：{[n['care_point'] for n in recent_nodes[-3:]]}"
-    
+        last_3 = recent_nodes[-3:] if len(recent_nodes) >=3 else recent_nodes
+        context = f"用户最近关注点：{[n['care_point'] for n in last_3]}"
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    
     prompt = f"""
     任务：为用户生成一个【每日意义追问】。
     用户元人性雷达：{radar_str}
     {context}
-    
-    要求：
-    1. 问题要短小精悍（20字以内）。
-    2. 要针对用户当前的弱项维度进行温和挑战，或者针对强项进行深度挖掘。
-    3. 旨在触发用户思考，生成新的意义节点。
-    
+    要求：短小精悍（20字以内），直击灵魂。
     返回 JSON: {{ "question": "..." }}
     """
     res = call_ai_api(prompt)
     if "question" in res: return res["question"]
     return "今天，什么事情让你感到'活着'？"
 
-# --- 🎨 渲染函数 (保持不变) ---
+# ==========================================
+# 🎨 5. 视觉渲染 (修复版)
+# ==========================================
 def render_2d_world_map(nodes):
-    map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
-    for _ in range(len(nodes) + 10): 
-        lon = np.random.uniform(-150, 150)
-        lat = np.random.uniform(-40, 60)
-        val = np.random.randint(10, 100)
-        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
+    # 🌟 修复：构造标准的 List[Dict]，确保类型安全
+    map_data = [{"lat": 39.9, "lon": 116.4, "size": 10, "label": "HQ"}]
+    for _ in range(len(nodes) + 15): 
+        map_data.append({
+            "lat": float(np.random.uniform(-40, 60)),
+            "lon": float(np.random.uniform(-130, 150)),
+            "size": float(np.random.randint(5, 12)),
+            "label": "Node"
+        })
+    
     df = pd.DataFrame(map_data)
+    # 确保 DataFrame 不为空
+    if df.empty: return 
+
     fig = px.scatter_geo(
         df, lat="lat", lon="lon", size="size", hover_name="label",
-        projection="natural earth", template="plotly_dark", color_discrete_sequence=["#ffd60a"]
+        projection="natural earth", template="plotly_dark",
+        color_discrete_sequence=["#ffd60a"]
     )
     fig.update_geos(showcountries=True, countrycolor="#444", showland=True, landcolor="#0e1117", showocean=True, oceancolor="#000")
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="#000", height=500)
@@ -387,12 +422,10 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i, node in enumerate(nodes):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
-        
         keywords = []
         if node.get('keywords'):
             if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
             else: keywords = node['keywords']
-            
         vector = None
         if node.get('vector'):
             if isinstance(node['vector'], str): vector = json.loads(node['vector'])
@@ -411,9 +444,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
-                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
-                m_sim = m_inter / m_union if m_union > 0 else 0
+                m_sim = len(set(na['keywords']).intersection(set(nb['keywords']))) / (len(set(na['keywords']).union(set(nb['keywords']))) or 1)
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
                 score = 0.6 * m_sim + 0.4 * vec_sim
                 if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
