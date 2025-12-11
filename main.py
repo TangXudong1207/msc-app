@@ -4,122 +4,146 @@ import time
 import json
 
 # ==========================================
-# 🎨 1. 注入赛博艺术 CSS (UI 灵魂)
+# 🎨 1. 注入 Google Studio 风格 CSS
 # ==========================================
 def inject_custom_css():
     st.markdown("""
     <style>
-        /* --- 全局背景：深空星尘 --- */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+        /* --- 全局容器：极简白 --- */
         .stApp {
-            background-color: #050510;
-            background-image: radial-gradient(circle at 50% 0%, #1a1c2e 0%, #000000 80%);
-            color: #e0e0e0;
+            background-color: #FFFFFF;
+            font-family: 'Roboto', sans-serif;
+            color: #1F1F1F;
         }
         
-        /* --- 侧边栏：驾驶舱仪表盘 --- */
+        /* --- 侧边栏：淡灰背景 --- */
         [data-testid="stSidebar"] {
-            background-color: rgba(10, 12, 20, 0.95);
-            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            background-color: #F8F9FA;
+            border-right: 1px solid #E0E0E0;
         }
         
-        /* --- 标题：流光渐变 --- */
+        /* --- 标题：Google 风格 --- */
         h1, h2, h3 {
-            font-family: 'Helvetica Neue', sans-serif;
-            font-weight: 300;
-            letter-spacing: 2px;
-            background: linear-gradient(90deg, #00d2ff, #ff00d4);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+            font-family: 'Roboto', sans-serif;
+            font-weight: 500;
+            color: #202124;
+            letter-spacing: -0.5px;
         }
         
-        /* --- 按钮：霓虹边框 --- */
+        /* --- 按钮：圆角胶囊 --- */
         .stButton button {
-            background: transparent;
-            border: 1px solid rgba(0, 255, 242, 0.3);
-            color: #00fff2;
-            border-radius: 4px;
-            transition: all 0.3s ease;
+            background-color: #FFFFFF;
+            border: 1px solid #DADCE0;
+            color: #1A73E8;
+            border-radius: 24px; /* 胶囊形状 */
+            padding: 0.5rem 1.5rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
         }
         .stButton button:hover {
-            border-color: #00fff2;
-            box-shadow: 0 0 15px rgba(0, 255, 242, 0.4);
-            color: #fff;
+            background-color: #F1F3F4;
+            border-color: #DADCE0;
+            color: #174EA6;
+            box-shadow: 0 1px 2px rgba(60,64,67,0.3);
+        }
+        /* 主按钮 (Primary) */
+        .stButton button[kind="primary"] {
+            background-color: #1A73E8;
+            color: white;
+            border: none;
+        }
+        .stButton button[kind="primary"]:hover {
+            background-color: #185ABC;
         }
 
-        /* --- 核心：意义卡片 (悬浮水晶) --- */
+        /* --- 核心：意义卡片 (Google Card) --- */
         .meaning-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-left: 3px solid #00d2ff;
+            background-color: #FFFFFF;
+            border: 1px solid #DADCE0;
             border-radius: 12px;
-            padding: 18px;
+            padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transition: box-shadow 0.3s ease;
+            font-family: 'Roboto', sans-serif;
         }
         
         .meaning-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 40px rgba(0, 210, 255, 0.15);
-            border-left-color: #ff00d4;
-            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 12px rgba(60,64,67,0.15);
+            border-color: #1A73E8;
         }
         
+        /* 不同的左侧边框颜色代表不同逻辑分 */
+        .card-high-logic { border-left: 4px solid #1A73E8; } /* 蓝 */
+        .card-mid-logic { border-left: 4px solid #A142F4; }  /* 紫 */
+        
         .card-header {
-            font-size: 0.85em;
-            color: #888;
+            font-size: 12px;
+            color: #5F6368;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             display: flex;
             justify-content: space-between;
         }
         
         .card-care {
-            font-size: 1.1em;
-            color: #fff;
+            font-size: 16px;
+            color: #202124;
             font-weight: 500;
             margin-bottom: 12px;
+            line-height: 1.5;
         }
         
         .card-insight {
-            font-family: 'Georgia', serif; /* 衬线体增加人文感 */
+            background-color: #F8F9FA;
+            padding: 12px;
+            border-radius: 8px;
+            color: #3C4043;
+            font-size: 14px;
+            line-height: 1.6;
             font-style: italic;
-            color: #00d2ff;
-            font-size: 1.05em;
-            line-height: 1.5;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-left: 2px solid #DADCE0;
         }
         
         .card-structure {
-            font-size: 0.85em;
-            color: #aaa;
-            margin-top: 8px;
+            font-size: 13px;
+            color: #70757A;
+            margin-top: 10px;
+            line-height: 1.5;
         }
 
-        /* --- 聊天气泡优化 --- */
-        .stChatMessage {
-            background-color: transparent !important;
-        }
+        /* --- 聊天气泡：极简风格 --- */
         [data-testid="stChatMessageContent"] {
-            border-radius: 12px;
-            padding: 15px;
-            font-size: 1.05em;
+            border-radius: 16px;
+            padding: 16px;
+            font-size: 15px;
+            line-height: 1.6;
+            box-shadow: none;
         }
         /* 用户气泡 */
         div[data-testid="stChatMessage"]:nth-child(odd) [data-testid="stChatMessageContent"] {
-            background: linear-gradient(135deg, rgba(50, 20, 80, 0.6), rgba(20, 20, 40, 0.6));
-            border: 1px solid rgba(255, 0, 212, 0.2);
-            color: #f0f0f0;
+            background-color: #E8F0FE; /* 极淡蓝 */
+            color: #174EA6;
+            border: none;
         }
         /* AI 气泡 */
         div[data-testid="stChatMessage"]:nth-child(even) [data-testid="stChatMessageContent"] {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(0, 255, 242, 0.2);
+            background-color: #F1F3F4; /* 极淡灰 */
+            color: #202124;
+            border: none;
+        }
+        
+        /* 输入框优化 */
+        .stTextInput input {
+            border-radius: 24px;
+            border: 1px solid #DADCE0;
+            padding-left: 20px;
+        }
+        .stTextInput input:focus {
+            border-color: #1A73E8;
+            box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
         }
     </style>
     """, unsafe_allow_html=True)
@@ -128,7 +152,7 @@ def inject_custom_css():
 # 🖥️ 主界面逻辑
 # ==========================================
 
-st.set_page_config(page_title="MSC v32.0 Art", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v33.0 Clean", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css() # 注入皮肤
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -137,12 +161,14 @@ if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        st.markdown("<h1 style='text-align: center; margin-bottom: 50px;'>🌌 MSC</h1>", unsafe_allow_html=True)
-        tab1, tab2 = st.tabs(["登录 · Login", "注册 · Sign Up"])
+        st.markdown("<h1 style='text-align: center; color: #1A73E8;'>🔷 MSC</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #5F6368;'>智能人文主义 · 意义协作系统</p>", unsafe_allow_html=True)
+        st.divider()
+        tab1, tab2 = st.tabs(["登录", "注册"])
         with tab1:
             u = st.text_input("用户名")
             p = st.text_input("密码", type='password')
-            if st.button("🚀 进入宇宙", use_container_width=True):
+            if st.button("登录", use_container_width=True, type="primary"):
                 res = msc.login_user(u, p)
                 if res:
                     st.session_state.logged_in = True
@@ -150,12 +176,12 @@ if not st.session_state.logged_in:
                     st.session_state.nickname = res[0]['nickname']
                     st.session_state.messages = [] 
                     st.rerun()
-                else: st.error("识别失败")
+                else: st.error("用户名或密码错误")
         with tab2:
             nu = st.text_input("新用户名")
             np_pass = st.text_input("新密码", type='password')
             nn = st.text_input("昵称")
-            if st.button("📝 注册身份", use_container_width=True):
+            if st.button("注册账户", use_container_width=True):
                 if msc.add_user(nu, np_pass, nn): st.success("注册成功")
                 else: st.error("注册失败")
 
@@ -170,56 +196,56 @@ else:
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
 
-    # --- 侧边栏 (仪表盘) ---
+    # --- 侧边栏 (Clean Style) ---
     with st.sidebar:
         rank_name, rank_icon = msc.calculate_rank(radar_dict)
-        st.markdown(f"### {rank_icon} {st.session_state.nickname}")
+        st.markdown(f"### {st.session_state.nickname}")
+        st.caption(f"{rank_icon} {rank_name}")
         
         msc.render_radar_chart(radar_dict)
         
-        # 弹窗功能区
-        col_btn1, col_btn2 = st.columns(2)
-        
+        st.markdown("#### 探索")
+        if st.button("🌍 MSC World", use_container_width=True):
+            msc.view_msc_world()
+            
         @st.dialog("🧬 画像分析")
         def show_persona():
-            if st.button("生成报告"):
+            if st.button("生成报告", type="primary"):
                 with st.spinner("分析中..."):
                     res = msc.analyze_persona_report(radar_dict)
-                    st.write(res)
-        if col_btn1.button("🧬 画像"): show_persona()
+                    st.markdown(f"### 🖼️ 静态画像")
+                    st.write(res.get('static_portrait'))
+                    st.markdown(f"### 🚀 动态成长")
+                    st.write(res.get('dynamic_growth'))
         
-        @st.dialog("🌍 MSC World", width="large")
-        def show_world():
-            global_nodes = msc.get_global_nodes()
-            t1, t2 = st.tabs(["2D Earth", "3D Galaxy"])
-            with t1: msc.render_2d_world_map(global_nodes)
-            with t2: msc.render_3d_galaxy(global_nodes)
-        if col_btn2.button("🌍 世界"): show_world()
-            
+        c1, c2 = st.columns(2)
+        if c1.button("🧬 画像"): show_persona()
+        
         @st.dialog("🧪 仿真实验室")
         def show_sim():
             topic = st.text_input("话题")
-            if st.button("开始注入"):
+            if st.button("开始注入", type="primary"):
                 cnt, msg = msc.simulate_civilization(topic, 3)
                 st.success(msg)
-        with st.expander("🛠️ 控制台"):
-            if st.button("打开实验室"): show_sim()
+        if c2.button("🧪 实验"): show_sim()
 
         st.divider()
+        st.caption("我的星云")
         msc.render_cyberpunk_map(all_nodes_list, height="200px")
         
         @st.dialog("🔭 全屏", width="large")
         def show_full_map():
             msc.render_cyberpunk_map(all_nodes_list, height="600px", is_fullscreen=True)
-        if st.button("🔭 全屏星云", use_container_width=True): show_full_map()
+        if st.button("🔭 全屏视图", use_container_width=True): show_full_map()
         
-        if st.button("退出连接", use_container_width=True): st.session_state.logged_in = False; st.rerun()
+        st.markdown("")
+        if st.button("退出登录", use_container_width=True): st.session_state.logged_in = False; st.rerun()
 
     # --- 主对话区 ---
     st.subheader("💬 意义流")
     
     for msg in chat_history:
-        col_chat, col_node = st.columns([0.6, 0.4], gap="medium") # 调整比例
+        col_chat, col_node = st.columns([0.6, 0.4], gap="medium")
         
         with col_chat:
             c_msg, c_del = st.columns([0.9, 0.1])
@@ -227,32 +253,33 @@ else:
                 with st.chat_message(msg['role']): st.markdown(msg['content'], unsafe_allow_html=True)
             with c_del:
                 if msg['role'] == 'user':
-                    if st.button("✕", key=f"del_{msg['id']}"):
+                    if st.button("✕", key=f"del_{msg['id']}", help="删除"):
                         if msc.soft_delete_chat_and_node(msg['id'], msg['content'], st.session_state.username): st.rerun()
 
         with col_node:
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map[msg['content']]
                 
-                # 🔥 渲染精美的 HTML 卡片
                 logic_score = node.get('logic_score', 0.5)
-                # 根据分数改变边框颜色
-                border_color = "#00d2ff" if logic_score < 0.8 else "#ff00d4"
+                # 高逻辑分用蓝色，低逻辑分用紫色 (符合 Google Gemini 调性)
+                card_class = "card-high-logic" if logic_score > 0.8 else "card-mid-logic"
                 
+                # HTML 卡片渲染
                 card_html = f"""
-                <div class="meaning-card" style="border-left-color: {border_color};">
+                <div class="meaning-card {card_class}">
                     <div class="card-header">
-                        <span>#{node['id']} NODE</span>
-                        <span>M-SCORE: {logic_score}</span>
+                        <span style="color: #1A73E8;">● NODE #{node['id']}</span>
+                        <span>SCORE: {logic_score}</span>
                     </div>
                     <div class="card-care">{node['care_point']}</div>
+                    <div class="card-insight">{node['insight']}</div>
                     <div class="card-structure">{node['meaning_layer']}</div>
-                    <div class="card-insight">“{node['insight']}”</div>
+                    <div style="margin-top:10px; font-size:11px; color:#9AA0A6;">{node['created_at'][:16]}</div>
                 </div>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
 
-    if prompt := st.chat_input("输入思考..."):
+    if prompt := st.chat_input("输入您的思考..."):
         msc.save_chat(st.session_state.username, "user", prompt)
         
         full_history = chat_history + [{'role':'user', 'content':prompt}]
@@ -260,7 +287,7 @@ else:
         reply_text = st.write_stream(stream)
         msc.save_chat(st.session_state.username, "assistant", reply_text)
         
-        with st.spinner("⚡ 捕捉意义..."):
+        with st.spinner("✨ 正在构建意义结构..."):
             analysis = msc.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
                 vec = msc.get_embedding(prompt)
