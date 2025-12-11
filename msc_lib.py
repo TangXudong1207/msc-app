@@ -2,6 +2,7 @@ import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
+import pydeck as pdk
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -11,8 +12,9 @@ import hashlib
 import time
 import numpy as np
 from datetime import datetime, timezone
+import msc_config as config # 🌟 引入调音台
 
-# 🛑 配置
+# 🛑 初始化
 def init_system():
     try:
         client = OpenAI(api_key=st.secrets["API_KEY"], base_url=st.secrets["BASE_URL"])
@@ -26,19 +28,18 @@ client_ai, TARGET_MODEL, supabase = init_system()
 # 🧮 算法
 def get_embedding(text): return np.random.rand(1536).tolist()
 def cosine_similarity(v1, v2):
-    if not v1 or not v2: return 0
     vec1, vec2 = np.array(v1), np.array(v2)
     return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
 def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest()
 
 def calculate_rank(radar_data):
-    if not radar_data: return "MSC 公民", "🥉"
+    if not radar_data: return "青铜", "🥉"
     if isinstance(radar_data, str): radar_data = json.loads(radar_data)
     total = sum(radar_data.values())
-    if total < 25: return "观察者", "🥉"
-    elif total < 38: return "探索者", "🥈"
-    elif total < 54: return "构建者", "💎"
-    else: return "领航员", "👑"
+    if total < 25: return "青铜", "🥉"
+    elif total < 38: return "黄金", "🥇"
+    elif total < 54: return "钻石", "💠"
+    else: return "王者", "👑"
 
 # 🔐 用户
 def login_user(username, password):
@@ -48,17 +49,16 @@ def login_user(username, password):
         return res.data
     except: return []
 
-def add_user(username, password, nickname, country):
+def add_user(username, password, nickname, country="Other"):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False 
+        default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         
-        # 简单坐标映射
+        # 简单坐标
         coords = [116.4, 39.9]
         if country == "USA": coords = [-95.7, 37.0]
-        elif country == "UK": coords = [-3.4, 55.3]
         
-        default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {
             "username": username, "password": make_hashes(password), "nickname": nickname, 
             "radar_profile": json.dumps(default_radar), "country": country, "location": json.dumps(coords),
@@ -73,7 +73,7 @@ def get_user_profile(username):
         res = supabase.table('users').select("*").eq('username', username).execute()
         if res.data: return res.data[0]
     except: pass
-    return {"nickname": username, "radar_profile": None}
+    return {"nickname": username, "radar_profile": None, "uid": "---"}
 
 def update_radar_score(username, new_scores):
     try:
@@ -104,13 +104,13 @@ def check_is_online(last_seen_str):
         else: last_seen = datetime.fromisoformat(last_seen_str)
         if last_seen.tzinfo is None: last_seen = last_seen.replace(tzinfo=timezone.utc)
         diff = datetime.now(timezone.utc) - last_seen
-        return diff.total_seconds() < 60 # 缩短到60秒算在线
+        return diff.total_seconds() < config.HEARTBEAT_TIMEOUT
     except: return False
 
 # --- 社交 ---
 def get_all_users(current_user):
     try:
-        res = supabase.table('users').select("username, nickname, last_seen").neq('username', current_user).execute()
+        res = supabase.table('users').select("username, nickname, last_seen, uid").neq('username', current_user).execute()
         return res.data
     except: return []
 
@@ -149,6 +149,7 @@ def save_chat(username, role, content):
     except: pass
 def get_active_chats(username, limit=50):
     try:
+        # 🌟 修复：确保获取正确的 AI 聊天记录
         res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(limit).execute()
         return list(reversed(res.data))
     except: return []
@@ -158,7 +159,8 @@ def save_node(username, content, data, mode, vector):
         keywords = data.get('keywords', [])
         insert_data = {
             "username": username, "content": content, "care_point": data.get('care_point', '未命名'), "meaning_layer": data.get('meaning_layer', '暂无结构'),
-            "insight": data.get('insight', '生成中断'), "mode": mode, "vector": json.dumps(vector), "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False
+            "insight": data.get('insight', '生成中断'), "mode": mode, "vector": json.dumps(vector), "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False,
+            "c_score": data.get('c_score', 0), "m_score": data.get('m_score', 0)
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
@@ -173,12 +175,9 @@ def get_all_nodes_for_map(username):
         res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
         return res.data
     except: return []
-
-# 🌟 修复：补全 get_global_nodes
+def get_user_nodes(username): return get_all_nodes_for_map(username)
 def get_global_nodes():
-    try:
-        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
-        return res.data
+    try: return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(config.MAX_NODE_DISPLAY).execute().data
     except: return []
 
 def soft_delete_chat_and_node(chat_id, content, username):
@@ -214,7 +213,7 @@ def find_resonance(current_vector, current_user, current_data):
             if row['vector']:
                 try:
                     score = cosine_similarity(current_vector, json.loads(row['vector']))
-                    if score > 0.75 and score > highest_score:
+                    if score > config.RESONANCE_THRESHOLD and score > highest_score:
                         highest_score = score
                         best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
                 except: continue
@@ -224,60 +223,87 @@ def find_resonance(current_vector, current_user, current_data):
 # --- AI ---
 def call_ai_api(prompt):
     try:
-        response = client_ai.chat.completions.create(model=TARGET_MODEL, messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}], temperature=0.7, stream=False, response_format={"type": "json_object"})
+        response = client_ai.chat.completions.create(
+            model=TARGET_MODEL,
+            messages=[{"role": "system", "content": "Output valid JSON only. No markdown."}, {"role": "user", "content": prompt}],
+            temperature=0.7, stream=False, response_format={"type": "json_object"} 
+        )
         content = response.choices[0].message.content
-        try: match = re.search(r'\{.*\}', content, re.DOTALL); return json.loads(match.group(0)) if match else json.loads(content)
-        except: return {"error": True}
+        try:
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True, "msg": "JSON解析失败"}
     except Exception as e: return {"error": True, "msg": str(e)}
 
+# 🌟 修复：AI回复函数
 def get_normal_response(history_messages):
     try:
-        api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
-        for msg in history_messages: api_messages.append({"role": msg["role"], "content": msg["content"]})
-        return client_ai.chat.completions.create(model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True)
-    except Exception as e: return f"Error: {e}"
+        api_messages = [{"role": "system", "content": config.PROMPT_CHATBOT}]
+        for msg in history_messages: 
+            # 过滤掉不合法的 role
+            if msg['role'] in ['user', 'assistant']:
+                api_messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        return client_ai.chat.completions.create(
+            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True
+        )
+    except Exception as e: return str(e) # 错误时返回字符串
 
 def analyze_meaning_background(text):
+    # 🌟 接入 Config 配置的 Prompt
     prompt = f"""
-    分析输入："{text}"
+    {config.PROMPT_ANALYST}
+    
+    用户输入："{text}"
+    
     返回 JSON: {{
-        "valid": true, "care_point": "...", "meaning_layer": "...", "insight": "...",
-        "logic_score": 0.8, "keywords": ["tag1"], "radar_scores": {{ "Care": 5, ... }}
+        "valid": true/false,
+        "c_score": 0.9, "n_score": 0.8,
+        "care_point": "...", "meaning_layer": "...", "insight": "...",
+        "logic_score": 0.8, "keywords": ["tag1"], 
+        "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
     }}
     """
     res = call_ai_api(prompt)
-    if res.get("valid") and res.get("logic_score", 0) < 0.4: res["valid"] = False
+    
+    # 🌟 接入 Config 配置的阈值
+    if res.get("valid", False):
+        c = res.get('c_score', 0)
+        n = res.get('n_score', 0)
+        m = c * n * 2 # 计算意义分
+        res['m_score'] = m
+        if m < config.MEANING_THRESHOLD: # 使用配置文件的阈值
+            res["valid"] = False
+            
     return res
-
-def generate_fusion(node_a_content, node_b_content):
-    prompt = f"""任务：融合 A: "{node_a_content}" B: "{node_b_content}"。返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}"""
-    return call_ai_api(prompt)
-
-def analyze_persona_report(radar_data):
-    prompt = f"任务：画像分析。数据：{json.dumps(radar_data)}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
-    return call_ai_api(prompt)
 
 def generate_daily_question(username, radar_data):
     recent = get_user_nodes(username); ctx = f"关注点：{[n['care_point'] for n in recent[-3:]]}" if recent else ""
-    res = call_ai_api(f"生成每日追问。用户：{json.dumps(radar_data)}。{ctx}。输出 JSON: {{ 'question': '...' }}")
+    prompt = f"{config.PROMPT_DAILY}\n用户：{json.dumps(radar_data)}。{ctx}。输出 JSON: {{ 'question': '...' }}"
+    res = call_ai_api(prompt)
     return res.get("question", "今天感觉如何？")
 
+def analyze_persona_report(radar_data):
+    prompt = f"{config.PROMPT_PERSONA}\n雷达数据：{json.dumps(radar_data)}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
+    return call_ai_api(prompt)
+
 def get_ai_interjection(history_text):
-    prompt = f"作为观察者，评论这段对话：\n{history_text}\n简短幽默。直接返回文本。"
+    prompt = f"{config.PROMPT_OBSERVER}\n对话记录:\n{history_text}\n输出: 纯文本"
     try:
         response = client_ai.chat.completions.create(model=TARGET_MODEL, messages=[{"role": "user", "content": prompt}], temperature=0.9)
         return response.choices[0].message.content
     except: return None
 
-# --- 渲染 ---
+# --- 渲染函数 (保持不变) ---
 def render_2d_world_map(nodes):
     map_data = [{"lat": 39.9, "lon": 116.4, "size": 10, "label": "HQ"}]
     for _ in range(len(nodes) + 15): 
         lon = np.random.uniform(-150, 150); lat = np.random.uniform(-40, 60)
         map_data.append({"lat": float(lat), "lon": float(lon), "size": 5, "label": "Node"})
     df = pd.DataFrame(map_data)
-    fig = go.Figure(data=go.Scattergeo(lon=df["lon"], lat=df["lat"], mode='markers', marker=dict(size=5, color='#ffd60a', opacity=0.8)))
-    fig.update_layout(geo=dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"), margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500)
+    fig = go.Figure(data=go.Scattergeo(lon = df["lon"], lat = df["lat"], mode = 'markers', marker = dict(size=5, color='#ffd60a', opacity=0.8)))
+    fig.update_layout(geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"), margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500)
     st.plotly_chart(fig, use_container_width=True)
 
 def render_3d_galaxy(nodes):
@@ -308,5 +334,13 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i, node in enumerate(nodes):
         logic = node.get('logic_score') or 0.5
         graph_nodes.append({"name": str(node['id']), "id": str(node['id']), "symbolSize": symbol_base * (0.8 + logic), "value": node['care_point'], "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"}, "vector": json.loads(node['vector']) if node.get('vector') else None, "keywords": json.loads(node['keywords']) if node.get('keywords') else []})
-    option = {"backgroundColor": "#0e1117", "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": [], "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]}
+    node_count = len(graph_nodes)
+    for i in range(node_count):
+        for j in range(i + 1, node_count):
+            na, nb = graph_nodes[i], graph_nodes[j]
+            if na['vector'] and nb['vector']:
+                vec_sim = cosine_similarity(na['vector'], nb['vector'])
+                if vec_sim > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
+                elif vec_sim > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
+    option = {"backgroundColor": "#0e1117", "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]}
     st_echarts(options=option, height=height)
