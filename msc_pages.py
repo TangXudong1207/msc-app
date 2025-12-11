@@ -126,56 +126,59 @@ def render_login_page():
                     sac.alert("Creation Failed", color='error', banner=True, icon='x-circle')
 
 # ==========================================
-# 🤖 页面：AI 伴侣 (恢复流式输出)
+# 🤖 页面：AI 伴侣 (v53.2 对齐修复版)
 # ==========================================
 def render_ai_page(username):
+    # 注入 CSS 确保风格一致
     inject_custom_css()
     st.caption("🤖 DEEPSEEK PARTNER")
     
+    # 1. 获取数据
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
-    # 布局：左对话，右卡片
-    col_chat, col_node = st.columns([0.7, 0.3], gap="medium")
-    
-    with col_chat:
-        for msg in chat_history:
-            with st.chat_message(msg['role']): st.markdown(msg['content'])
-    
-    with col_node:
-        for msg in chat_history:
+    # 2. 逐行渲染 (这就是您要求的修改)
+    for msg in chat_history:
+        # 定义一行：左边宽(气泡)，右边窄(圆点)
+        c_msg, c_dot = st.columns([0.9, 0.1])
+        
+        # 左边画气泡
+        with c_msg:
+            with st.chat_message(msg['role']): 
+                st.markdown(msg['content'])
+        
+        # 右边画圆点 (仅当有意义时)
+        with c_dot:
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map[msg['content']]
-                # 渲染极简卡片
-                score = node.get('m_score', 0) if node.get('m_score') else node.get('logic_score', 0.5)
-                card_html = f"""
-                <div class="meaning-card">
-                    <div class="card-header">SCORE: {score:.2f}</div>
-                    <div class="card-body">{node['care_point']}</div>
-                    <div class="card-insight">“{node['insight']}”</div>
-                </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
-            else:
-                st.write("") # 占位
+                # 这里的 "●" 就是您要求的小灰点
+                with st.popover("●", help="Deep Meaning"):
+                    # 展开后的卡片内容
+                    st.caption(f"MSC Score: {node.get('m_score', 0):.2f}")
+                    st.markdown(f"**{node['care_point']}**")
+                    st.info(node['insight'])
+                    st.markdown(f"_{node['meaning_layer']}_")
 
+    # 3. 输入区 (保持不变)
     if prompt := st.chat_input("Input..."):
-        # 1. 存用户
         msc.save_chat(username, "user", prompt)
         
-        # 2. 显示并生成 AI 回复
+        # 乐观更新：先把用户的话画出来
+        with st.chat_message("user"): st.markdown(prompt)
+
+        # AI 回复
         full_history = chat_history + [{'role':'user', 'content':prompt}]
+        stream = msc.get_normal_response(full_history)
         
-        with col_chat:
-            with st.chat_message("user"): st.markdown(prompt)
-            with st.chat_message("assistant"):
-                # 调用流式回复
-                stream = msc.get_normal_response(full_history)
+        # 流式输出 AI 回复
+        with st.chat_message("assistant"):
+            try:
                 response_text = st.write_stream(stream)
-                # 存 AI 回复
                 msc.save_chat(username, "assistant", response_text)
+            except: 
+                st.error("Connection timeout")
         
-        # 3. 意义分析 (使用新的严厉过滤器)
+        # 后台分析意义
         with st.spinner(""):
             analysis = msc.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
@@ -184,6 +187,7 @@ def render_ai_page(username):
                 if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
                 st.toast("Meaning Captured", icon="🌱")
         
+        # 刷新页面以显示刚才生成的小圆点
         time.sleep(0.5)
         st.rerun()
 
