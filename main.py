@@ -1,183 +1,255 @@
 import streamlit as st
-import streamlit_antd_components as sac
-import msc_lib as msc
-import time
+from openai import OpenAI
+from supabase import create_client, Client
+from streamlit_echarts import st_echarts
+import pydeck as pdk
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
 import json
+import re
+import hashlib
+import time
+import numpy as np
+from sklearn.decomposition import PCA 
+from sklearn.cluster import KMeans
 
-# ==========================================
-# 🎨 CSS：极简科技风
-# ==========================================
-def inject_custom_css():
-    st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
-        .stApp { background-color: #FFFFFF; font-family: 'Roboto', sans-serif; color: #1F1F1F; }
-        [data-testid="stSidebar"] { background-color: #F8F9FA; border-right: 1px solid #E0E0E0; }
-        h1, h2, h3 { font-family: 'Roboto', sans-serif; font-weight: 500; color: #202124; letter-spacing: -0.5px; }
-        .stButton button { background-color: #FFFFFF; border: 1px solid #DADCE0; color: #1A73E8; border-radius: 24px; padding: 0.5rem 1.5rem; font-weight: 500; transition: all 0.2s ease; }
-        .stButton button:hover { background-color: #F1F3F4; border-color: #DADCE0; color: #174EA6; box-shadow: 0 1px 2px rgba(60,64,67,0.3); }
-        .stButton button[kind="primary"] { background-color: #1A73E8; color: white; border: none; }
-        .stButton button[kind="primary"]:hover { background-color: #185ABC; }
+# 🛑 配置与初始化
+def init_system():
+    try:
+        client = OpenAI(api_key=st.secrets["API_KEY"], base_url=st.secrets["BASE_URL"])
+        model = st.secrets["MODEL_NAME"]
+        supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        return client, model, supabase
+    except Exception as e: st.error(f"Error: {e}"); st.stop()
+
+client_ai, TARGET_MODEL, supabase = init_system()
+
+# 🧮 算法
+def get_embedding(text): return np.random.rand(1536).tolist()
+def cosine_similarity(v1, v2):
+    if not v1 or not v2: return 0
+    vec1, vec2 = np.array(v1), np.array(v2)
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
+
+def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest()
+
+# 🔐 用户操作
+def login_user(username, password):
+    try:
+        hashed_pw = make_hashes(password)
+        res = supabase.table('users').select("*").eq('username', username).eq('password', hashed_pw).execute()
+        return res.data
+    except: return []
+
+def add_user(username, password, nickname):
+    try:
+        res = supabase.table('users').select("*").eq('username', username).execute()
+        if len(res.data) > 0: return True 
+        default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
+        data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
+        supabase.table('users').insert(data).execute()
+        return True
+    except: return False
+
+def get_user_profile(username):
+    try:
+        res = supabase.table('users').select("nickname, radar_profile").eq('username', username).execute()
+        if res.data: return res.data[0]
+    except: pass
+    return {"nickname": username, "radar_profile": None}
+
+def update_radar_score(username, new_scores):
+    try:
+        user_data = get_user_profile(username)
+        current_radar = user_data.get('radar_profile')
+        if not current_radar: current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str): current_radar = json.loads(current_radar)
+        alpha = 0.2
+        updated_radar = {}
+        for key in new_scores:
+            old_val = float(current_radar.get(key, 3.0))
+            input_val = float(new_scores.get(key, 0))
+            if input_val > 1.0: updated_radar[key] = round(min(10.0, old_val*(1-alpha)+input_val*alpha), 2)
+            else: updated_radar[key] = old_val
+        supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
+    except: pass
+
+def calculate_rank(radar_data):
+    if not radar_data: return "倔强青铜 III", "🥉"
+    if isinstance(radar_data, str): radar_data = json.loads(radar_data)
+    total = sum(radar_data.values())
+    if total < 25: return "倔强青铜", "🥉"
+    elif total < 30: return "秩序白银", "🥈"
+    elif total < 38: return "荣耀黄金", "🥇"
+    elif total < 46: return "尊贵铂金", "💎"
+    elif total < 54: return "永恒钻石", "💠"
+    elif total < 62: return "至尊星耀", "✨"
+    else: return "最强王者", "👑"
+
+# 🌟 社交功能：获取所有用户（模拟好友列表）
+def get_all_users(current_user):
+    try:
+        res = supabase.table('users').select("username, nickname").neq('username', current_user).execute()
+        return res.data
+    except: return []
+
+# 🌟 社交功能：获取私聊记录
+def get_direct_messages(user1, user2):
+    try:
+        # 获取 sender=u1, receiver=u2 OR sender=u2, receiver=u1
+        # Supabase 的 or 语法比较特殊，这里为了简单，分别查两次合并并排序（或者用 SQL view，这里用代码处理）
+        res1 = supabase.table('direct_messages').select("*").eq('sender', user1).eq('receiver', user2).execute()
+        res2 = supabase.table('direct_messages').select("*").eq('sender', user2).eq('receiver', user1).execute()
         
-        /* 每日追问卡片 */
-        .daily-card {
-            background: linear-gradient(135deg, #e8f0fe 0%, #ffffff 100%);
-            border: 1px solid #d2e3fc;
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 20px;
-            text-align: center;
+        all_msgs = res1.data + res2.data
+        # 按时间排序
+        all_msgs.sort(key=lambda x: x['id'])
+        return all_msgs
+    except: return []
+
+# 🌟 社交功能：发送私信
+def send_direct_message(sender, receiver, content):
+    try:
+        supabase.table('direct_messages').insert({
+            "sender": sender, "receiver": receiver, "content": content
+        }).execute()
+        return True
+    except: return False
+
+# 💾 节点存取
+def save_node(username, content, data, mode, vector):
+    try:
+        logic = data.get('logic_score', 0.5)
+        keywords = data.get('keywords', [])
+        insert_data = {
+            "username": username, "content": content,
+            "care_point": data.get('care_point', '未命名'),
+            "meaning_layer": data.get('meaning_layer', '暂无结构'),
+            "insight": data.get('insight', '生成中断'),
+            "mode": mode, "vector": json.dumps(vector),
+            "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False
         }
-        .daily-title { color: #174ea6; font-size: 0.8em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-        .daily-question { color: #202124; font-size: 1.1em; font-weight: 500; line-height: 1.4; }
-        
-        /* 聊天气泡 */
-        [data-testid="stChatMessageContent"] { border-radius: 16px; padding: 16px; font-size: 15px; line-height: 1.6; }
-        div[data-testid="stChatMessage"]:nth-child(odd) [data-testid="stChatMessageContent"] { background-color: #E8F0FE; color: #174EA6; }
-        div[data-testid="stChatMessage"]:nth-child(even) [data-testid="stChatMessageContent"] { background-color: #F1F3F4; color: #202124; }
-    </style>
-    """, unsafe_allow_html=True)
+        supabase.table('nodes').insert(insert_data).execute()
+        return True
+    except: return False
 
-st.set_page_config(page_title="MSC v37.0 Fix", layout="wide", initial_sidebar_state="expanded")
-inject_custom_css()
+def get_all_nodes_for_map(username):
+    try:
+        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
+        return res.data
+    except: return []
 
-if "logged_in" not in st.session_state: st.session_state.logged_in = False
+def get_global_nodes():
+    try:
+        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
+        return res.data
+    except: return []
 
-# --- 场景 1: 登录注册 ---
-if not st.session_state.logged_in:
-    col1, col2, col3 = st.columns([1,1.5,1])
-    with col2:
-        st.markdown("<h1 style='text-align: center; color: #1A73E8;'>🔷 MSC</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #5F6368;'>智能人文主义 · 意义协作系统</p>", unsafe_allow_html=True)
-        st.divider()
-        tab = sac.tabs([sac.TabsItem('登录', icon='box-arrow-in-right'), sac.TabsItem('注册', icon='person-plus-fill')], align='center', variant='outline')
-        if tab == '登录':
-            u = st.text_input("用户名")
-            p = st.text_input("密码", type='password')
-            if st.button("进入系统", use_container_width=True, type="primary"):
-                res = msc.login_user(u, p)
-                if res:
-                    st.session_state.logged_in = True
-                    st.session_state.username = u
-                    st.session_state.nickname = res[0]['nickname']
-                    st.session_state.messages = [] 
-                    st.rerun()
-                else: sac.alert("账号或密码错误", color='red')
-        else:
-            nu = st.text_input("新用户名")
-            np = st.text_input("新密码", type='password')
-            nn = st.text_input("昵称")
-            if st.button("创建身份", use_container_width=True):
-                if msc.add_user(nu, np, nn): sac.alert("注册成功，请切换至登录页", color='success')
-                else: sac.alert("注册失败", color='error')
+# 🧠 AI 业务
+def call_ai_api(prompt):
+    try:
+        response = client_ai.chat.completions.create(
+            model=TARGET_MODEL,
+            messages=[{"role": "system", "content": "Output valid JSON only. No markdown."}, {"role": "user", "content": prompt}],
+            temperature=0.7, stream=False, response_format={"type": "json_object"} 
+        )
+        content = response.choices[0].message.content
+        try:
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True, "msg": "JSON解析失败"}
+    except Exception as e: return {"error": True, "msg": str(e)}
 
-# --- 场景 2: 主应用 ---
-else:
-    chat_history = msc.get_active_chats(st.session_state.username)
-    nodes_map = msc.get_active_nodes_map(st.session_state.username)
-    all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-    user_profile = msc.get_user_profile(st.session_state.username)
-    raw_radar = user_profile.get('radar_profile')
-    if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
-    else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
-    rank_name, rank_icon = msc.calculate_rank(radar_dict)
+def analyze_meaning_background(text):
+    prompt = f"""
+    分析输入："{text}"
+    判断是否有深层意义（观点/情绪/洞察）。若只是寒暄（如你好/在吗/好的）返回 {{ "valid": false }}。
+    若有意义返回 JSON:
+    {{
+        "valid": true,
+        "care_point": "核心关切",
+        "meaning_layer": "结构分析",
+        "insight": "升维洞察",
+        "logic_score": 0.8, 
+        "keywords": ["tag1"], 
+        "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
+    }}
+    """
+    return call_ai_api(prompt)
 
-    # --- 侧边栏 ---
-    with st.sidebar:
-        sac.result(label=st.session_state.nickname, description=f"{rank_icon} {rank_name}", status="success")
-        
-        # 📅 每日追问
-        if "daily_q" not in st.session_state: st.session_state.daily_q = None
-        if st.session_state.daily_q is None:
-            if st.button("📅 生成今日追问", use_container_width=True):
-                with st.spinner("读取灵魂中..."):
-                    q = msc.generate_daily_question(st.session_state.username, radar_dict)
-                    st.session_state.daily_q = q
-                    st.rerun()
-        else:
-            st.markdown(f"<div class='daily-card'><div class='daily-title'>DAILY INQUIRY</div><div class='daily-question'>{st.session_state.daily_q}</div></div>", unsafe_allow_html=True)
-            if st.button("🔄 换一个"): st.session_state.daily_q = None; st.rerun()
+def find_resonance(current_vector, current_user):
+    if not current_vector: return None
+    try:
+        res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
+        best_match, highest = None, 0
+        for row in res.data:
+            if row['vector']:
+                try:
+                    score = cosine_similarity(current_vector, json.loads(row['vector']))
+                    if score > 0.75 and score > highest:
+                        highest = score
+                        best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+                except: continue
+        return best_match
+    except: return None
 
-        msc.render_radar_chart(radar_dict, height="200px")
-        
-        menu = sac.menu([
-            sac.MenuItem('控制台', icon='grid'),
-            sac.MenuItem('世界观', icon='globe'),
-            sac.MenuItem('实验室', icon='box'),
-            sac.MenuItem('系统', type='group', children=[sac.MenuItem('退出', icon='power')]),
-        ], index=0, format_func='title', size='sm', variant='light', open_all=True)
+# 🎨 渲染函数
+def render_radar_chart(radar_dict, height="200px"):
+    keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
+    scores = [radar_dict.get(k, 3.0) for k in keys]
+    option = {
+        "backgroundColor": "transparent",
+        "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}},
+        "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]
+    }
+    st_echarts(options=option, height=height)
 
-        if menu == '退出': st.session_state.logged_in = False; st.rerun()
-        
-        elif menu == '世界观':
-            @st.dialog("🌍 MSC World", width="large")
-            def show_world():
-                global_nodes = msc.get_global_nodes()
-                t1, t2 = st.tabs(["2D Earth", "3D Galaxy"])
-                with t1: msc.render_2d_world_map(global_nodes)
-                with t2: msc.render_3d_galaxy(global_nodes)
-            show_world()
-            
-        elif menu == '实验室':
-            @st.dialog("🧪 仿真")
-            def show_sim():
-                t = st.text_input("Topic")
-                if st.button("Inject Agents"):
-                    cnt, msg = msc.simulate_civilization(t, 3)
-                    st.success(msg)
-            show_sim()
+def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
+    if not nodes: return
+    graph_nodes, graph_links = [], []
+    symbol_base = 30 if is_fullscreen else 15
+    for i, node in enumerate(nodes):
+        logic = node.get('logic_score')
+        if logic is None: logic = 0.5
+        graph_nodes.append({
+            "name": str(node['id']), "id": str(node['id']),
+            "symbolSize": symbol_base * (0.8 + logic),
+            "value": node['care_point'],
+            "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
+            "vector": json.loads(node['vector']) if node.get('vector') else None
+        })
+    # 简单连线逻辑
+    for i in range(len(graph_nodes)-1):
+        graph_links.append({"source": graph_nodes[i]['id'], "target": graph_nodes[i+1]['id']})
 
-        st.divider()
-        st.caption("Mini Map")
-        msc.render_cyberpunk_map(all_nodes_list, height="150px")
-        
-        if st.button("🔭 全屏", use_container_width=True): 
-            msc.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+    option = {
+        "backgroundColor": "#0e1117",
+        "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
+    }
+    st_echarts(options=option, height=height)
 
-    # --- 主对话区 ---
-    st.subheader("💬 意义流")
-    
-    for msg in chat_history:
-        col_chat, col_node = st.columns([0.65, 0.35], gap="small")
-        
-        with col_chat:
-            c_msg, c_del = st.columns([0.9, 0.1])
-            with c_msg:
-                with st.chat_message(msg['role'], avatar=None):
-                    st.markdown(msg['content'], unsafe_allow_html=True)
-            with c_del:
-                if msg['role'] == 'user':
-                    if st.button("✕", key=f"del_{msg['id']}", help="Delete"):
-                        if msc.soft_delete_chat_and_node(msg['id'], msg['content'], st.session_state.username): st.rerun()
+# 🌟 修复：确保这个函数存在
+@st.dialog("🔭 浩荡宇宙", width="large")
+def view_fullscreen_map(nodes, user_name):
+    st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
+    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
 
-        with col_node:
-            if msg['role'] == 'user' and msg['content'] in nodes_map:
-                node = nodes_map[msg['content']]
-                # 🌟 修复：改回 Expander 折叠形式
-                logic_score = node.get('logic_score', 0.5)
-                icon = "🔵" if logic_score > 0.8 else "🟣"
-                
-                with st.expander(f"{icon} 意义: {node['care_point'][:8]}...", expanded=False):
-                    st.caption(f"Score: {logic_score}")
-                    st.info(node['insight'])
-                    st.markdown(f"**Structure:**\n{node['meaning_layer']}")
-                    st.caption(f"Time: {node['created_at'][:16]}")
+def render_2d_world_map(nodes):
+    map_data = [{"lat": 39.9, "lon": 116.4, "size": 10, "label": "HQ"}]
+    for _ in range(len(nodes) + 15): 
+        map_data.append({"lat": float(np.random.uniform(-40, 60)), "lon": float(np.random.uniform(-130, 150)), "size": 5, "label": "Node"})
+    df = pd.DataFrame(map_data)
+    fig = go.Figure(data=go.Scattergeo(
+        lon = df["lon"], lat = df["lat"], mode = 'markers',
+        marker = dict(size=5, color='#ffd60a', opacity=0.8)
+    ))
+    fig.update_layout(
+        geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"),
+        margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    if prompt := st.chat_input("输入..."):
-        msc.save_chat(st.session_state.username, "user", prompt)
-        
-        full_history = chat_history + [{'role':'user', 'content':prompt}]
-        stream = msc.get_normal_response(full_history)
-        reply_text = st.write_stream(stream)
-        msc.save_chat(st.session_state.username, "assistant", reply_text)
-        
-        with st.spinner("Processing..."):
-            analysis = msc.analyze_meaning_background(prompt)
-            if analysis.get("valid", False):
-                vec = msc.get_embedding(prompt)
-                msc.save_node(st.session_state.username, prompt, analysis, "日常", vec)
-                if "radar_scores" in analysis: msc.update_radar_score(st.session_state.username, analysis["radar_scores"])
-                match = msc.find_resonance(vec, st.session_state.username, analysis)
-                if match: st.toast(f"Resonance found", icon="⚡")
-                msc.check_group_formation(analysis, vec, st.session_state.username)
-        st.rerun()
+def render_3d_galaxy(nodes):
+    st.info("星河数据加载中...")
