@@ -5,7 +5,7 @@ import time
 import json
 
 # ==========================================
-# 🎨 CSS
+# 🎨 CSS：极简科技风
 # ==========================================
 def inject_custom_css():
     st.markdown("""
@@ -15,31 +15,51 @@ def inject_custom_css():
         [data-testid="stSidebar"] { background-color: #F8F9FA; border-right: 1px solid #E0E0E0; }
         h1, h2, h3 { font-family: 'Roboto', sans-serif; font-weight: 500; color: #202124; letter-spacing: -0.5px; }
         
-        .chat-bubble-me { background-color: #95EC69; color: #000; padding: 10px 14px; border-radius: 8px; border-top-right-radius: 2px; margin-bottom: 10px; display: inline-block; float: right; clear: both; max-width: 80%; }
-        .chat-bubble-other { background-color: #FFFFFF; color: #000; padding: 10px 14px; border-radius: 8px; border-top-left-radius: 2px; margin-bottom: 10px; display: inline-block; float: left; clear: both; border: 1px solid #eee; max-width: 80%; }
+        /* 每日追问卡片 */
+        .daily-card {
+            background: linear-gradient(135deg, #e8f0fe 0%, #ffffff 100%);
+            border: 1px solid #d2e3fc;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .daily-title { color: #174ea6; font-size: 0.8em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .daily-question { color: #202124; font-size: 1.1em; font-weight: 500; line-height: 1.4; }
         
-        .meaning-card { background-color: #FFFFFF; border: 1px solid #DADCE0; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        /* 聊天气泡 */
+        [data-testid="stChatMessageContent"] { border-radius: 16px; padding: 16px; font-size: 15px; line-height: 1.6; }
+        div[data-testid="stChatMessage"]:nth-child(odd) [data-testid="stChatMessageContent"] { background-color: #E8F0FE; color: #174EA6; }
+        div[data-testid="stChatMessage"]:nth-child(even) [data-testid="stChatMessageContent"] { background-color: #F1F3F4; color: #202124; }
+
+        /* 意义卡片 */
+        .meaning-card {
+            background-color: #FFFFFF;
+            border: 1px solid #DADCE0;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
         .card-header { font-size: 11px; color: #1A73E8; margin-bottom: 8px; font-weight: bold; text-transform: uppercase; }
         .card-body { font-size: 14px; color: #202124; margin-bottom: 8px; font-weight: 500; }
         .card-insight { font-size: 13px; color: #5F6368; font-style: italic; border-left: 2px solid #E8F0FE; padding-left: 8px; }
-        
-        .daily-card { background: linear-gradient(135deg, #e8f0fe 0%, #ffffff 100%); border: 1px solid #d2e3fc; border-radius: 12px; padding: 15px; margin-bottom: 20px; text-align: center; }
-        .daily-title { color: #174ea6; font-size: 0.8em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-        .daily-question { color: #202124; font-size: 1.1em; font-weight: 500; line-height: 1.4; }
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="MSC v39.0 Restored", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v39.0 Dual World", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
-# --- 登录 ---
+# --- 场景 1: 登录注册 ---
 if not st.session_state.logged_in:
     col1, col2, col3 = st.columns([1,1.5,1])
     with col2:
         st.markdown("<h1 style='text-align: center; color: #1A73E8;'>🔷 MSC</h1>", unsafe_allow_html=True)
-        tab = sac.tabs([sac.TabsItem('登录'), sac.TabsItem('注册')], align='center', variant='outline')
+        st.markdown("<p style='text-align: center; color: #5F6368;'>智能人文主义 · 意义协作系统</p>", unsafe_allow_html=True)
+        st.divider()
+        tab = sac.tabs([sac.TabsItem('登录', icon='box-arrow-in-right'), sac.TabsItem('注册', icon='person-plus-fill')], align='center', variant='outline')
         if tab == '登录':
             u = st.text_input("用户名")
             p = st.text_input("密码", type='password')
@@ -53,15 +73,16 @@ if not st.session_state.logged_in:
                     st.rerun()
                 else: sac.alert("账号或密码错误", color='red')
         else:
-            nu = st.text_input("新账号")
+            nu = st.text_input("新用户名")
             np = st.text_input("新密码", type='password')
             nn = st.text_input("昵称")
             if st.button("创建身份", use_container_width=True):
-                if msc.add_user(nu, np, nn): sac.alert("注册成功", color='success')
-                else: sac.alert("失败", color='error')
+                if msc.add_user(nu, np, nn): sac.alert("注册成功，请切换至登录页", color='success')
+                else: sac.alert("注册失败", color='error')
 
-# --- 主界面 ---
+# --- 场景 2: 主应用 ---
 else:
+    # 全局数据预加载
     chat_history = msc.get_active_chats(st.session_state.username)
     nodes_map = msc.get_active_nodes_map(st.session_state.username)
     all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
@@ -71,23 +92,11 @@ else:
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
     rank_name, rank_icon = msc.calculate_rank(radar_dict)
 
-    # --- 侧边栏 ---
+    # --- 侧边栏 (导航) ---
     with st.sidebar:
         sac.result(label=st.session_state.nickname, description=f"{rank_icon} {rank_name}", status="success")
         
-        if "daily_q" not in st.session_state: st.session_state.daily_q = None
-        if st.session_state.daily_q is None:
-            if st.button("📅 生成今日追问", use_container_width=True):
-                with st.spinner("..."):
-                    st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
-                    st.rerun()
-        else:
-            st.markdown(f"<div class='daily-card'><div class='daily-title'>DAILY INQUIRY</div><div class='daily-question'>{st.session_state.daily_q}</div></div>", unsafe_allow_html=True)
-            if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
-
-        msc.render_radar_chart(radar_dict, height="180px")
-        
-        # 🌟 恢复：经典菜单结构
+        # 核心导航
         menu = sac.menu([
             sac.MenuItem('Home', icon='house-fill', description='个人主页'),
             sac.MenuItem('Matrix', icon='cpu-fill', description='造物主模拟'),
@@ -96,17 +105,27 @@ else:
         ], index=0, format_func='title', size='md', variant='light', open_all=True)
 
         st.divider()
-        msc.render_cyberpunk_map(all_nodes_list, height="200px")
         
-        @st.dialog("🔭 全屏", width="large")
-        def show_full_map():
-            msc.render_cyberpunk_map(all_nodes_list, height="600px", is_fullscreen=True)
-        if st.button("🔭 全屏", use_container_width=True): show_full_map()
+        # 每日追问 (只在 Home 显示)
+        if menu == 'Home':
+            if "daily_q" not in st.session_state: st.session_state.daily_q = None
+            if st.session_state.daily_q is None:
+                if st.button("📅 生成今日追问", use_container_width=True):
+                    with st.spinner("..."):
+                        q = msc.generate_daily_question(st.session_state.username, radar_dict)
+                        st.session_state.daily_q = q
+                        st.rerun()
+            else:
+                st.markdown(f"<div class='daily-card'><div class='daily-title'>DAILY INQUIRY</div><div class='daily-question'>{st.session_state.daily_q}</div></div>", unsafe_allow_html=True)
         
-        if menu == '退出': st.session_state.logged_in = False; st.rerun()
+        # 迷你地图
+        st.caption("Mini Map")
+        msc.render_cyberpunk_map(all_nodes_list, height="150px")
 
-    # --- 1. Matrix: 造物主 ---
-    if menu == 'Matrix':
+    if menu == '退出': st.session_state.logged_in = False; st.rerun()
+
+    # --- 🌌 Matrix 模式 (造物主) ---
+    elif menu == 'Matrix':
         st.header("🧬 Matrix Simulation")
         st.caption("在这里，你可以扮演上帝，创造文明并观察其意义的演化。")
         
@@ -118,15 +137,23 @@ else:
             if st.button("🚀 注入虚拟文明", type="primary", use_container_width=True):
                 with st.status("正在编织剧本...", expanded=True) as status:
                     st.write("📝 正在撰写剧本...")
-                    # 调用库函数
-                    cnt, msg = msc.simulate_civilization(topic, count)
-                    if cnt > 0:
+                    script = msc.generate_simulation_script(topic, count)
+                    if script:
+                        st.write(f"🎭 剧本已生成 ({len(script)} 角色)，正在演绎...")
+                        progress_bar = st.progress(0)
+                        
+                        # 逐个演绎
+                        for i, agent in enumerate(script):
+                            msc.process_simulation_turn(agent)
+                            progress_bar.progress((i + 1) / len(script))
+                            time.sleep(0.5)
+                        
                         status.update(label="✅ 文明注入完成", state="complete", expanded=False)
-                        st.success(msg)
+                        st.success(f"成功注入 {len(script)} 个智能体！请前往 World 观察。")
                     else:
-                        st.error(msg)
+                        st.error("剧本生成失败")
 
-    # --- 2. World: 世界 ---
+    # --- 🌍 World 模式 (全网) ---
     elif menu == 'World':
         st.header("🌍 MSC World")
         global_nodes = msc.get_global_nodes()
@@ -134,7 +161,7 @@ else:
         with t1: msc.render_2d_world_map(global_nodes)
         with t2: msc.render_3d_galaxy(global_nodes)
 
-    # --- 3. Home: 个人主页 ---
+    # --- 🏠 Home 模式 (个人) ---
     else:
         st.subheader("💬 意义流")
         
@@ -154,13 +181,16 @@ else:
             with col_node:
                 if msg['role'] == 'user' and msg['content'] in nodes_map:
                     node = nodes_map[msg['content']]
-                    # 恢复：展开式卡片
+                    logic_score = node.get('logic_score', 0.5)
+                    card_class = "card-high-logic" if logic_score > 0.8 else "card-mid-logic"
+                    
                     with st.expander(f"✨ 发现意义：{node['care_point'][:10]}...", expanded=False):
-                        logic_score = node.get('logic_score', 0.5)
-                        card_class = "card-high-logic" if logic_score > 0.8 else "card-mid-logic"
                         card_html = f"""
                         <div class="meaning-card {card_class}">
-                            <div class="card-header">SCORE: {logic_score}</div>
+                            <div class="card-header">
+                                <span style="color: #1A73E8;">#{node['id']}</span>
+                                <span>SCORE: {logic_score}</span>
+                            </div>
                             <div class="card-body">{node['care_point']}</div>
                             <div class="card-insight">“{node['insight']}”</div>
                             <div class="card-structure" style="margin-top:8px;font-size:12px;color:#777;">{node['meaning_layer']}</div>
