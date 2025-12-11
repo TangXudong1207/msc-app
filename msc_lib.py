@@ -23,6 +23,7 @@ def init_system():
             base_url=st.secrets["BASE_URL"]
         )
         model = st.secrets["MODEL_NAME"]
+        
         supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         return client, model, supabase
     except Exception as e:
@@ -32,7 +33,7 @@ def init_system():
 client_ai, TARGET_MODEL, supabase = init_system()
 
 # ==========================================
-# 🧮 2. 核心算法
+# 🧮 2. 核心算法 (辅助)
 # ==========================================
 def get_embedding(text):
     return np.random.rand(1536).tolist()
@@ -66,7 +67,7 @@ def check_hashes(password, hashed_text):
     return False
 
 # ==========================================
-# 🔐 3. 用户与数据库
+# 🔐 3. 用户与数据库操作
 # ==========================================
 def add_user(username, password, nickname):
     try:
@@ -180,6 +181,11 @@ def get_all_nodes_for_map(username):
         return res.data
     except: return []
 
+# 🌟 修复：明确定义 get_user_nodes 函数，供 AI 使用
+def get_user_nodes(username):
+    # 复用 get_all_nodes_for_map 的逻辑
+    return get_all_nodes_for_map(username)
+
 def get_global_nodes():
     try:
         res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
@@ -250,7 +256,9 @@ def find_resonance(current_vector, current_user, current_data):
         return best_match
     except: return None
 
-# --- 🧠 AI 核心 ---
+# ==========================================
+# 🧠 4. AI 智能
+# ==========================================
 def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
@@ -280,9 +288,6 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点。
-    2. 提取 MSC 结构。
-    3. 【雷达评分】Care,Curiosity,Reflection,Coherence,Empathy,Agency,Aesthetic (0-10)。
     返回 JSON:
     {{
         "valid": true,
@@ -338,11 +343,11 @@ def simulate_civilization(topic, count):
         except: pass
     return success_count, f"成功注入 {success_count} 个智能体！"
 
+# 🌟 每日追问 (现在安全了)
 def generate_daily_question(username, radar_data):
     recent_nodes = get_user_nodes(username)
     context = ""
     if recent_nodes:
-        # 取最近3个节点的 care point
         last_3 = recent_nodes[-3:] if len(recent_nodes) >=3 else recent_nodes
         context = f"用户最近关注点：{[n['care_point'] for n in last_3]}"
     radar_str = json.dumps(radar_data, ensure_ascii=False)
@@ -358,27 +363,19 @@ def generate_daily_question(username, radar_data):
     return "今天，什么事情让你感到'活着'？"
 
 # ==========================================
-# 🎨 5. 视觉渲染 (修复版)
+# 🎨 5. 视觉渲染 (Locked)
 # ==========================================
 def render_2d_world_map(nodes):
-    # 🌟 修复：构造标准的 List[Dict]，确保类型安全
-    map_data = [{"lat": 39.9, "lon": 116.4, "size": 10, "label": "HQ"}]
-    for _ in range(len(nodes) + 15): 
-        map_data.append({
-            "lat": float(np.random.uniform(-40, 60)),
-            "lon": float(np.random.uniform(-130, 150)),
-            "size": float(np.random.randint(5, 12)),
-            "label": "Node"
-        })
-    
+    map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
+    for _ in range(len(nodes) + 10): 
+        lon = np.random.uniform(-150, 150)
+        lat = np.random.uniform(-40, 60)
+        val = np.random.randint(10, 100)
+        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
     df = pd.DataFrame(map_data)
-    # 确保 DataFrame 不为空
-    if df.empty: return 
-
     fig = px.scatter_geo(
         df, lat="lat", lon="lon", size="size", hover_name="label",
-        projection="natural earth", template="plotly_dark",
-        color_discrete_sequence=["#ffd60a"]
+        projection="natural earth", template="plotly_dark", color_discrete_sequence=["#ffd60a"]
     )
     fig.update_geos(showcountries=True, countrycolor="#444", showland=True, landcolor="#0e1117", showocean=True, oceancolor="#000")
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="#000", height=500)
@@ -422,10 +419,12 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i, node in enumerate(nodes):
         logic = node.get('logic_score')
         if logic is None: logic = 0.5
+        
         keywords = []
         if node.get('keywords'):
             if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
             else: keywords = node['keywords']
+            
         vector = None
         if node.get('vector'):
             if isinstance(node['vector'], str): vector = json.loads(node['vector'])
@@ -444,7 +443,9 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                m_sim = len(set(na['keywords']).intersection(set(nb['keywords']))) / (len(set(na['keywords']).union(set(nb['keywords']))) or 1)
+                m_inter = len(set(na['keywords']).intersection(set(nb['keywords'])))
+                m_union = len(set(na['keywords']).union(set(nb['keywords'])))
+                m_sim = m_inter / m_union if m_union > 0 else 0
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
                 score = 0.6 * m_sim + 0.4 * vec_sim
                 if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
