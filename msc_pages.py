@@ -45,7 +45,7 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 🤖 页面：AI 伴侣 (修复版)
+# 🤖 页面：AI 伴侣 (修复流式输出)
 # ==========================================
 def render_ai_page(username):
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
@@ -53,11 +53,13 @@ def render_ai_page(username):
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
+    # 渲染历史记录
     for msg in chat_history:
         c_msg, c_dot = st.columns([0.92, 0.08])
-        
         with c_msg:
-            if msg['role'] == 'user':
+            role = "user" if msg['role'] == "user" else "assistant"
+            # 根据角色应用不同样式
+            if role == "user":
                 st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
             else:
                 st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
@@ -67,29 +69,39 @@ def render_ai_page(username):
                 node = nodes_map[msg['content']]
                 st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                 with st.popover("●", help="Deep Meaning"):
-                    # 🌟 修复点：强制类型转换，防止 None 报错
                     raw_score = node.get('m_score')
                     score_val = float(raw_score) if raw_score is not None else 0.0
-                    
                     st.caption(f"MSC Score: {score_val:.2f}")
                     st.markdown(f"**{node['care_point']}**")
                     st.info(node['insight'])
                     st.caption(f"Structure: {node['meaning_layer']}")
                 st.markdown('</div>', unsafe_allow_html=True)
 
+    # 输入处理
     if prompt := st.chat_input("Input..."):
+        # 1. 存用户输入
         msc.save_chat(username, "user", prompt)
         
+        # 2. 乐观更新：显示用户气泡
         with st.container():
              st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
+        # 3. 🌟 修复：正确处理 AI 流式回复
         full_history = chat_history + [{'role':'user', 'content':prompt}]
-        try:
-            resp = msc.get_normal_response(full_history)
-            reply = resp.choices[0].message.content
-            msc.save_chat(username, "assistant", reply)
-        except: pass
         
+        # 创建一个空容器来放 AI 的正在输入的状态
+        with st.container():
+            with st.chat_message("assistant"): # 临时使用官方组件显示流动画
+                try:
+                    stream = msc.get_normal_response(full_history)
+                    # write_stream 会自动处理生成器，并返回最终文本
+                    response_text = st.write_stream(stream) 
+                    # 4. 存 AI 回复
+                    msc.save_chat(username, "assistant", response_text)
+                except Exception as e:
+                    st.error(f"AI 连接中断: {e}")
+        
+        # 5. 意义分析
         with st.spinner(""):
             analysis = msc.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
@@ -98,6 +110,7 @@ def render_ai_page(username):
                 if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
                 st.toast("Meaning Captured", icon="🌱")
         
+        # 刷新页面以显示最终样式
         time.sleep(0.5)
         st.rerun()
 
@@ -113,11 +126,8 @@ def render_friends_page(username, unread_counts):
         if users:
             for u in users:
                 is_online = msc.check_is_online(u.get('last_seen'))
-                unread = unread_counts.get(u['username'], 0)
-                # 状态点和红点
                 status_char = "🟢" if is_online else "⚪"
-                label = f"{status_icon} {u['nickname']}" if 'status_icon' in locals() else f"{u['nickname']}"
-                # 重新构建 label
+                unread = unread_counts.get(u['username'], 0)
                 final_label = f"{status_char} {u['nickname']}"
                 if unread > 0: final_label += f" 🔴 {unread}"
                 
@@ -135,14 +145,15 @@ def render_friends_page(username, unread_counts):
             with c1: st.markdown(f"**{partner}**")
             with c2: 
                 if st.button("🤖", help="AI Observer"):
-                    # 简化占位
                     pass 
 
             history = msc.get_direct_messages(username, partner)
             my_nodes = msc.get_active_nodes_map(username)
 
             with st.container(height=500, border=False):
+                chat_str = ""
                 for msg in history:
+                    chat_str += f"{msg['sender']}: {msg['content']}\n"
                     c_msg, c_dot = st.columns([0.92, 0.08])
                     
                     with c_msg:
@@ -158,42 +169,4 @@ def render_friends_page(username, unread_counts):
                             node = my_nodes[msg['content']]
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                             with st.popover("●"):
-                                st.info(node['insight'])
-                            st.markdown('</div>', unsafe_allow_html=True)
-
-            if prompt := st.chat_input("Type..."):
-                msc.send_direct_message(username, partner, prompt)
-                with st.spinner(""):
-                    analysis = msc.analyze_meaning_background(prompt)
-                    if analysis.get("valid", False):
-                        vec = msc.get_embedding(prompt)
-                        msc.save_node(username, prompt, analysis, "私聊", vec)
-                st.rerun()
-        else:
-            st.info("👈 Select a friend")
-
-# ==========================================
-# 🌍 页面：世界
-# ==========================================
-def render_world_page():
-    st.caption("MSC GLOBAL VIEW")
-    global_nodes = msc.get_global_nodes()
-    t1, t2 = st.tabs(["2D MAP", "3D GALAXY"])
-    with t1: msc.render_2d_world_map(global_nodes)
-    with t2: msc.render_3d_galaxy(global_nodes)
-
-# ==========================================
-# 🪐 页面：星团
-# ==========================================
-def render_cluster_page(username):
-    st.caption("SPONTANEOUS CLUSTERS")
-    rooms = msc.get_available_rooms()
-    if rooms:
-        for room in rooms:
-            with st.expander(f"{room['name']}", expanded=True):
-                st.caption(room['description'])
-                if st.button("Enter", key=f"join_{room['id']}"):
-                    msc.join_room(room['id'], username)
-                    msc.view_group_chat(room, username)
-    else:
-        st.info("No clusters formed yet.")
+                                st.info(node['insight'
