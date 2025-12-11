@@ -5,13 +5,86 @@ import time
 import json
 
 # ==========================================
-# 🔐 页面：极简登录 (v48 风格回归)
+# 🎨 CSS：极简科技风 (v48/v52 经典回归)
+# ==========================================
+def inject_custom_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        
+        /* 1. 全局去色，回归黑白灰 */
+        .stApp { background-color: #FFFFFF; font-family: 'Roboto', sans-serif; color: #222; }
+        
+        /* 2. 侧边栏：纯净白 */
+        [data-testid="stSidebar"] { background-color: #FAFAFA; border-right: 1px solid #EEE; }
+        
+        /* 3. 输入框：极细边框，无阴影 */
+        .stTextInput input {
+            border: 1px solid #E0E0E0; border-radius: 4px; padding: 10px;
+            color: #333; background: #fff;
+        }
+        .stTextInput input:focus { border-color: #333; box-shadow: none; }
+        
+        /* 4. 按钮：黑白极简 */
+        .stButton button {
+            border: 1px solid #E0E0E0; background: #fff; color: #333;
+            border-radius: 4px; font-weight: 400; font-size: 14px;
+        }
+        .stButton button:hover { border-color: #333; color: #000; background: #F9F9F9; }
+        .stButton button[kind="primary"] { background-color: #333; color: white; border: none; }
+        .stButton button[kind="primary"]:hover { background-color: #000; }
+        
+        /* 5. 聊天气泡：回归线条感与深色块 */
+        .chat-bubble-me {
+            background-color: #333; color: #fff; /* 我是深色块 */
+            padding: 10px 15px; border-radius: 18px; border-bottom-right-radius: 2px;
+            margin-bottom: 5px; display: inline-block; float: right; clear: both; max-width: 80%;
+            font-size: 14px;
+        }
+        .chat-bubble-other {
+            background-color: #F2F2F2; color: #333; /* 对方是浅灰块 */
+            padding: 10px 15px; border-radius: 18px; border-bottom-left-radius: 2px;
+            margin-bottom: 5px; display: inline-block; float: left; clear: both; max-width: 80%;
+            font-size: 14px;
+        }
+        .chat-bubble-ai {
+            background: transparent; color: #666; border: 1px solid #ddd;
+            padding: 8px 12px; border-radius: 12px; margin: 15px auto;
+            text-align: center; font-size: 0.85em; width: fit-content;
+        }
+        
+        /* 6. 意义卡片 (AI 页面用) */
+        .meaning-card {
+            background-color: #FFFFFF;
+            border: 1px solid #E0E0E0;
+            border-left: 3px solid #333;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .card-header { font-size: 10px; color: #999; margin-bottom: 5px; letter-spacing: 1px; text-transform: uppercase; }
+        .card-body { font-size: 14px; color: #222; font-weight: 500; margin-bottom: 5px; }
+        .card-insight { font-size: 12px; color: #666; font-style: italic; }
+
+        /* 7. 每日追问卡片 */
+        .daily-card {
+            border: 1px solid #eee; padding: 15px; border-radius: 8px;
+            text-align: center; margin-bottom: 20px; background: #fff;
+        }
+        .daily-title { font-size: 10px; color: #999; letter-spacing: 1px; margin-bottom: 5px; }
+        .daily-question { font-size: 14px; color: #333; font-weight: 500; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==========================================
+# 🔐 页面：极简登录
 # ==========================================
 def render_login_page():
+    inject_custom_css() # 确保在登录页也注入 CSS
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.markdown("<br><br><br>", unsafe_allow_html=True)
-        # 极简标题，无背景卡片
+        # 极简标题
         st.markdown("""
         <h1 style='text-align: center; font-weight: 300; letter-spacing: 4px; color: #333;'>MSC</h1>
         <div style='text-align: center; color: #999; font-size: 0.8em; margin-bottom: 30px; letter-spacing: 1px;'>
@@ -19,20 +92,18 @@ def render_login_page():
         </div>
         """, unsafe_allow_html=True)
         
-        # 使用 SAC Tabs，线条风格
         tab = sac.tabs([
             sac.TabsItem('LOGIN', icon='box-arrow-in-right'),
             sac.TabsItem('SIGN UP', icon='person-plus'),
         ], align='center', size='sm', variant='outline')
         
-        st.write("") # 留白
+        st.write("") 
 
         if tab == 'LOGIN':
             u = st.text_input("ID", placeholder="Username", label_visibility="collapsed")
             p = st.text_input("PASSWORD", type='password', placeholder="Password", label_visibility="collapsed")
-            
             st.write("")
-            if st.button("CONNECT SYSTEM", use_container_width=True):
+            if st.button("CONNECT SYSTEM", use_container_width=True, type="primary"):
                 res = msc.login_user(u, p)
                 if res:
                     st.session_state.logged_in = True
@@ -40,15 +111,13 @@ def render_login_page():
                     st.session_state.nickname = res[0]['nickname']
                     st.session_state.messages = [] 
                     st.rerun()
-                else:
-                    sac.alert("Access Denied", color='red', banner=True, icon='x-circle')
+                else: sac.alert("Access Denied", color='red', banner=True, icon='x-circle')
 
         else:
             nu = st.text_input("NEW ID", placeholder="New Username", label_visibility="collapsed")
             np = st.text_input("NEW PASSWORD", type='password', placeholder="New Password", label_visibility="collapsed")
             nn = st.text_input("NICKNAME", placeholder="Display Name", label_visibility="collapsed")
             nc = st.selectbox("REGION", ["China", "USA", "UK", "Japan", "Other"], label_visibility="collapsed")
-            
             st.write("")
             if st.button("INITIALIZE IDENTITY", use_container_width=True):
                 if msc.add_user(nu, np, nn, nc): 
@@ -57,15 +126,17 @@ def render_login_page():
                     sac.alert("Creation Failed", color='error', banner=True, icon='x-circle')
 
 # ==========================================
-# 🤖 页面：AI 伴侣
+# 🤖 页面：AI 伴侣 (恢复流式输出)
 # ==========================================
 def render_ai_page(username):
-    st.caption("🤖 DEEPSEEK LINKED")
+    inject_custom_css()
+    st.caption("🤖 DEEPSEEK PARTNER")
     
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
-    col_chat, col_node = st.columns([0.85, 0.15])
+    # 布局：左对话，右卡片
+    col_chat, col_node = st.columns([0.7, 0.3], gap="medium")
     
     with col_chat:
         for msg in chat_history:
@@ -75,108 +146,115 @@ def render_ai_page(username):
         for msg in chat_history:
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map[msg['content']]
-                with st.popover("●", help="Meaning Structure"):
-                    st.caption(f"Score: {node.get('logic_score', 0.5)}")
-                    st.info(node['insight'])
-                    st.caption(node['meaning_layer'])
+                # 渲染极简卡片
+                score = node.get('m_score', 0) if node.get('m_score') else node.get('logic_score', 0.5)
+                card_html = f"""
+                <div class="meaning-card">
+                    <div class="card-header">SCORE: {score:.2f}</div>
+                    <div class="card-body">{node['care_point']}</div>
+                    <div class="card-insight">“{node['insight']}”</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
             else:
-                st.write("") # 占位保持对齐
+                st.write("") # 占位
 
     if prompt := st.chat_input("Input..."):
+        # 1. 存用户
         msc.save_chat(username, "user", prompt)
-        # 乐观更新
+        
+        # 2. 显示并生成 AI 回复
         full_history = chat_history + [{'role':'user', 'content':prompt}]
         
-        # 调用 AI 回复
-        stream = msc.get_normal_response(full_history)
-        try:
-            reply = stream.choices[0].message.content
-            msc.save_chat(username, "assistant", reply)
-        except: pass
+        with col_chat:
+            with st.chat_message("user"): st.markdown(prompt)
+            with st.chat_message("assistant"):
+                # 调用流式回复
+                stream = msc.get_normal_response(full_history)
+                response_text = st.write_stream(stream)
+                # 存 AI 回复
+                msc.save_chat(username, "assistant", response_text)
         
-        # 异步分析
+        # 3. 意义分析 (使用新的严厉过滤器)
         with st.spinner(""):
             analysis = msc.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
                 vec = msc.get_embedding(prompt)
-                msc.save_node(username, prompt, analysis, "日常", vec)
-                # 更新雷达
+                msc.save_node(username, prompt, analysis, "AI对话", vec)
                 if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
+                st.toast("Meaning Captured", icon="🌱")
         
+        time.sleep(0.5)
         st.rerun()
 
 # ==========================================
-# 💬 页面：好友私聊 (带实时刷新)
+# 💬 页面：好友社交 (包含 AI 插话 & 私密圆点)
 # ==========================================
 def render_friends_page(username, unread_counts):
+    inject_custom_css()
     col_list, col_chat = st.columns([0.3, 0.7])
     
-    # 1. 好友列表
     with col_list:
-        # 搜索框极简风
         st.text_input("🔍", placeholder="Search UID...", label_visibility="collapsed")
-        
         users = msc.get_all_users(username)
         if users:
             st.markdown("---")
             for u in users:
                 is_online = msc.check_is_online(u.get('last_seen'))
-                # 极简状态点
-                status_color = "#4CAF50" if is_online else "#E0E0E0"
-                status_html = f"<span style='color:{status_color}; font-size:1.2em;'>•</span>"
+                status_color = "#4CAF50" if is_online else "#DDD"
+                status_html = f"<span style='color:{status_color};'>•</span>"
                 
                 unread = unread_counts.get(u['username'], 0)
-                unread_badge = f" <span style='background:#FF4B4B;color:white;padding:1px 6px;border-radius:10px;font-size:0.7em'>{unread}</span>" if unread > 0 else ""
+                label = f"{u['nickname']} {'🔴'+str(unread) if unread>0 else ''}"
                 
-                # 自定义按钮样式比较难，还是用原生按钮，但在label上做文章
-                btn_label = f"{u['nickname']} {unread * '🔴'}" 
-                
-                if st.button(btn_label, key=f"f_{u['username']}", use_container_width=True):
+                # 在按钮文字里没法直接加颜色代码，所以用 label
+                if st.button(label, key=f"f_{u['username']}", use_container_width=True):
                     st.session_state.current_chat_partner = u['username']
                     msc.mark_messages_read(u['username'], username)
                     st.rerun()
         else:
-            st.caption("No connections yet.")
+            st.caption("No friends yet.")
 
-    # 2. 聊天窗口
     with col_chat:
         partner = st.session_state.current_chat_partner
         if partner:
-            # 顶部栏：名字 + 实时开关
+            # 顶部栏
             c_name, c_switch = st.columns([0.8, 0.2])
             with c_name: st.markdown(f"**{partner}**")
             with c_switch: 
-                # 实时开关
                 auto_refresh = st.toggle("Live", value=False)
-            
-            if auto_refresh:
-                time.sleep(3)
-                st.rerun()
+                if auto_refresh: time.sleep(3); st.rerun()
 
             history = msc.get_direct_messages(username, partner)
             my_nodes = msc.get_active_nodes_map(username)
 
-            with st.container(height=500, border=False): # 无边框容器
-                chat_str = ""
+            with st.container(height=500, border=False):
+                chat_str_for_ai = ""
                 for msg in history:
-                    chat_str += f"{msg['sender']}: {msg['content']}\n"
+                    chat_str_for_ai += f"{msg['sender']}: {msg['content']}\n"
                     
                     c_msg, c_dot = st.columns([0.9, 0.1])
-                    if msg['sender'] == 'AI':
-                         st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
-                    elif msg['sender'] == username:
-                        with c_msg: st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
-                        with c_dot:
-                            if msg['content'] in my_nodes:
-                                node = my_nodes[msg['content']]
-                                with st.popover("●"): st.info(node['insight'])
-                    else:
-                        with c_msg: st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
+                    
+                    with c_msg:
+                        if msg['sender'] == 'AI':
+                             st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+                        elif msg['sender'] == username:
+                            st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
+                    
+                    with c_dot:
+                        # 🌟 隐私圆点：只显示我的，且只有在有意义时显示
+                        if msg['sender'] == username and msg['content'] in my_nodes:
+                            node = my_nodes[msg['content']]
+                            with st.popover("●", help="My Meaning"):
+                                st.caption(node['care_point'])
+                                st.info(node['insight'])
 
-            # AI 插话
+            # 功能栏
             if st.button("🤖 AI Observer", use_container_width=True, help="Invoke DeepSeek"):
-                 with st.spinner("Analyzing..."):
-                    comment = msc.get_ai_interjection(chat_str)
+                 with st.spinner("..."):
+                    comment = msc.get_ai_interjection(chat_str_for_ai)
                     if comment:
                         msc.send_direct_message('AI', username, comment)
                         msc.send_direct_message('AI', partner, comment)
@@ -184,23 +262,43 @@ def render_friends_page(username, unread_counts):
 
             if prompt := st.chat_input("Type a message..."):
                 msc.send_direct_message(username, partner, prompt)
-                # 静默分析
-                analysis = msc.analyze_meaning_background(prompt)
-                if analysis.get("valid", False):
-                    vec = msc.get_embedding(prompt)
-                    msc.save_node(username, prompt, analysis, "私聊", vec)
-                    match = msc.find_resonance(vec, username, analysis)
-                    if match: st.toast("Resonance Detected", icon="⚡")
+                
+                with st.spinner(""):
+                    analysis = msc.analyze_meaning_background(prompt)
+                    if analysis.get("valid", False):
+                        vec = msc.get_embedding(prompt)
+                        msc.save_node(username, prompt, analysis, "私聊", vec)
+                        # 共鸣检测
+                        match = msc.find_resonance(vec, username, analysis)
+                        if match: st.toast("Resonance detected!", icon="⚡")
                 st.rerun()
         else:
-            st.caption("Select a contact to start.")
+            st.info("👈 Select a chat")
 
 # ==========================================
 # 🌍 页面：世界
 # ==========================================
 def render_world_page():
+    inject_custom_css()
     st.caption("MSC GLOBAL VIEW")
     global_nodes = msc.get_global_nodes()
     t1, t2 = st.tabs(["2D MAP", "3D GALAXY"])
     with t1: msc.render_2d_world_map(global_nodes)
     with t2: msc.render_3d_galaxy(global_nodes)
+
+# ==========================================
+# 🪐 页面：星团
+# ==========================================
+def render_cluster_page(username):
+    inject_custom_css()
+    st.caption("SPONTANEOUS CLUSTERS")
+    rooms = msc.get_available_rooms()
+    if rooms:
+        for room in rooms:
+            with st.expander(f"{room['name']}", expanded=True):
+                st.caption(room['description'])
+                if st.button("Enter", key=f"join_{room['id']}"):
+                    msc.join_room(room['id'], username)
+                    msc.view_group_chat(room, username)
+    else:
+        st.info("No clusters formed yet.")
