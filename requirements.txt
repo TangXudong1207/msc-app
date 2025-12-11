@@ -8,3 +8,4 @@ scikit-learn
 plotly
 pandas
 networkx
+streamlit-antd-components
