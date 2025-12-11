@@ -24,38 +24,57 @@ def init_system():
             base_url=st.secrets["BASE_URL"]
         )
         model = st.secrets["MODEL_NAME"]
-        
         supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         return client, model, supabase
     except Exception as e:
         st.error(f"系统启动失败: {e}")
         st.stop()
 
-# 🌟 全局变量名确认为 client_ai
 client_ai, TARGET_MODEL, supabase = init_system()
 
 # ==========================================
-# 🧮 2. 核心算法 (辅助)
+# 🧮 2. 核心算法 (数学公式回归)
 # ==========================================
 def get_embedding(text):
     return np.random.rand(1536).tolist()
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
-    vec1 = np.array(v1)
-    vec2 = np.array(v2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
+    vec1 = np.array(v1); vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1); norm2 = np.linalg.norm(vec2)
     if norm1 == 0 or norm2 == 0: return 0
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
 def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex_b):
     sim_vec = cosine_similarity(vec_a, vec_b)
-    topic_sim = 0 # 简化处理
-    meaning_sim = 0 # 简化处理
-    # 模拟 MLS 计算
-    return 0.5 * sim_vec + 0.5 # 简化版
+    t_inter = len(set(topic_a).intersection(set(topic_b)))
+    t_union = len(set(topic_a).union(set(topic_b)))
+    topic_sim = t_inter / t_union if t_union > 0 else 0
+    m_inter = len(set(meaning_a).intersection(set(meaning_b)))
+    m_union = len(set(meaning_a).union(set(meaning_b)))
+    meaning_sim = m_inter / m_union if m_union > 0 else 0
+    if topic_sim > 0.7 and meaning_sim < 0.3: return 0.2
+    ex_match = 1.0 if (ex_a and ex_b) else 0.0
+    return 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
 
+# 🌟 恢复：结构分 S 计算 (Structure Score)
+def calculate_structure_score(new_vector, existing_nodes):
+    if not existing_nodes: return 0.5
+    links = 0
+    # 随机取50个节点计算连接度，模拟图论中心性
+    sample_nodes = existing_nodes[-50:] 
+    for node in sample_nodes:
+        if node['vector']:
+            try:
+                sim = cosine_similarity(new_vector, json.loads(node['vector']))
+                if sim > 0.75: links += 1
+            except: pass
+    # 归一化：如果有3个以上强链接，S分就很高
+    return min(1.0, 0.2 + (links / 5.0))
+
+# ==========================================
+# 🔐 3. 用户与数据库操作
+# ==========================================
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -63,9 +82,6 @@ def check_hashes(password, hashed_text):
     if make_hashes(password) == hashed_text: return True
     return False
 
-# ==========================================
-# 🔐 3. 用户与数据库操作
-# ==========================================
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
@@ -94,20 +110,14 @@ def update_radar_score(username, new_scores):
     try:
         user_data = get_user_profile(username)
         current_radar = user_data.get('radar_profile')
-        if not current_radar:
-            current_radar = {k: 3.0 for k in new_scores.keys()}
-        elif isinstance(current_radar, str):
-            current_radar = json.loads(current_radar)
+        if not current_radar: current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str): current_radar = json.loads(current_radar)
         alpha = 0.2
         updated_radar = {}
         for key in new_scores:
-            old_val = float(current_radar.get(key, 3.0))
-            input_val = float(new_scores.get(key, 0))
-            if input_val > 1.0:
-                updated_val = old_val * (1 - alpha) + input_val * alpha
-                updated_radar[key] = round(min(10.0, updated_val), 2)
-            else:
-                updated_radar[key] = old_val
+            old_val = float(current_radar.get(key, 3.0)); input_val = float(new_scores.get(key, 0))
+            if input_val > 1.0: updated_radar[key] = round(min(10.0, old_val*(1-alpha)+input_val*alpha), 2)
+            else: updated_radar[key] = old_val
         supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
     except: pass
 
@@ -124,9 +134,7 @@ def calculate_rank(radar_data):
     else: return "最强王者", "👑"
 
 def save_chat(username, role, content):
-    try:
-        data = {"username": username, "role": role, "content": content, "is_deleted": False}
-        supabase.table('chats').insert(data).execute()
+    try: supabase.table('chats').insert({"username": username, "role": role, "content": content, "is_deleted": False}).execute()
     except: pass
 
 def get_active_chats(username, limit=50):
@@ -150,8 +158,8 @@ def restore_item(table, item_id):
 
 def save_node(username, content, data, mode, vector):
     try:
-        logic = data.get('logic_score')
-        if logic is None: logic = 0.5
+        # 🌟 恢复：存入 C/S/N 分数
+        logic = data.get('m_score', 0.5) # 用综合分作为逻辑分显示
         keywords = data.get('keywords', [])
         insert_data = {
             "username": username, "content": content,
@@ -159,7 +167,12 @@ def save_node(username, content, data, mode, vector):
             "meaning_layer": data.get('meaning_layer', '暂无结构'),
             "insight": data.get('insight', '生成中断'),
             "mode": mode, "vector": json.dumps(vector),
-            "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False
+            "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False,
+            # 存入核心指标
+            "c_score": data.get('c_score', 0),
+            "s_score": data.get('s_score', 0),
+            "n_score": data.get('n_score', 0),
+            "m_score": data.get('m_score', 0)
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
@@ -177,75 +190,65 @@ def get_all_nodes_for_map(username):
         res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
         return res.data
     except: return []
-    
-def get_user_nodes(username): return get_all_nodes_for_map(username)
 
+def get_user_nodes(username): return get_all_nodes_for_map(username)
 def get_global_nodes():
-    try:
-        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
-        return res.data
+    try: return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute().data
     except: return []
 
 def check_group_formation(new_node_data, vector, username):
-    care_point = new_node_data.get('care_point')
-    if not care_point: return
+    care = new_node_data.get('care_point')
+    if not care: return
     try:
-        res = supabase.table('nodes').select("*").ilike('care_point', f"%{care_point}%").execute()
-        unique_users = set([row['username'] for row in res.data])
-        if len(unique_users) >= 3:
-            room_name = f"🌌 {care_point} · 星团"
-            existing = supabase.table('rooms').select("*").eq('name', room_name).execute()
-            if not existing.data:
-                supabase.table('rooms').insert({
-                    "name": room_name, "type": "Gravity", "trigger_keyword": care_point,
-                    "description": f"由 {len(unique_users)} 位探索者的共同意义汇聚而成。"
-                }).execute()
+        res = supabase.table('nodes').select("*").ilike('care_point', f"%{care}%").execute()
+        users = set([row['username'] for row in res.data])
+        if len(users) >= 3:
+            rname = f"🌌 {care} · 星团"
+            exist = supabase.table('rooms').select("*").eq('name', rname).execute()
+            if not exist.data:
+                supabase.table('rooms').insert({"name": rname, "type": "Gravity", "trigger_keyword": care, "description": f"由 {len(users)} 位探索者汇聚。"}).execute()
     except: pass
 
 def get_available_rooms():
-    try:
-        res = supabase.table('rooms').select("*").order('created_at', desc=True).execute()
-        return res.data
+    try: return supabase.table('rooms').select("*").order('created_at', desc=True).execute().data
     except: return []
-
-def join_room(room_id, username):
+def join_room(rid, user):
     try:
-        check = supabase.table('room_members').select("*").eq('room_id', room_id).eq('username', username).execute()
-        if not check.data:
-            supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
+        chk = supabase.table('room_members').select("*").eq('room_id', rid).eq('username', user).execute()
+        if not chk.data: supabase.table('room_members').insert({"room_id": rid, "username": user}).execute()
     except: pass
-
-def get_room_messages(room_id):
-    try:
-        res = supabase.table('room_chats').select("*").eq('room_id', room_id).order('created_at', desc=False).execute()
-        return res.data
+def get_room_messages(rid):
+    try: return supabase.table('room_chats').select("*").eq('room_id', rid).order('created_at', desc=False).execute().data
     except: return []
-
-def send_room_message(room_id, username, content):
-    try:
-        supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
+def send_room_message(rid, user, content):
+    try: supabase.table('room_chats').insert({"room_id": rid, "username": user, "content": content}).execute()
     except: pass
-
 def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     try:
         res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
         others = res.data
         best_match, highest_score = None, 0
-        
+        c_topics = current_data.get('topic_tags', [])
+        c_meanings = current_data.get('keywords', [])
+        c_ex = current_data.get('existential_q', False)
         for row in others:
             if row['vector']:
                 try:
-                    score = cosine_similarity(current_vector, json.loads(row['vector']))
-                    if score > 0.75 and score > highest_score:
-                        highest_score = score
-                        best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+                    o_vec = json.loads(row['vector'])
+                    o_keywords = json.loads(row['keywords']) if row['keywords'] else []
+                    o_topics = [] 
+                    o_ex = False
+                    MLS = calculate_MLS(current_vector, o_vec, c_topics, o_topics, c_meanings, o_keywords, c_ex, o_ex)
+                    if MLS > 0.75 and MLS > highest_score:
+                        highest_score = MLS
+                        best_match = {"user": row['username'], "content": row['content'], "score": round(MLS * 100, 1)}
                 except: continue
         return best_match
     except: return None
 
 # ==========================================
-# 🧠 4. AI 智能
+# 🧠 4. AI 智能 (恢复哲学逻辑)
 # ==========================================
 def call_ai_api(prompt):
     try:
@@ -265,30 +268,57 @@ def call_ai_api(prompt):
 def get_normal_response(history_messages):
     try:
         api_messages = [{"role": "system", "content": "你是温暖的对话伙伴。"}]
-        for msg in history_messages:
-            api_messages.append({"role": msg["role"], "content": msg["content"]})
-        response = client_ai.chat.completions.create(
-            model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True 
-        )
-        return response
+        for msg in history_messages: api_messages.append({"role": msg["role"], "content": msg["content"]})
+        return client_ai.chat.completions.create(model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True)
     except Exception as e: return f"Error: {e}"
 
+# 🌟 核心回归：Analyze Meaning Engine (取代 Background)
+# 这里融合了 v25 的逻辑，但为了兼容现在的 main.py，函数名保持 analyze_meaning_background
+# 但内部逻辑升级为 M=C*S*N
 def analyze_meaning_background(text):
+    # 这里我们要在内部去获取一下用户的历史节点，算出 S 值，但这在库函数里做比较慢
+    # 为了性能，我们简化处理：让 AI 估算 C 和 N，我们在 Python 里估算 S
+    
     prompt = f"""
     分析输入："{text}"
-    返回 JSON:
+    
+    请严格基于 MSC (Meaning-Structure-Care) 哲学模型进行评估。
+    
+    1. Care Score (C, 0.0-1.0): 情绪强度、价值关联度。如果是寒暄或无意义废话，C < 0.2。
+    2. Novelty Score (N, 0.0-1.0): 语义新度，是否提出了新的视角或问题。
+    
+    若 C * N < 0.1，视为无意义，返回 {{ "valid": false }}。
+    
+    若有意义，返回 JSON:
     {{
         "valid": true,
         "care_point": "核心关切",
-        "meaning_layer": "结构",
-        "insight": "洞察",
-        "logic_score": 0.8,
+        "meaning_layer": "深层结构/哲学隐喻",
+        "insight": "升维洞察",
+        "c_score": 0.8,
+        "n_score": 0.8,
         "keywords": ["tag1"], 
         "topic_tags": ["topic1"],
+        "existential_q": false,
         "radar_scores": {{ "Care": 5, "Curiosity": 5, "Reflection": 5, "Coherence": 5, "Empathy": 5, "Agency": 5, "Aesthetic": 5 }}
     }}
     """
-    return call_ai_api(prompt)
+    res = call_ai_api(prompt)
+    
+    if res.get("valid", False):
+        # 补算 M 值
+        # M = C * N (S值暂时由 AI 隐性判断，或者默认 0.8)
+        c = res.get('c_score', 0.5)
+        n = res.get('n_score', 0.5)
+        m = c * n * 2 # 放大系数
+        res['m_score'] = m
+        res['s_score'] = 0.5 # 占位
+        
+        # 🌟 关键过滤：如果 M 分太低，依然判定为无效
+        if m < 0.3: 
+            res['valid'] = False
+            
+    return res
 
 def generate_fusion(node_a_content, node_b_content):
     prompt = f"""
@@ -306,88 +336,63 @@ def analyze_persona_report(radar_data):
 
 def simulate_civilization(topic, count):
     prompt = f"""
-    Task: Simulate {count} distinct users discussing "{topic}".
-    Create realistic, profound personas.
-    
-    IMPORTANT: Return a JSON object with a 'users' key containing a list.
-    Example:
-    {{
-        "users": [
-            {{ "username": "u1", "nickname": "A", "content": "..." }},
-            {{ "username": "u2", "nickname": "B", "content": "..." }}
-        ]
-    }}
+    Task: Simulate {count} users discussing "{topic}".
+    Return JSON: {{ "users": [ {{ "username": "u1", "nickname": "A", "content": "..." }} ] }}
     """
     res = call_ai_api(prompt)
-    
     agents = []
-    if isinstance(res, dict) and "users" in res:
-        agents = res["users"]
-    elif isinstance(res, list):
-        agents = res
+    if isinstance(res, dict) and "users" in res: agents = res["users"]
+    elif isinstance(res, list): agents = res
     elif isinstance(res, dict): 
         for val in res.values(): 
             if isinstance(val, list): agents = val; break
-            
-    if not agents: return 0, f"AI生成格式异常"
-
-    success_count = 0
+    if not agents: return 0, "AI生成异常"
+    cnt=0
     for agent in agents:
         try:
-            uid = agent.get('username', 'bot') + str(int(time.time()))[-3:] + str(np.random.randint(10,99))
-            add_user(uid, "123456", agent.get('nickname', 'SimBot'))
-            save_chat(uid, "user", agent['content'])
+            uid = agent.get('username','bot')+str(int(time.time()))[-3:]+str(np.random.randint(10,99))
+            add_user(uid,"123456",agent.get('nickname','Sim'))
+            save_chat(uid,"user",agent['content'])
             analysis = analyze_meaning_background(agent['content'])
-            
-            if "error" in analysis: 
-                analysis = {"valid": True, "care_point": "虚拟关切", "meaning_layer": "仿真结构", "insight": "仿真洞察", "logic_score": 0.8, "keywords": [], "topic_tags": []}
-            else:
-                analysis["valid"] = True
-            
-            vec = get_embedding(agent['content'])
-            save_node(uid, agent['content'], analysis, "日常", vec)
-            
-            if "radar_scores" in analysis: 
-                update_radar_score(uid, analysis["radar_scores"])
-            
-            check_group_formation(analysis, vec, uid)
-            success_count += 1
+            # 仿真强制
+            if "error" in analysis: analysis={"valid":True,"care_point":"Sim","meaning_layer":"Sim","insight":"Sim","m_score":0.8,"keywords":[],"topic_tags":[]}
+            else: analysis["valid"]=True
+            vec=get_embedding(agent['content'])
+            save_node(uid,agent['content'],analysis,"日常",vec)
+            if "radar_scores" in analysis: update_radar_score(uid,analysis["radar_scores"])
+            check_group_formation(analysis,vec,uid)
+            cnt+=1
             time.sleep(0.2)
-        except Exception as e: print(f"Sim error: {e}")
-        
-    return success_count, f"成功注入 {success_count} 个智能体！"
+        except: pass
+    return cnt, f"成功注入 {cnt}"
 
 def generate_daily_question(username, radar_data):
-    recent_nodes = get_user_nodes(username)
-    context = ""
-    if recent_nodes:
-        last_3 = recent_nodes[-3:] if len(recent_nodes) >=3 else recent_nodes
-        context = f"用户最近关注点：{[n['care_point'] for n in last_3]}"
-    radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"任务：生成每日追问。用户：{json.dumps(radar_data)}。{context}。输出 JSON: {{ 'question': '...' }}"
+    recent = get_user_nodes(username)
+    ctx = ""
+    if recent: ctx = f"关注点：{[n['care_point'] for n in recent[-3:]]}"
+    prompt = f"生成每日追问。用户：{json.dumps(radar_data)}。{ctx}。输出 JSON: {{ 'question': '...' }}"
     res = call_ai_api(prompt)
     if "question" in res: return res["question"]
     return "今天，什么事情让你感到'活着'？"
 
 # ==========================================
-# 🎨 5. 视觉渲染
+# 🎨 5. 视觉渲染 (Locked)
 # ==========================================
 def render_2d_world_map(nodes):
-    # 修复：使用 Plotly graph_objects 最稳定写法
-    lats, lons = [], []
-    for _ in range(len(nodes) + 15):
-        lats.append(float(np.random.uniform(-40, 60)))
-        lons.append(float(np.random.uniform(-130, 150)))
-    
+    map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
+    for _ in range(len(nodes) + 15): 
+        lon = np.random.uniform(-150, 150)
+        lat = np.random.uniform(-40, 60)
+        val = np.random.randint(10, 100)
+        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
+    df = pd.DataFrame(map_data)
     fig = go.Figure(data=go.Scattergeo(
-        lon = lons, lat = lats,
+        lon = [d['value'][0] for d in map_data],
+        lat = [d['value'][1] for d in map_data],
         mode = 'markers',
         marker = dict(size=5, color='#ffd60a', opacity=0.8)
     ))
-    fig.update_layout(
-        geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"),
-        margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500
-    )
+    fig.update_layout(geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"), margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500)
     st.plotly_chart(fig, use_container_width=True)
 
 def render_3d_galaxy(nodes):
@@ -426,8 +431,8 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     graph_nodes, graph_links = [], []
     symbol_base = 30 if is_fullscreen else 15
     for i, node in enumerate(nodes):
-        logic = node.get('logic_score')
-        if logic is None: logic = 0.5
+        # 🌟 修复：现在优先取 m_score，没有再取 logic_score
+        logic = node.get('m_score') if node.get('m_score') is not None else node.get('logic_score', 0.5)
         keywords = []
         if node.get('keywords'):
             if isinstance(node['keywords'], str): keywords = json.loads(node['keywords'])
