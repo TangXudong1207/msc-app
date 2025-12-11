@@ -3,7 +3,7 @@ from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
 import pydeck as pdk
-import plotly.express as px  # 🌟 修复：引入 Plotly 画地图
+import plotly.express as px
 import pandas as pd
 import json
 import re
@@ -41,8 +41,10 @@ def make_hashes(password):
 
 def add_user(username, password, nickname):
     try:
+        # 模拟器专用：如果用户存在就不报错，直接跳过
         res = supabase.table('users').select("*").eq('username', username).execute()
-        if len(res.data) > 0: return False
+        if len(res.data) > 0: return True 
+        
         default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
@@ -78,7 +80,7 @@ def update_radar_score(username, new_scores):
             current_radar = {k: 3.0 for k in new_scores.keys()}
         elif isinstance(current_radar, str):
             current_radar = json.loads(current_radar)
-        alpha = 0.08
+        alpha = 0.2 # 模拟模式下学习率调高，让性格变化更明显
         updated_radar = {}
         for key in new_scores:
             old_val = float(current_radar.get(key, 3.0))
@@ -153,18 +155,19 @@ def get_all_nodes_for_map(username):
 
 def get_global_nodes():
     try:
-        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
+        # 获取最新的300个节点，用于展示全球星河
+        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(300).execute()
         return res.data
     except: return []
 
-# --- 群组功能 ---
 def check_group_formation(new_node_data, vector, username):
     care_point = new_node_data.get('care_point')
     if not care_point: return
     try:
         res = supabase.table('nodes').select("*").ilike('care_point', f"%{care_point}%").execute()
         unique_users = set([row['username'] for row in res.data])
-        if len(unique_users) >= 2:
+        # 阈值：3人成团
+        if len(unique_users) >= 3:
             room_name = f"🌌 {care_point} · 星团"
             existing = supabase.table('rooms').select("*").eq('name', room_name).execute()
             if not existing.data:
@@ -172,7 +175,7 @@ def check_group_formation(new_node_data, vector, username):
                     "name": room_name, "type": "Gravity", "trigger_keyword": care_point,
                     "description": f"由 {len(unique_users)} 位探索者的共同意义汇聚而成。"
                 }).execute()
-                st.toast(f"🌟 意义引力临界点已突破！自动生成星团：{room_name}", icon="🪐")
+                # 模拟器中不需要toast，默默建群即可
     except: pass
 
 def get_available_rooms():
@@ -263,20 +266,76 @@ def generate_fusion(node_a_content, node_b_content):
     """
     return call_ai_api(prompt)
 
-# 🌟 恢复：人物画像分析功能
 def analyze_persona_report(radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
     prompt = f"""
-    任务：基于用户的元人性雷达数据，生成一份深度人物画像。
-    雷达数据：{radar_str}
-    
-    请输出 JSON 格式：
-    {{
-        "static_portrait": "静态画像：用心理学和哲学语言描述该用户的核心人格底色、优势与盲点...",
-        "dynamic_growth": "动态成长：分析该用户目前的进化趋势，并给出下一步提升段位的具体建议..."
-    }}
+    任务：人物画像分析。雷达数据：{radar_str}。请输出 JSON: {{ "static_portrait": "...", "dynamic_growth": "..." }}
     """
     return call_ai_api(prompt)
+
+# --- 🧬 仿真模拟器 (Simulator) ---
+def simulate_civilization(topic, count):
+    """
+    生成虚拟用户，模拟对话，注入系统
+    """
+    # 1. 生成虚拟人格和对话
+    prompt = f"""
+    任务：模拟 {count} 个不同背景、性格的用户，围绕话题“{topic}”发表一句深刻的看法。
+    
+    要求：
+    1. 每个人格要有 distinctive 的名字 (如: CyberPunk_01, ZenMaster, AnxietyBot)。
+    2. 内容要有深度，能够触发 MSC 的节点生成。
+    3. 模拟真实的社交网络输入。
+    
+    返回 JSON 列表:
+    [
+        {{ "username": "...", "nickname": "...", "content": "..." }},
+        ...
+    ]
+    """
+    res = call_ai_api(prompt)
+    if "error" in res or not isinstance(res, list): # 简单的错误处理
+        # 尝试处理直接返回 dict 的情况
+        if isinstance(res, dict) and "users" in res:
+            res = res["users"]
+        else:
+            return 0, "脚本生成失败"
+
+    success_count = 0
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i, agent in enumerate(res):
+        status_text.text(f"👾 正在注入智能体: {agent['nickname']} ...")
+        
+        # A. 注册/登录虚拟用户
+        # 密码默认 123456
+        add_user(agent['username'], "123456", agent['nickname'])
+        
+        # B. 存入 Chat
+        # 既然是模拟，我们不模拟 assistant 的回复，只模拟 user 发言
+        save_chat(agent['username'], "user", agent['content'])
+        
+        # C. 意义分析 & 存入 Node
+        analysis = analyze_meaning_background(agent['content'])
+        if analysis.get("valid", False):
+            vec = get_embedding(agent['content'])
+            save_node(agent['username'], agent['content'], analysis, "日常", vec)
+            
+            # 更新虚拟人的雷达
+            if "radar_scores" in analysis:
+                update_radar_score(agent['username'], analysis["radar_scores"])
+            
+            # 触发建群检测
+            check_group_formation(analysis, vec, agent['username'])
+            success_count += 1
+        
+        progress_bar.progress((i + 1) / len(res))
+        time.sleep(0.5) # 防止速率限制
+
+    status_text.empty()
+    progress_bar.empty()
+    return success_count, "模拟完成"
 
 # --- 🧮 算法 ---
 def cosine_similarity(v1, v2):
@@ -300,63 +359,41 @@ def find_resonance(current_vector, current_user):
         return best_match
     except: return None
 
-# --- 🌍 2D 地球渲染 (Plotly 修复版) ---
+# --- 渲染函数 ---
 def render_2d_world_map(nodes):
-    # 模拟数据
     map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
     for _ in range(len(nodes) + 10): 
-        lon = np.random.uniform(-150, 150)
-        lat = np.random.uniform(-40, 60)
-        val = np.random.randint(10, 100)
-        # 用 label 字段存名字，size 存大小
-        map_data.append({"lat": float(lat), "lon": float(lon), "size": 5, "label": "Meaning Node"})
-
-    df = pd.DataFrame(map_data)
-    
-    # 🌟 使用 Plotly 渲染，绝对稳
-    fig = px.scatter_geo(
-        df, lat="lat", lon="lon", size="size", hover_name="label",
-        projection="natural earth", template="plotly_dark",
-        color_discrete_sequence=["#ffd60a"]
-    )
-    fig.update_geos(
-        showcountries=True, countrycolor="#444",
-        showland=True, landcolor="#0e1117", showocean=True, oceancolor="#000"
-    )
+        lon, lat = np.random.uniform(-150, 150), np.random.uniform(-40, 60)
+        map_data.append({"name": "Node", "value": [float(lon), float(lat), 50]})
+    fig = px.scatter_geo(pd.DataFrame(map_data), lat="value", lon="value", # Plotly需要适配df列名，这里简化处理
+                         projection="natural earth", template="plotly_dark")
+    # 简化版 Plotly Map 渲染，为防报错，我们直接构造正确df
+    df_map = pd.DataFrame([{"lat": d["value"][1], "lon": d["value"][0]} for d in map_data])
+    fig = px.scatter_geo(df_map, lat="lat", lon="lon", size_max=5, template="plotly_dark", color_discrete_sequence=["#ffd60a"])
+    fig.update_geos(showcountries=True, countrycolor="#444", showland=True, landcolor="#0e1117", showocean=True, oceancolor="#000")
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="#000", height=500)
     st.plotly_chart(fig, use_container_width=True)
 
-# --- 🌌 3D 星河渲染 (PyDeck) ---
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: st.info("🌌 星河汇聚中..."); return
-    vectors, labels = [], []
+    vectors, labels, colors = [], [], []
     for i, node in enumerate(nodes):
         if node['vector']:
             try:
                 v = json.loads(node['vector'])
                 vectors.append(v)
                 labels.append(node['care_point'])
+                colors.append(0 if "Alice" in node['username'] else 1) # 简单区分颜色
             except: pass
     if not vectors: return
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
-    coords = coords / np.max(np.abs(coords)) * 100
-    df_data = []
-    for i, (x, y, z) in enumerate(coords):
-        df_data.append({
-            "position": [x, y, z],
-            "care": labels[i],
-            "color": [0, 255, 242] if i%2==0 else [255, 0, 212]
-        })
-    df = pd.DataFrame(df_data)
-    point_cloud = pdk.Layer(
-        "PointCloudLayer", data=df, get_position="position", get_normal=[0,1,0],
-        get_color="color", point_size=8, pickable=True
-    )
-    view_state = pdk.ViewState(target=[0,0,0], zoom=3, rotation_orbit=30, pitch=45)
-    st.pydeck_chart(pdk.Deck(map_style=None, initial_view_state=view_state, layers=[point_cloud], tooltip={"html": "<b>{care}</b>"}))
+    df = pd.DataFrame(coords, columns=['x', 'y', 'z'])
+    df['label'] = labels
+    fig = px.scatter_3d(df, x='x', y='y', z='z', hover_name='label', template="plotly_dark", opacity=0.8)
+    fig.update_layout(scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
 
-# --- 侧边栏渲染 ---
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
@@ -386,18 +423,15 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             if na['vector'] and nb['vector']:
-                m_sim = len(set(na['keywords']).intersection(set(nb['keywords']))) / (len(set(na['keywords']).union(set(nb['keywords']))) or 1)
                 vec_sim = cosine_similarity(na['vector'], nb['vector'])
-                score = 0.6 * m_sim + 0.4 * vec_sim
-                if score > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
-                elif score > 0.6: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
+                if vec_sim > 0.8: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
+                elif vec_sim > 0.65: graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
     option = {
         "backgroundColor": "#0e1117",
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
     }
     st_echarts(options=option, height=height)
 
-# --- 🖥️ 弹窗 ---
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
@@ -419,9 +453,7 @@ def view_radar_details(radar_dict):
         st.metric("总灵力", f"{sum(radar_dict.values()):.1f}")
     with c2:
         render_radar_chart(radar_dict, height="250px")
-    
     st.divider()
-    # 🌟 修复：画像分析按钮逻辑回归
     if st.button("🤖 生成人物画像分析", type="primary", use_container_width=True):
         with st.spinner("DeepSeek 正在扫描您的灵魂结构..."):
             analysis = analyze_persona_report(radar_dict)
@@ -431,8 +463,7 @@ def view_radar_details(radar_dict):
                 st.write(analysis.get('static_portrait', '无数据'))
                 st.markdown(f"### 🚀 动态成长")
                 st.write(analysis.get('dynamic_growth', '无数据'))
-            else:
-                st.error("分析失败")
+            else: st.error("分析失败")
 
 @st.dialog("🪐 进入星团房间")
 def view_group_chat(room, username):
@@ -450,7 +481,7 @@ def view_group_chat(room, username):
 # 🖥️ 主程序
 # ==========================================
 
-st.set_page_config(page_title="MSC v27.0 Final", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v28.0 Simulation", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
@@ -491,12 +522,9 @@ else:
         rank_name, rank_icon = calculate_rank(radar_dict)
         st.markdown(f"## {rank_icon} {st.session_state.nickname}")
         render_radar_chart(radar_dict)
-        if st.button("🧬 查看详细画像", use_container_width=True):
-            view_radar_details(radar_dict)
+        if st.button("🧬 查看详细画像", use_container_width=True): view_radar_details(radar_dict)
+        if st.button("🌍 MSC World", use_container_width=True, type="primary"): view_msc_world()
         
-        if st.button("🌍 MSC World", use_container_width=True, type="primary"):
-            view_msc_world()
-            
         st.divider()
         st.subheader("🌌 发现星团")
         rooms = get_available_rooms()
@@ -507,10 +535,19 @@ else:
                     view_group_chat(room, st.session_state.username)
         else: st.caption("暂无自发星团...")
 
+        # 🌟 仿真实验室入口
+        with st.expander("🧪 仿真实验室 (Admin)"):
+            sim_topic = st.text_input("设定社会话题", value="人工智能对人类情感的影响")
+            sim_count = st.slider("生成虚拟人数", 1, 5, 3)
+            if st.button("🚀 注入虚拟文明"):
+                with st.spinner("DeepSeek 正在编织虚拟人生..."):
+                    cnt, msg = simulate_civilization(sim_topic, sim_count)
+                    if cnt > 0: st.success(f"成功注入 {cnt} 个智能体！请刷新页面查看星河变化。")
+                    else: st.error(msg)
+
         st.divider()
         render_cyberpunk_map(all_nodes_list, height="200px")
-        if st.button(f"🔭 {st.session_state.nickname} 的浩荡宇宙", use_container_width=True): 
-            view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+        if st.button("🔭 全屏", use_container_width=True): view_fullscreen_map(all_nodes_list, st.session_state.nickname)
         
         if st.button("退出"): st.session_state.logged_in = False; st.rerun()
 
@@ -542,7 +579,6 @@ else:
         stream = get_normal_response(full_history)
         reply_text = st.write_stream(stream)
         save_chat(st.session_state.username, "assistant", reply_text)
-        
         with st.spinner("⚡ 意义判别 & 星团扫描..."):
             analysis = analyze_meaning_background(prompt)
             if analysis.get("valid", False):
