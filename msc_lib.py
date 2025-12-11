@@ -2,6 +2,7 @@ import streamlit as st
 from openai import OpenAI
 from supabase import create_client, Client
 from streamlit_echarts import st_echarts
+import pydeck as pdk
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -9,28 +10,110 @@ import json
 import re
 import hashlib
 import time
-from datetime import datetime, timedelta, timezone
+import numpy as np # 🌟 核心修复：必须显式引入 numpy
+from sklearn.decomposition import PCA 
+from sklearn.cluster import KMeans
 
-# 🛑 配置与初始化
+# ==========================================
+# 🛑 1. 配置与初始化
+# ==========================================
 def init_system():
     try:
-        client = OpenAI(api_key=st.secrets["API_KEY"], base_url=st.secrets["BASE_URL"])
+        client = OpenAI(
+            api_key=st.secrets["API_KEY"],
+            base_url=st.secrets["BASE_URL"]
+        )
         model = st.secrets["MODEL_NAME"]
+        
         supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         return client, model, supabase
-    except Exception as e: st.error(f"Error: {e}"); st.stop()
+    except Exception as e:
+        st.error(f"系统启动失败: {e}")
+        st.stop()
 
 client_ai, TARGET_MODEL, supabase = init_system()
 
-# 🧮 算法
-def get_embedding(text): return np.random.rand(1536).tolist()
-def cosine_similarity(v1, v2):
-    import numpy as np
-    if not v1 or not v2: return 0
-    vec1, vec2 = np.array(v1), np.array(v2)
-    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)) if np.linalg.norm(vec1) > 0 else 0
+# ==========================================
+# 🧮 2. 核心算法
+# ==========================================
+def get_embedding(text):
+    return np.random.rand(1536).tolist()
 
-def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest()
+def cosine_similarity(v1, v2):
+    if not v1 or not v2: return 0
+    vec1 = np.array(v1)
+    vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0: return 0
+    return np.dot(vec1, vec2) / (norm1 * norm2)
+
+def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex_b):
+    sim_vec = cosine_similarity(vec_a, vec_b)
+    t_inter = len(set(topic_a).intersection(set(topic_b)))
+    t_union = len(set(topic_a).union(set(topic_b)))
+    topic_sim = t_inter / t_union if t_union > 0 else 0
+    m_inter = len(set(meaning_a).intersection(set(meaning_b)))
+    m_union = len(set(meaning_a).union(set(meaning_b)))
+    meaning_sim = m_inter / m_union if m_union > 0 else 0
+    if topic_sim > 0.7 and meaning_sim < 0.3: return 0.2
+    ex_match = 1.0 if (ex_a and ex_b) else 0.0
+    return 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
+
+def make_hashes(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
+
+def check_hashes(password, hashed_text):
+    if make_hashes(password) == hashed_text: return True
+    return False
+
+# ==========================================
+# 🔐 3. 用户与数据库操作
+# ==========================================
+def add_user(username, password, nickname):
+    try:
+        res = supabase.table('users').select("*").eq('username', username).execute()
+        if len(res.data) > 0: return True 
+        default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
+        data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
+        supabase.table('users').insert(data).execute()
+        return True
+    except: return False
+
+def login_user(username, password):
+    try:
+        hashed_pw = make_hashes(password)
+        res = supabase.table('users').select("*").eq('username', username).eq('password', hashed_pw).execute()
+        return res.data
+    except: return []
+
+def get_user_profile(username):
+    try:
+        res = supabase.table('users').select("nickname, radar_profile").eq('username', username).execute()
+        if res.data: return res.data[0]
+    except: pass
+    return {"nickname": username, "radar_profile": None}
+
+def update_radar_score(username, new_scores):
+    try:
+        user_data = get_user_profile(username)
+        current_radar = user_data.get('radar_profile')
+        if not current_radar:
+            current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str):
+            current_radar = json.loads(current_radar)
+        alpha = 0.2
+        updated_radar = {}
+        for key in new_scores:
+            old_val = float(current_radar.get(key, 3.0))
+            input_val = float(new_scores.get(key, 0))
+            if input_val > 1.0:
+                updated_val = old_val * (1 - alpha) + input_val * alpha
+                updated_radar[key] = round(min(10.0, updated_val), 2)
+            else:
+                updated_radar[key] = old_val
+        supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
+    except: pass
 
 def calculate_rank(radar_data):
     if not radar_data: return "倔强青铜 III", "🥉"
@@ -44,72 +127,72 @@ def calculate_rank(radar_data):
     elif total < 62: return "至尊星耀", "✨"
     else: return "最强王者", "👑"
 
-# 🔐 用户操作
-def login_user(username, password):
+# 🌟 修复：确保 save_chat 存在
+def save_chat(username, role, content):
     try:
-        hashed_pw = make_hashes(password)
-        res = supabase.table('users').select("*").eq('username', username).eq('password', hashed_pw).execute()
-        return res.data
+        data = {"username": username, "role": role, "content": content, "is_deleted": False}
+        supabase.table('chats').insert(data).execute()
+    except: pass
+
+def get_active_chats(username, limit=50):
+    try:
+        res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(limit).execute()
+        return list(reversed(res.data))
     except: return []
 
-def add_user(username, password, nickname):
+def soft_delete_chat_and_node(chat_id, content, username):
     try:
-        res = supabase.table('users').select("*").eq('username', username).execute()
-        if len(res.data) > 0: return False 
-        default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
-        data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
-        supabase.table('users').insert(data).execute()
+        supabase.table('chats').update({"is_deleted": True}).eq("id", chat_id).execute()
+        supabase.table('nodes').update({"is_deleted": True}).eq("username", username).eq("content", content).execute()
         return True
     except: return False
 
-def get_user_profile(username):
+def restore_item(table, item_id):
     try:
-        res = supabase.table('users').select("nickname, radar_profile").eq('username', username).execute()
-        if res.data: return res.data[0]
-    except: pass
-    return {"nickname": username, "radar_profile": None}
-
-def update_radar_score(username, new_scores):
-    try:
-        user_data = get_user_profile(username)
-        current_radar = user_data.get('radar_profile')
-        if not current_radar: current_radar = {k: 3.0 for k in new_scores.keys()}
-        elif isinstance(current_radar, str): current_radar = json.loads(current_radar)
-        alpha = 0.2
-        updated_radar = {}
-        for key in new_scores:
-            old_val = float(current_radar.get(key, 3.0)); input_val = float(new_scores.get(key, 0))
-            if input_val > 1.0: updated_radar[key] = round(min(10.0, old_val*(1-alpha)+input_val*alpha), 2)
-            else: updated_radar[key] = old_val
-        supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
-    except: pass
-
-# --- 🌟 在线状态核心 (新增) ---
-def update_heartbeat(username):
-    """更新用户最后在线时间"""
-    try:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        supabase.table('users').update({"last_seen": now_iso}).eq("username", username).execute()
-    except: pass
-
-def check_is_online(last_seen_str):
-    """判断是否在线 (5分钟内活跃)"""
-    if not last_seen_str: return False
-    try:
-        # 解析时间字符串
-        last_seen = datetime.fromisoformat(last_seen_str.replace('Z', '+00:00'))
-        # 获取当前 UTC 时间
-        now = datetime.now(timezone.utc)
-        # 判读差值
-        diff = now - last_seen
-        return diff.total_seconds() < 300 # 300秒 = 5分钟
+        supabase.table(table).update({"is_deleted": False}).eq("id", item_id).execute()
+        return True
     except: return False
 
-# --- 消息与通知 ---
+def save_node(username, content, data, mode, vector):
+    try:
+        logic = data.get('logic_score')
+        if logic is None: logic = 0.5
+        keywords = data.get('keywords', [])
+        insert_data = {
+            "username": username, "content": content,
+            "care_point": data.get('care_point', '未命名'),
+            "meaning_layer": data.get('meaning_layer', '暂无结构'),
+            "insight": data.get('insight', '生成中断'),
+            "mode": mode, "vector": json.dumps(vector),
+            "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False
+        }
+        supabase.table('nodes').insert(insert_data).execute()
+        return True
+    except Exception as e: st.error(f"Save Node Error: {e}")
+    return False
+
+def get_active_nodes_map(username):
+    try:
+        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).execute()
+        return {node['content']: node for node in res.data}
+    except: return {}
+
+def get_all_nodes_for_map(username):
+    try:
+        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
+        return res.data
+    except: return []
+
+def get_global_nodes():
+    try:
+        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
+        return res.data
+    except: return []
+
+# 社交功能
 def get_all_users(current_user):
     try:
-        # 获取 users 表，包含 last_seen
-        res = supabase.table('users').select("username, nickname, last_seen").neq('username', current_user).execute()
+        res = supabase.table('users').select("username, nickname").neq('username', current_user).execute()
         return res.data
     except: return []
 
@@ -148,90 +231,47 @@ def mark_messages_read(sender, receiver):
             .eq('sender', sender).eq('receiver', receiver).eq('is_read', False).execute()
     except: pass
 
-# --- 🌟 修复：找回丢失的 AI 聊天记录函数 ---
-def get_active_chats(username, limit=50):
-    """获取与AI的对话历史"""
-    try:
-        res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(limit).execute()
-        return list(reversed(res.data))
-    except: return []
-
-# --- 节点存取 ---
-def save_node(username, content, data, mode, vector):
-    try:
-        logic = data.get('logic_score')
-        if logic is None: logic = 0.5
-        keywords = data.get('keywords', [])
-        insert_data = {
-            "username": username, "content": content,
-            "care_point": data.get('care_point', '未命名'),
-            "meaning_layer": data.get('meaning_layer', '暂无结构'),
-            "insight": data.get('insight', '生成中断'),
-            "mode": mode, "vector": json.dumps(vector),
-            "logic_score": logic, "keywords": json.dumps(keywords), "is_deleted": False
-        }
-        supabase.table('nodes').insert(insert_data).execute()
-        return True
-    except: return False
-
-def get_active_nodes_map(username):
-    try:
-        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).execute()
-        return {node['content']: node for node in res.data}
-    except: return {}
-
-def get_all_nodes_for_map(username):
-    try:
-        res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
-        return res.data
-    except: return []
-
-def get_global_nodes():
-    try:
-        res = supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute()
-        return res.data
-    except: return []
-
-def soft_delete_chat_and_node(chat_id, content, username):
-    try:
-        supabase.table('chats').update({"is_deleted": True}).eq("id", chat_id).execute()
-        supabase.table('nodes').update({"is_deleted": True}).eq("username", username).eq("content", content).execute()
-        return True
-    except: return False
-
-# --- 群组 ---
+# 群组功能
 def check_group_formation(new_node_data, vector, username):
-    care = new_node_data.get('care_point')
-    if not care: return
+    care_point = new_node_data.get('care_point')
+    if not care_point: return
     try:
-        res = supabase.table('nodes').select("*").ilike('care_point', f"%{care}%").execute()
-        users = set([row['username'] for row in res.data])
-        if len(users) >= 2:
-            rname = f"🌌 {care} · 星团"
-            exist = supabase.table('rooms').select("*").eq('name', rname).execute()
-            if not exist.data:
-                supabase.table('rooms').insert({"name": rname, "type": "Gravity", "trigger_keyword": care, "description": f"由 {len(users)} 位探索者汇聚。"}).execute()
+        res = supabase.table('nodes').select("*").ilike('care_point', f"%{care_point}%").execute()
+        unique_users = set([row['username'] for row in res.data])
+        if len(unique_users) >= 3:
+            room_name = f"🌌 {care_point} · 星团"
+            existing = supabase.table('rooms').select("*").eq('name', room_name).execute()
+            if not existing.data:
+                supabase.table('rooms').insert({
+                    "name": room_name, "type": "Gravity", "trigger_keyword": care_point,
+                    "description": f"由 {len(unique_users)} 位探索者的共同意义汇聚而成。"
+                }).execute()
     except: pass
 
 def get_available_rooms():
-    try: return supabase.table('rooms').select("*").order('created_at', desc=True).execute().data
-    except: return []
-
-def join_room(rid, user):
     try:
-        chk = supabase.table('room_members').select("*").eq('room_id', rid).eq('username', user).execute()
-        if not chk.data: supabase.table('room_members').insert({"room_id": rid, "username": user}).execute()
-    except: pass
-
-def get_room_messages(rid):
-    try: return supabase.table('room_chats').select("*").eq('room_id', rid).order('created_at', desc=False).execute().data
+        res = supabase.table('rooms').select("*").order('created_at', desc=True).execute()
+        return res.data
     except: return []
 
-def send_room_message(rid, user, content):
-    try: supabase.table('room_chats').insert({"room_id": rid, "username": user, "content": content}).execute()
+def join_room(room_id, username):
+    try:
+        check = supabase.table('room_members').select("*").eq('room_id', room_id).eq('username', username).execute()
+        if not check.data:
+            supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
     except: pass
 
-# --- 共鸣 ---
+def get_room_messages(room_id):
+    try:
+        res = supabase.table('room_chats').select("*").eq('room_id', room_id).order('created_at', desc=False).execute()
+        return res.data
+    except: return []
+
+def send_room_message(room_id, username, content):
+    try:
+        supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
+    except: pass
+
 def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     try:
@@ -256,7 +296,9 @@ def find_resonance(current_vector, current_user, current_data):
         return best_match
     except: return None
 
-# --- AI ---
+# ==========================================
+# 🧠 4. AI 智能
+# ==========================================
 def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
@@ -294,7 +336,20 @@ def analyze_meaning_background(text):
     """
     return call_ai_api(prompt)
 
+def generate_fusion(node_a_content, node_b_content):
+    prompt = f"""
+    任务：融合 A: "{node_a_content}" 和 B: "{node_b_content}"。
+    返回 JSON: {{ "care_point": "...", "meaning_layer": "...", "insight": "..." }}
+    """
+    return call_ai_api(prompt)
+
+def analyze_persona_report(radar_data):
+    radar_str = json.dumps(radar_data, ensure_ascii=False)
+    prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
+    return call_ai_api(prompt)
+
 def generate_daily_question(username, radar_data):
+    # 🌟 修复：调用 get_all_nodes_for_map (即 get_user_nodes)
     recent = get_all_nodes_for_map(username)
     ctx = ""
     if recent: ctx = f"关注点：{[n['care_point'] for n in recent[-3:]]}"
@@ -303,12 +358,9 @@ def generate_daily_question(username, radar_data):
     if "question" in res: return res["question"]
     return "今天，什么事情让你感到'活着'？"
 
-def analyze_persona_report(radar_data):
-    radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"任务：人物画像分析。雷达数据：{radar_str}。输出 JSON: {{ 'static_portrait': '...', 'dynamic_growth': '...' }}"
-    return call_ai_api(prompt)
-
-# --- 渲染 ---
+# ==========================================
+# 🎨 5. 视觉渲染 (Locked)
+# ==========================================
 def render_2d_world_map(nodes):
     map_data = [{"lat": 39.9, "lon": 116.4, "size": 10, "label": "HQ"}]
     for _ in range(len(nodes) + 15): 
@@ -320,7 +372,10 @@ def render_2d_world_map(nodes):
         lon = df["lon"], lat = df["lat"], mode = 'markers',
         marker = dict(size=5, color='#ffd60a', opacity=0.8)
     ))
-    fig.update_layout(geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"), margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500)
+    fig.update_layout(
+        geo = dict(scope='world', projection_type='natural earth', showland=True, landcolor="rgb(20, 20, 20)", bgcolor="black"),
+        margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor="black", height=500
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 def render_3d_galaxy(nodes):
