@@ -13,37 +13,24 @@ import numpy as np
 from sklearn.decomposition import PCA 
 from sklearn.cluster import KMeans
 
-# ==========================================
-# 🛑 1. 配置与初始化
-# ==========================================
+# 🛑 配置与初始化
 def init_system():
     try:
-        client = OpenAI(
-            api_key=st.secrets["API_KEY"],
-            base_url=st.secrets["BASE_URL"]
-        )
+        client = OpenAI(api_key=st.secrets["API_KEY"], base_url=st.secrets["BASE_URL"])
         model = st.secrets["MODEL_NAME"]
-        
         supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         return client, model, supabase
-    except Exception as e:
-        st.error(f"系统启动失败: {e}")
-        st.stop()
+    except Exception as e: st.error(f"Error: {e}"); st.stop()
 
 client_ai, TARGET_MODEL, supabase = init_system()
 
-# ==========================================
-# 🧮 2. 核心算法
-# ==========================================
-def get_embedding(text):
-    return np.random.rand(1536).tolist()
+# 🧮 算法与工具
+def get_embedding(text): return np.random.rand(1536).tolist()
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
-    vec1 = np.array(v1)
-    vec2 = np.array(v2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
+    vec1, vec2 = np.array(v1), np.array(v2)
+    norm1, norm2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
     if norm1 == 0 or norm2 == 0: return 0
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
@@ -59,20 +46,13 @@ def calculate_MLS(vec_a, vec_b, topic_a, topic_b, meaning_a, meaning_b, ex_a, ex
     ex_match = 1.0 if (ex_a and ex_b) else 0.0
     return 0.5 * meaning_sim + 0.3 * sim_vec + 0.2 * ex_match
 
-def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+def make_hashes(password): return hashlib.sha256(str.encode(password)).hexdigest()
 
-def check_hashes(password, hashed_text):
-    if make_hashes(password) == hashed_text: return True
-    return False
-
-# ==========================================
-# 🔐 3. 用户与数据库操作
-# ==========================================
+# 🔐 用户与数据库
 def add_user(username, password, nickname):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
-        if len(res.data) > 0: return True 
+        if len(res.data) > 0: return False
         default_radar = {"Care": 3.0, "Curiosity": 3.0, "Reflection": 3.0, "Coherence": 3.0, "Empathy": 3.0, "Agency": 3.0, "Aesthetic": 3.0}
         data = {"username": username, "password": make_hashes(password), "nickname": nickname, "radar_profile": json.dumps(default_radar)}
         supabase.table('users').insert(data).execute()
@@ -97,20 +77,15 @@ def update_radar_score(username, new_scores):
     try:
         user_data = get_user_profile(username)
         current_radar = user_data.get('radar_profile')
-        if not current_radar:
-            current_radar = {k: 3.0 for k in new_scores.keys()}
-        elif isinstance(current_radar, str):
-            current_radar = json.loads(current_radar)
+        if not current_radar: current_radar = {k: 3.0 for k in new_scores.keys()}
+        elif isinstance(current_radar, str): current_radar = json.loads(current_radar)
         alpha = 0.2
         updated_radar = {}
         for key in new_scores:
             old_val = float(current_radar.get(key, 3.0))
             input_val = float(new_scores.get(key, 0))
-            if input_val > 1.0:
-                updated_val = old_val * (1 - alpha) + input_val * alpha
-                updated_radar[key] = round(min(10.0, updated_val), 2)
-            else:
-                updated_radar[key] = old_val
+            if input_val > 1.0: updated_radar[key] = round(min(10.0, old_val*(1-alpha)+input_val*alpha), 2)
+            else: updated_radar[key] = old_val
         supabase.table('users').update({"radar_profile": json.dumps(updated_radar)}).eq("username", username).execute()
     except: pass
 
@@ -127,9 +102,7 @@ def calculate_rank(radar_data):
     else: return "最强王者", "👑"
 
 def save_chat(username, role, content):
-    try:
-        data = {"username": username, "role": role, "content": content, "is_deleted": False}
-        supabase.table('chats').insert(data).execute()
+    try: supabase.table('chats').insert({"username": username, "role": role, "content": content, "is_deleted": False}).execute()
     except: pass
 
 def get_active_chats(username, limit=50):
@@ -145,16 +118,9 @@ def soft_delete_chat_and_node(chat_id, content, username):
         return True
     except: return False
 
-def restore_item(table, item_id):
-    try:
-        supabase.table(table).update({"is_deleted": False}).eq("id", item_id).execute()
-        return True
-    except: return False
-
 def save_node(username, content, data, mode, vector):
     try:
-        logic = data.get('logic_score')
-        if logic is None: logic = 0.5
+        logic = data.get('logic_score', 0.5)
         keywords = data.get('keywords', [])
         insert_data = {
             "username": username, "content": content,
@@ -166,8 +132,7 @@ def save_node(username, content, data, mode, vector):
         }
         supabase.table('nodes').insert(insert_data).execute()
         return True
-    except Exception as e: st.error(f"Save Node Error: {e}")
-    return False
+    except: return False
 
 def get_active_nodes_map(username):
     try:
@@ -180,6 +145,10 @@ def get_all_nodes_for_map(username):
         res = supabase.table('nodes').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=False).execute()
         return res.data
     except: return []
+
+# 🌟 将这个函数移动到 get_all_nodes_for_map 之后
+def get_user_nodes(username):
+    return get_all_nodes_for_map(username)
 
 def get_global_nodes():
     try:
@@ -212,8 +181,7 @@ def get_available_rooms():
 def join_room(room_id, username):
     try:
         check = supabase.table('room_members').select("*").eq('room_id', room_id).eq('username', username).execute()
-        if not check.data:
-            supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
+        if not check.data: supabase.table('room_members').insert({"room_id": room_id, "username": username}).execute()
     except: pass
 
 def get_room_messages(room_id):
@@ -223,8 +191,7 @@ def get_room_messages(room_id):
     except: return []
 
 def send_room_message(room_id, username, content):
-    try:
-        supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
+    try: supabase.table('room_chats').insert({"room_id": room_id, "username": username, "content": content}).execute()
     except: pass
 
 def find_resonance(current_vector, current_user, current_data):
@@ -233,11 +200,9 @@ def find_resonance(current_vector, current_user, current_data):
         res = supabase.table('nodes').select("*").neq('username', current_user).eq('is_deleted', False).execute()
         others = res.data
         best_match, highest_score = None, 0
-        
         c_topics = current_data.get('topic_tags', [])
         c_meanings = current_data.get('keywords', [])
         c_ex = current_data.get('existential_q', False)
-        
         for row in others:
             if row['vector']:
                 try:
@@ -245,14 +210,7 @@ def find_resonance(current_vector, current_user, current_data):
                     o_keywords = json.loads(row['keywords']) if row['keywords'] else []
                     o_topics = [] 
                     o_ex = False
-                    
-                    MLS = calculate_MLS(
-                        current_vector, o_vec,
-                        c_topics, o_topics,
-                        c_meanings, o_keywords,
-                        c_ex, o_ex
-                    )
-                    
+                    MLS = calculate_MLS(current_vector, o_vec, c_topics, o_topics, c_meanings, o_keywords, c_ex, o_ex)
                     if MLS > 0.75 and MLS > highest_score:
                         highest_score = MLS
                         best_match = {"user": row['username'], "content": row['content'], "score": round(MLS * 100, 1)}
@@ -260,9 +218,7 @@ def find_resonance(current_vector, current_user, current_data):
         return best_match
     except: return None
 
-# ==========================================
-# 🧠 4. AI 智能
-# ==========================================
+# 🧠 AI 核心
 def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
@@ -292,13 +248,6 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"""
     分析输入："{text}"
-    1. 判断是否生成节点 (valid: true/false)。只有具备深层观点或情绪才生成。
-    2. 提取 Topic Tags (表层话题)。
-    3. 提取 Meaning Tags (深层价值)。
-    4. 提取 Care Point (简短关切)。
-    5. 提取 Meaning Layer (结构分析)。
-    6. 提取 Insight (升维洞察)。
-    
     返回 JSON:
     {{
         "valid": true,
@@ -336,7 +285,6 @@ def simulate_civilization(topic, count):
         for val in res.values(): 
             if isinstance(val, list): agents = val; break
     if not agents: return 0, f"AI生成格式异常"
-
     success_count = 0
     for agent in agents:
         try:
@@ -355,12 +303,15 @@ def simulate_civilization(topic, count):
         except: pass
     return success_count, f"成功注入 {success_count} 个智能体！"
 
-# 🌟 新增：生成每日追问
+# 🌟 每日追问 (修复版：确保 get_user_nodes 可用)
 def generate_daily_question(username, radar_data):
-    # 获取最近的节点作为上下文
+    # 现在调用 get_user_nodes 没问题了，因为它在上面定义了
     recent_nodes = get_user_nodes(username)
     context = ""
     if recent_nodes:
+        # 取最近3个节点的 care point
+        # recent_nodes[-3:] 获取最后三个，也就是最新的（如果列表是按时间正序）
+        # 这里假设 get_user_nodes 返回的是按时间正序
         context = f"用户最近关注点：{[n['care_point'] for n in recent_nodes[-3:]]}"
     
     radar_str = json.dumps(radar_data, ensure_ascii=False)
@@ -381,9 +332,7 @@ def generate_daily_question(username, radar_data):
     if "question" in res: return res["question"]
     return "今天，什么事情让你感到'活着'？"
 
-# ==========================================
-# 🎨 5. 视觉渲染 (Locked)
-# ==========================================
+# --- 🎨 渲染函数 (保持不变) ---
 def render_2d_world_map(nodes):
     map_data = [{"name": "HQ", "value": [116.4, 39.9, 100]}]
     for _ in range(len(nodes) + 10): 
