@@ -41,54 +41,50 @@ def render_radar_chart(radar_dict, height="200px"):
     option = {"backgroundColor": "transparent", "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]}
     st_echarts(options=option, height=height)
 
-# 🌟 修复：连线逻辑
-def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
-    if not nodes: return
-    graph_nodes, graph_links = [], []
-    symbol_base = 30 if is_fullscreen else 15
-    
-    # 1. 生成节点
-    for i, node in enumerate(nodes):
-        logic = node.get('logic_score') or 0.5
-        keywords = json.loads(node['keywords']) if node.get('keywords') else []
-        vector = json.loads(node['vector']) if node.get('vector') else None
-        
-        graph_nodes.append({
-            "name": str(node['id']), "id": str(node['id']),
-            "symbolSize": symbol_base * (0.8 + logic),
-            "value": node['care_point'],
-            "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
-            "vector": vector, "keywords": keywords
-        })
-
-    # 2. 生成连线 (Relaxed Logic)
-    # 我们降低了相似度阈值，并加入了 Tag 匹配
-    node_count = len(graph_nodes)
-    # 为了性能，只比较最近的 30 个节点
-    start_idx = max(0, node_count - 30)
-    
+# 优化后的连线逻辑 (V72.1)
     for i in range(start_idx, node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             
             score = 0
-            # A. 向量相似度
-            if na['vector'] and nb['vector']:
-                vec1, vec2 = np.array(na['vector']), np.array(nb['vector'])
-                sim = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-                score += sim * 0.6
-                
-            # B. 标签重叠度 (Meaning Overlap)
-            if na['keywords'] and nb['keywords']:
-                overlap = len(set(na['keywords']).intersection(set(nb['keywords'])))
-                if overlap > 0: score += 0.4 # 只要有共同标签就加分
             
-            # C. 阈值判断
-            if score > 0.75: # 强连接
-                graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2, "color": "#00fff2"}})
-            elif score > 0.55: # 弱连接 (降低门槛)
-                graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 0.5, "color": "#555", "type": "dashed"}})
+            # 1. 标签重叠 (Tag Overlap) - 提升权重到 0.7
+            # 这是目前最准确的指标。只要有共同关键词，就应该建立连接。
+            shared_tags = 0
+            if na['keywords'] and nb['keywords']:
+                shared_tags = len(set(na['keywords']).intersection(set(nb['keywords'])))
+                if shared_tags > 0:
+                    # 有1个共同标签得0.5分，2个得0.8分，3个以上直接满分
+                    score += min(0.5 + (shared_tags * 0.15), 0.9)
 
+            # 2. 向量相似度 (Vector Similarity) - 降低权重到 0.3
+            # (仅当 vector 有效且不是随机生成时才有意义，这里作为辅助)
+            if na['vector'] and nb['vector'] and score < 0.9:
+                try:
+                    vec1, vec2 = np.array(na['vector']), np.array(nb['vector'])
+                    # 防止除以零
+                    norm = np.linalg.norm(vec1) * np.linalg.norm(vec2)
+                    if norm > 0:
+                        sim = np.dot(vec1, vec2) / norm
+                        # 只有相似度非常高时才加分，避免随机噪声
+                        if sim > 0.8: score += 0.2
+                except: pass
+            
+            # 3. 阈值分级
+            # 强连接 (Strong): 亮青色实线
+            if score >= 0.65: 
+                graph_links.append({
+                    "source": na['name'], 
+                    "target": nb['name'], 
+                    "lineStyle": {"width": 2.5, "color": "#00fff2", "curveness": 0.2}
+                })
+            # 弱连接 (Weak): 灰色虚线
+            elif score >= 0.4: 
+                graph_links.append({
+                    "source": na['name'], 
+                    "target": nb['name'], 
+                    "lineStyle": {"width": 1, "color": "#555", "type": "dashed", "curveness": 0.2}
+                })
     option = {
         "backgroundColor": "#0e1117",
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 500 if is_fullscreen else 200}, "itemStyle": {"shadowBlur": 10}}]
