@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
-import msc_ai as ai
+# import msc_ai as ai  <-- 已移除
 import msc_viz as viz
 import msc_pages as pages
 import json
