@@ -1,15 +1,18 @@
 import streamlit as st
-from streamlit_echarts import st_echarts
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import json
 import numpy as np
-from sklearn.decomposition import PCA # 🌟 核心修复
+# 🌟 核心修复：必须引入这两个库
+from sklearn.decomposition import PCA 
 from sklearn.cluster import KMeans
+from streamlit_echarts import st_echarts
 
 # --- 2D 地图 ---
 def render_2d_world_map(nodes):
+    # ... (代码与之前相同，略) ...
+    # 确保 map_data 不为空
     map_data = [{"lat": 39.9, "lon": 116.4, "size": 10, "label": "HQ"}]
     for _ in range(len(nodes) + 15): 
         lon = np.random.uniform(-150, 150)
@@ -17,8 +20,6 @@ def render_2d_world_map(nodes):
         map_data.append({"lat": float(lat), "lon": float(lon), "size": 5, "label": "Node"})
     
     df = pd.DataFrame(map_data)
-    if df.empty: return
-
     fig = go.Figure(data=go.Scattergeo(
         lon = df["lon"], lat = df["lat"],
         mode = 'markers',
@@ -44,7 +45,7 @@ def render_3d_galaxy(nodes):
             except: pass
     if not vectors: return
     
-    # 🌟 PCA 降维，不再报错
+    # 🌟 PCA 调用现在安全了
     pca = PCA(n_components=3)
     coords = pca.fit_transform(vectors)
     
@@ -85,3 +86,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "force": {"repulsion": 1000 if is_fullscreen else 300}, "itemStyle": {"shadowBlur": 10}}]
     }
     st_echarts(options=option, height=height)
+
+@st.dialog("🔭 全屏", width="large")
+def view_fullscreen_map(nodes, user_name):
+    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
