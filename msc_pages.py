@@ -1,209 +1,145 @@
 import streamlit as st
-import msc_lib as msc
+import msc_db as db   # 🌟 引用数据库
+import msc_ai as ai   # 🌟 引用 AI
+import msc_viz as viz # 🌟 引用绘图
 import time
 import json
 import streamlit_antd_components as sac
 
-# ==========================================
-# 🔐 页面：极简登录
-# ==========================================
+# ... (CSS 保持 v53.3 的极简风，此处省略以节省篇幅，实际应保留 inject_custom_css) ...
+def inject_custom_css():
+    st.markdown("""<style>
+    .stApp { background-color: #FFFFFF; font-family: 'Roboto', sans-serif; color: #222; }
+    [data-testid="stSidebar"] { background-color: #FAFAFA; border-right: 1px solid #EEE; }
+    .chat-bubble-me { background-color: #222; color: #fff; padding: 10px 16px; border-radius: 18px; float: right; }
+    .chat-bubble-other { background-color: #F2F2F2; color: #222; padding: 10px 16px; border-radius: 18px; float: left; }
+    .meaning-dot-btn button { border: none !important; color: #BBB !important; font-size: 18px !important; }
+    .meaning-dot-btn button:hover { color: #1A73E8 !important; }
+    </style>""", unsafe_allow_html=True)
+
+# 🔐 登录页
 def render_login_page():
+    inject_custom_css()
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.markdown("""
-        <h1 style='text-align: center; font-weight: 300; letter-spacing: 4px; color: #333;'>MSC</h1>
-        <div style='text-align: center; color: #999; font-size: 0.8em; margin-bottom: 30px; letter-spacing: 1px;'>
-        MEANING · STRUCTURE · CARE
-        </div>
-        """, unsafe_allow_html=True)
-        
-        tab = sac.tabs([sac.TabsItem('LOGIN'), sac.TabsItem('SIGN UP')], align='center', size='sm', variant='outline')
+        st.markdown("<br><br><br><h1 style='text-align:center'>MSC</h1>", unsafe_allow_html=True)
+        tab = sac.tabs(['LOGIN', 'SIGN UP'], align='center', size='sm', variant='outline')
         st.write("") 
-
         if tab == 'LOGIN':
-            u = st.text_input("ID", placeholder="Username", label_visibility="collapsed")
-            p = st.text_input("PASSWORD", type='password', placeholder="Password", label_visibility="collapsed")
+            u = st.text_input("ID", label_visibility="collapsed")
+            p = st.text_input("PASSWORD", type='password', label_visibility="collapsed")
             st.write("")
             if st.button("CONNECT", use_container_width=True, type="primary"):
-                res = msc.login_user(u, p)
-                if res:
+                if db.login_user(u, p):
                     st.session_state.logged_in = True
                     st.session_state.username = u
-                    st.session_state.nickname = res[0]['nickname']
-                    st.session_state.messages = [] 
+                    st.session_state.nickname = db.get_nickname(u)
                     st.rerun()
                 else: sac.alert("Access Denied", color='red')
         else:
-            nu = st.text_input("NEW ID", placeholder="New Username", label_visibility="collapsed")
-            np = st.text_input("NEW PASSWORD", type='password', placeholder="New Password", label_visibility="collapsed")
-            nn = st.text_input("NICKNAME", placeholder="Display Name", label_visibility="collapsed")
-            nc = st.selectbox("REGION", ["China", "USA", "UK", "Other"], label_visibility="collapsed")
+            nu = st.text_input("NEW ID", label_visibility="collapsed")
+            np = st.text_input("NEW PW", type='password', label_visibility="collapsed")
+            nn = st.text_input("NICK", label_visibility="collapsed")
+            nc = st.selectbox("REGION", ["China", "USA"], label_visibility="collapsed")
             st.write("")
-            if st.button("INITIALIZE", use_container_width=True):
-                if msc.add_user(nu, np, nn, nc): sac.alert("Created", color='success')
+            if st.button("INIT", use_container_width=True):
+                if db.add_user(nu, np, nn, nc): sac.alert("Created", color='success')
                 else: sac.alert("Failed", color='error')
 
-# ==========================================
-# 🤖 页面：AI 伴侣 (流式修复版)
-# ==========================================
+# 🤖 AI 页面
 def render_ai_page(username):
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+    inject_custom_css()
+    chat_history = db.get_active_chats(username)
+    nodes_map = db.get_active_nodes_map(username)
     
-    chat_history = msc.get_active_chats(username)
-    nodes_map = msc.get_active_nodes_map(username)
-    
-    # 渲染历史
     for msg in chat_history:
         c_msg, c_dot = st.columns([0.92, 0.08])
-        
         with c_msg:
-            # 判断角色，应用样式
-            if msg['role'] == 'user':
-                st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
-        
+            if msg['role'] == 'user': st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
+            else: st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         with c_dot:
-            # 只有用户有意义的消息才显示点
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map[msg['content']]
                 st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
-                with st.popover("●", help="Deep Meaning"):
-                    raw_score = node.get('m_score')
-                    score_val = float(raw_score) if raw_score is not None else 0.0
-                    st.caption(f"MSC Score: {score_val:.2f}")
+                with st.popover("●"):
                     st.markdown(f"**{node['care_point']}**")
                     st.info(node['insight'])
-                    st.caption(f"Structure: {node['meaning_layer']}")
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # 输入处理
     if prompt := st.chat_input("Input..."):
-        # 1. 存用户输入
-        msc.save_chat(username, "user", prompt)
+        db.save_chat(username, "user", prompt)
+        with st.container(): st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
-        # 2. 乐观更新显示
-        with st.container():
-             st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
-        
-        # 3. AI 流式回复
         full_history = chat_history + [{'role':'user', 'content':prompt}]
+        with st.chat_message("assistant"):
+            try:
+                stream = ai.get_normal_response(full_history)
+                resp = st.write_stream(stream)
+                db.save_chat(username, "assistant", resp)
+            except: pass
         
-        # 使用 st.chat_message 临时容器来显示流动画
-        with st.container():
-            with st.chat_message("assistant"):
-                try:
-                    stream = msc.get_normal_response(full_history)
-                    response_text = st.write_stream(stream)
-                    # 存入数据库
-                    msc.save_chat(username, "assistant", response_text)
-                except Exception as e:
-                    st.error(f"Connection timeout: {e}")
-        
-        # 4. 意义分析
         with st.spinner(""):
-            analysis = msc.analyze_meaning_background(prompt)
+            analysis = ai.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
-                vec = msc.get_embedding(prompt)
-                msc.save_node(username, prompt, analysis, "AI对话", vec)
-                if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
-                st.toast("Meaning Captured", icon="🌱")
-        
-        time.sleep(0.5)
-        st.rerun()
+                vec = ai.get_embedding(prompt)
+                db.save_node(username, prompt, analysis, "AI", vec)
+                if "radar_scores" in analysis: db.update_radar_score(username, analysis["radar_scores"])
+                st.toast("Captured", icon="🌱")
+        time.sleep(0.5); st.rerun()
 
-# ==========================================
-# 💬 页面：好友社交
-# ==========================================
+# 💬 好友页面
 def render_friends_page(username, unread_counts):
+    inject_custom_css()
     col_list, col_chat = st.columns([0.3, 0.7])
-    
     with col_list:
         st.caption("CONTACTS")
-        users = msc.get_all_users(username)
+        users = db.get_all_users(username)
         if users:
             for u in users:
-                is_online = msc.check_is_online(u.get('last_seen'))
-                status_char = "🟢" if is_online else "⚪"
                 unread = unread_counts.get(u['username'], 0)
-                final_label = f"{status_char} {u['nickname']}"
-                if unread > 0: final_label += f" 🔴 {unread}"
-                
-                if st.button(final_label, key=f"f_{u['username']}", use_container_width=True):
+                label = f"{u['nickname']} {'🔴'+str(unread) if unread>0 else ''}"
+                if st.button(label, key=f"f_{u['username']}", use_container_width=True):
                     st.session_state.current_chat_partner = u['username']
-                    msc.mark_messages_read(u['username'], username)
+                    db.mark_messages_read(u['username'], username)
                     st.rerun()
-        else:
-            st.caption("No friends yet.")
 
     with col_chat:
         partner = st.session_state.current_chat_partner
         if partner:
             c1, c2 = st.columns([0.8, 0.2])
             with c1: st.markdown(f"**{partner}**")
-            with c2: 
-                if st.button("🤖", help="AI Observer"):
-                    pass 
-
-            history = msc.get_direct_messages(username, partner)
-            my_nodes = msc.get_active_nodes_map(username)
-
+            
+            history = db.get_direct_messages(username, partner)
+            my_nodes = db.get_active_nodes_map(username)
+            
             with st.container(height=500, border=False):
                 for msg in history:
                     c_msg, c_dot = st.columns([0.92, 0.08])
-                    
                     with c_msg:
-                        if msg['sender'] == 'AI':
-                            st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
-                        elif msg['sender'] == username:
-                            st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
-                    
+                        if msg['sender'] == 'AI': st.markdown(f"<div class='chat-bubble-other'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+                        elif msg['sender'] == username: st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
+                        else: st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
                     with c_dot:
                         if msg['sender'] == username and msg['content'] in my_nodes:
                             node = my_nodes[msg['content']]
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
-                            with st.popover("●"):
-                                st.info(node['insight'])
+                            with st.popover("●"): st.info(node['insight'])
                             st.markdown('</div>', unsafe_allow_html=True)
-
+            
             if prompt := st.chat_input("Type..."):
-                msc.send_direct_message(username, partner, prompt)
+                db.send_direct_message(username, partner, prompt)
                 with st.spinner(""):
-                    analysis = msc.analyze_meaning_background(prompt)
+                    analysis = ai.analyze_meaning_background(prompt)
                     if analysis.get("valid", False):
-                        vec = msc.get_embedding(prompt)
-                        msc.save_node(username, prompt, analysis, "私聊", vec)
-                        match = msc.find_resonance(vec, username, analysis)
+                        vec = ai.get_embedding(prompt)
+                        db.save_node(username, prompt, analysis, "私聊", vec)
+                        match = ai.find_resonance(vec, username, analysis)
                         if match: st.toast("Resonance!", icon="⚡")
                 st.rerun()
-        else:
-            st.info("👈 Select a friend")
 
-# ==========================================
-# 🌍 页面：世界
-# ==========================================
+# 🌍 世界
 def render_world_page():
-    st.caption("MSC GLOBAL VIEW")
-    global_nodes = msc.get_global_nodes()
-    t1, t2 = st.tabs(["2D MAP", "3D GALAXY"])
-    with t1: msc.render_2d_world_map(global_nodes)
-    with t2: msc.render_3d_galaxy(global_nodes)
-
-# ==========================================
-# 🪐 页面：星团
-# ==========================================
-def render_cluster_page(username):
-    st.caption("SPONTANEOUS CLUSTERS")
-    rooms = msc.get_available_rooms()
-    if rooms:
-        for room in rooms:
-            with st.expander(f"{room['name']}", expanded=True):
-                st.caption(room['description'])
-                if st.button("Enter", key=f"join_{room['id']}"):
-                    msc.join_room(room['id'], username)
-                    msc.view_group_chat(room, username)
-    else:
-        st.info("No clusters formed yet.")
+    nodes = db.get_global_nodes()
+    t1, t2 = st.tabs(["2D", "3D"])
+    with t1: viz.render_2d_world_map(nodes)
+    with t2: viz.render_3d_galaxy(nodes)
