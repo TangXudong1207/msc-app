@@ -1,10 +1,11 @@
-### msc_lib.py (完整清洗版) ###
+### msc_lib.py (真正完整版) ###
 
 import streamlit as st
 import numpy as np
 import json
 import re
 import time
+from datetime import datetime, timezone
 from openai import OpenAI
 from sklearn.decomposition import PCA
 import msc_config as config
@@ -15,7 +16,6 @@ import msc_db as db
 # ==========================================
 def init_system():
     try:
-        # 尝试从 Streamlit Secrets 获取配置
         client = OpenAI(
             api_key=st.secrets["API_KEY"],
             base_url=st.secrets["BASE_URL"]
@@ -29,18 +29,44 @@ def init_system():
 client_ai, TARGET_MODEL = init_system()
 
 # ==========================================
-# 🧮 2. 数学与向量算法
+# 🌉 2. 数据库桥梁 (用户与社交)
+# 这里负责把 pages 的请求转发给 db
 # ==========================================
-def get_embedding(text):
-    # TODO: 未来可替换为真实的 OpenAI Embedding
-    return np.random.rand(1536).tolist()
+def login_user(username, password):
+    return db.login_user(username, password)
 
-def cosine_similarity(v1, v2):
-    if not v1 or not v2: return 0
-    vec1 = np.array(v1); vec2 = np.array(v2)
-    norm1 = np.linalg.norm(vec1); norm2 = np.linalg.norm(vec2)
-    if norm1 == 0 or norm2 == 0: return 0
-    return np.dot(vec1, vec2) / (norm1 * norm2)
+def add_user(username, password, nickname, country="Other"):
+    return db.add_user(username, password, nickname, country)
+
+def get_nickname(username):
+    return db.get_nickname(username)
+
+def get_user_profile(username):
+    return db.get_user_profile(username)
+
+def get_all_users(current_user):
+    return db.get_all_users(current_user)
+
+def update_heartbeat(username):
+    db.update_heartbeat(username)
+
+def check_is_online(last_seen_str):
+    """判断用户是否在线 (5分钟内有心跳)"""
+    if not last_seen_str: return False
+    try:
+        # 处理时间格式，兼容带Z和不带Z的情况
+        if last_seen_str.endswith('Z'): 
+            last_seen = datetime.fromisoformat(last_seen_str.replace('Z', '+00:00'))
+        else: 
+            last_seen = datetime.fromisoformat(last_seen_str)
+            
+        if last_seen.tzinfo is None: 
+            last_seen = last_seen.replace(tzinfo=timezone.utc)
+            
+        diff = datetime.now(timezone.utc) - last_seen
+        # 使用配置中的超时时间，默认300秒
+        return diff.total_seconds() < config.HEARTBEAT_TIMEOUT
+    except: return False
 
 def calculate_rank(radar_data):
     """根据雷达图总分计算段位"""
@@ -58,11 +84,55 @@ def calculate_rank(radar_data):
     elif total < 54: return "构建者", "💎"
     else: return "领航员", "👑"
 
+# --- 消息与节点桥梁 ---
+def save_chat(username, role, content):
+    db.save_chat(username, role, content)
+
+def get_active_chats(username):
+    return db.get_active_chats(username)
+
+def get_direct_messages(u1, u2):
+    return db.get_direct_messages(u1, u2)
+
+def send_direct_message(sender, receiver, content):
+    return db.send_direct_message(sender, receiver, content)
+
+def get_unread_counts(curr):
+    return db.get_unread_counts(curr)
+
+def mark_messages_read(sender, receiver):
+    db.mark_read(sender, receiver)
+
+def save_node(username, content, data, mode, vector):
+    db.save_node(username, content, data, mode, vector)
+
+def get_active_nodes_map(username):
+    return db.get_active_nodes_map(username)
+
+def get_all_nodes_for_map(username):
+    return db.get_all_nodes_for_map(username)
+
+def get_global_nodes():
+    return db.get_global_nodes()
+
 # ==========================================
-# 🧠 3. AI 智能核心
+# 🧮 3. 数学与向量算法
+# ==========================================
+def get_embedding(text):
+    # TODO: 未来可替换为真实的 OpenAI Embedding
+    return np.random.rand(1536).tolist()
+
+def cosine_similarity(v1, v2):
+    if not v1 or not v2: return 0
+    vec1 = np.array(v1); vec2 = np.array(v2)
+    norm1 = np.linalg.norm(vec1); norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0: return 0
+    return np.dot(vec1, vec2) / (norm1 * norm2)
+
+# ==========================================
+# 🧠 4. AI 智能核心
 # ==========================================
 def call_ai_api(prompt):
-    """通用 JSON 格式 AI 调用"""
     if not client_ai: return {"error": "AI未连接"}
     try:
         response = client_ai.chat.completions.create(
@@ -84,7 +154,6 @@ def call_ai_api(prompt):
     except Exception as e: return {"error": True, "msg": str(e)}
 
 def get_normal_response(history_messages):
-    """获取流式对话响应"""
     if not client_ai: yield "AI 未配置"; return
     try:
         api_messages = [{"role": "system", "content": config.PROMPT_CHATBOT}]
@@ -101,7 +170,6 @@ def get_normal_response(history_messages):
     except Exception as e: return f"Error: {e}"
 
 def analyze_meaning_background(text):
-    """后台意义分析"""
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
     res = call_ai_api(prompt)
     
@@ -117,9 +185,8 @@ def analyze_meaning_background(text):
     return res
 
 def generate_daily_question(username, radar_data):
-    """生成每日一问"""
     try:
-        recent = db.get_user_nodes(username)
+        recent = db.get_all_nodes_for_map(username)
         ctx = ""
         if recent: 
             last_3 = recent[-3:]
@@ -132,7 +199,6 @@ def generate_daily_question(username, radar_data):
     return res.get("question", "今天，什么事情让你感到'活着'？")
 
 def update_radar_score(username, input_scores):
-    """根据 AI 分析更新用户雷达图"""
     try:
         user_data = db.get_user_profile(username)
         current = user_data.get('radar_profile')
@@ -149,20 +215,17 @@ def update_radar_score(username, input_scores):
             new_val = float(v)
             updated[k] = round(old_val * (1-alpha) + new_val * alpha, 2)
             
-        db.update_radar_score(username, json.dumps(updated))
+        db.update_radar_score(username, json.dumps(updated)) # 这里的函数名要在 db 中确认
     except: pass
     
 def find_resonance(current_vector, current_user, current_data):
-    """寻找共鸣"""
     if not current_vector: return None
-    others = db.get_global_nodes() # 使用 db 中存在的函数
+    others = db.get_global_nodes()
     if not others: return None
     
     best_match, highest_score = None, 0
     for row in others:
-        # 排除自己
         if row['username'] == current_user: continue
-
         if row['vector']:
             try:
                 o_vec = json.loads(row['vector'])
