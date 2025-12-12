@@ -83,13 +83,18 @@ if not st.session_state.logged_in:
 
 # --- 2. 主界面 ---
 else:
-    msc.update_heartbeat(st.session_state.username)
-    user_profile = msc.get_user_profile(st.session_state.username)
-    raw_radar = user_profile.get('radar_profile')
-    if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
-    else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
+    # 确保这一整块的缩进是对齐的（通常是 4 个空格）
+    else:
+        # 如果雷达图数据是字符串，转成字典；否则用默认值
+        if isinstance(raw_radar, str): 
+            radar_dict = json.loads(raw_radar)
+        else: 
+            radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
     
-    # 🔧 修正点：调用 msc 而不是 ai
+    # === 修复点：这行必须和上面的 if/else 保持垂直对齐 ===
+    rank_name, rank_icon = msc.calculate_rank(radar_dict)
+    
+    total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     rank_name, rank_icon = msc.calculate_rank(radar_dict) 
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
 
