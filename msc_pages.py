@@ -98,78 +98,129 @@ def render_ai_page(username):
         time.sleep(0.5); st.rerun()
 
 # ==========================================
-# 💬 页面：好友社交 (同步修复)
+# 💬 页面：好友社交 (UI 升级版 + 自动刷新)
 # ==========================================
 def render_friends_page(username, unread_counts):
-    col_list, col_chat = st.columns([0.3, 0.7])
+    # ⏱️ 心跳机制：每 5 秒自动刷新一次，实现“伪实时”收信和更新在线状态
+    st_autorefresh(interval=5000, key="msg_refresh")
     
-    with col_list:
-        st.caption("CONTACTS")
-        users = msc.get_all_users(username)
-        if users:
-            for u in users:
-                is_online = msc.check_is_online(u.get('last_seen'))
-                status = "🟢" if is_online else "⚪"
-                unread = unread_counts.get(u['username'], 0)
-                label = f"{status} {u['nickname']} {'🔴'+str(unread) if unread>0 else ''}"
-                
-                if st.button(label, key=f"f_{u['username']}", use_container_width=True):
-                    st.session_state.current_chat_partner = u['username']
-                    msc.mark_messages_read(u['username'], username)
-                    st.rerun()
-        else:
-            st.caption("No friends yet.")
+    # 每次刷新都更新一下自己的心跳
+    msc.update_heartbeat(username)
 
+    col_list, col_chat = st.columns([0.25, 0.75]) # 调整比例，左边窄一点更像侧边栏
+    
+    # --- 左侧：好友列表 (使用 SAC Menu 组件) ---
+    with col_list:
+        st.markdown("### 💬") # 标题留白
+        users = msc.get_all_users(username)
+        
+        if users:
+            menu_items = []
+            for u in users:
+                # 在线状态判定
+                is_online = msc.check_is_online(u.get('last_seen'))
+                # 图标：在线是实心圆，离线是空心圆
+                icon_name = "circle-fill" if is_online else "circle"
+                icon_color = "#4CAF50" if is_online else "#CCCCCC" # 绿色 vs 灰色
+                
+                # 未读消息数
+                unread = unread_counts.get(u['username'], 0)
+                tag_val = sac.Tag(str(unread), color='red', bordered=False) if unread > 0 else None
+                
+                # 描述文字（可选，比如显示最后在线时间，这里暂空）
+                desc = "Online" if is_online else "Offline"
+
+                menu_items.append(sac.MenuItem(
+                    label=u['nickname'], 
+                    icon=sac.BsIcon(name=icon_name, color=icon_color),
+                    tag=tag_val,
+                    description=desc,
+                    key=u['username'] # 用 username 做唯一键
+                ))
+            
+            # 渲染菜单，获取选中的用户 ID
+            # 这里的 index 设置为 -1 初始不选中，或者保持上次选中的索引
+            selected_user = sac.menu(
+                menu_items, 
+                index=0, # 默认选中第一个，或者你可以写逻辑判断
+                format_func='title', 
+                size='md', 
+                variant='light',
+                indent=10,
+                open_all=True
+            )
+            
+            # 更新 session state
+            if selected_user:
+                st.session_state.current_chat_partner = selected_user
+        else:
+            st.caption("No citizens found.")
+
+    # --- 右侧：聊天窗口 ---
     with col_chat:
         partner = st.session_state.current_chat_partner
+        
+        # 如果当前有选中的人
         if partner:
-            c1, c2 = st.columns([0.8, 0.2])
-            with c1: st.markdown(f"**{partner}**")
-            with c2: 
-                if st.button("🤖", help="AI Observer"): pass 
+            # 标记已读
+            msc.mark_messages_read(partner, username)
+            
+            # 顶部栏
+            header_col1, header_col2 = st.columns([0.9, 0.1])
+            with header_col1: 
+                st.markdown(f"#### {msc.get_nickname(partner)}")
+            with header_col2: 
+                if st.button("👁️", help="AI Insight"): 
+                    st.toast("DeepSeek is observing...", icon="🧠")
 
+            # 消息容器
             history = msc.get_direct_messages(username, partner)
             my_nodes = msc.get_active_nodes_map(username)
 
-            with st.container(height=500, border=False):
+            with st.container(height=600, border=True): # 增加高度和边框
+                if not history:
+                    st.caption("No messages yet. Say hi!")
+                
                 for msg in history:
-                    c_msg, c_dot = st.columns([0.92, 0.08])
+                    c_msg, c_dot = st.columns([0.94, 0.06])
                     with c_msg:
                         if msg['sender'] == 'AI':
                             st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
                         elif msg['sender'] == username:
+                            # 自己发的消息
                             st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
                         else:
+                            # 对方发的消息
                             st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
+                    
+                    # 意义点渲染（保持原逻辑）
                     with c_dot:
                         if msg['sender'] == username and msg['content'] in my_nodes:
                             node = my_nodes[msg['content']]
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                             with st.popover("●"):
-                                # 🌟 同样的修复
-                                try:
-                                    raw_m = node.get('m_score')
-                                    score_val = float(raw_m) if raw_m is not None else 0.5
+                                try: score_val = float(node.get('m_score', 0.5))
                                 except: score_val = 0.5
-                                
-                                st.caption(f"Score: {score_val:.2f}")
+                                st.caption(f"MSC Score: {score_val:.2f}")
                                 st.markdown(f"**{node['care_point']}**")
-                                st.info(node['insight'])
+                                st.info(node.get('insight', ''))
                             st.markdown('</div>', unsafe_allow_html=True)
 
-            if prompt := st.chat_input("Type..."):
+            # 底部输入框
+            if prompt := st.chat_input(f"Message {msc.get_nickname(partner)}..."):
                 msc.send_direct_message(username, partner, prompt)
-                with st.spinner(""):
+                
+                # 异步分析逻辑（保持原逻辑）
+                with st.spinner("Analyzing meaning..."):
                     analysis = msc.analyze_meaning_background(prompt)
                     if analysis.get("valid", False):
                         vec = msc.get_embedding(prompt)
                         msc.save_node(username, prompt, analysis, "私聊", vec)
                         match = msc.find_resonance(vec, username, analysis)
-                        if match: st.toast("Resonance!", icon="⚡")
-                st.rerun()
+                        if match: st.toast(f"Resonance with {match['user']}!", icon="⚡")
+                st.rerun() # 发送完立即刷新
         else:
-            st.info("👈 Select a friend")
-
+            st.info("👈 Select a friend from the left to connect.")
 # ... (世界和星团页面保持不变) ...
 def render_world_page():
     st.caption("MSC GLOBAL VIEW")
