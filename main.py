@@ -83,21 +83,23 @@ if not st.session_state.logged_in:
 
 # --- 2. 主界面 ---
 else:
-    # 确保这一整块的缩进是对齐的（通常是 4 个空格）
-    else:
-        # 如果雷达图数据是字符串，转成字典；否则用默认值
-        if isinstance(raw_radar, str): 
-            radar_dict = json.loads(raw_radar)
-        else: 
-            radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
+    # 1. 更新心跳
+    msc.update_heartbeat(st.session_state.username)
     
-    # === 修复点：这行必须和上面的 if/else 保持垂直对齐 ===
-    rank_name, rank_icon = msc.calculate_rank(radar_dict)
-    
-    total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
-    rank_name, rank_icon = msc.calculate_rank(radar_dict) 
-    total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
+    # 2. 获取用户数据
+    user_profile = msc.get_user_profile(st.session_state.username)
+    raw_radar = user_profile.get('radar_profile')
 
+    # 3. 处理雷达图数据 (确保是字典格式)
+    if isinstance(raw_radar, str):
+        radar_dict = json.loads(raw_radar)
+    else:
+        # 如果是空的，给个默认值
+        radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
+
+    # 4. 计算段位和未读消息
+    rank_name, rank_icon = msc.calculate_rank(radar_dict)
+    total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     with st.sidebar:
         st.markdown(f"### {rank_icon} {st.session_state.nickname}")
         
