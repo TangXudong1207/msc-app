@@ -180,16 +180,7 @@ def find_resonance(current_vector, current_user, current_data):
                         "score": round(score * 100, 1)
                     }
             except: continue
-    return best_matchimport streamlit as st
-import numpy as np
-import json
-import re
-import time
-from openai import OpenAI
-from sklearn.decomposition import PCA
-import msc_config as config
-import msc_db as db
-
+    return best_match
 # ==========================================
 # 🛑 1. 初始化系统
 # ==========================================
