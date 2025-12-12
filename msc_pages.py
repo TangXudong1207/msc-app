@@ -140,4 +140,61 @@ def render_friends_page(username, unread_counts):
                 
                 if st.button(f"{status_char} {label}", key=f"f_{u['username']}", use_container_width=True):
                     st.session_state.current_chat_partner = u['username']
-                    msc.mark_messages_
+                    msc.mark_messages_read(u['username'], username)
+                    st.rerun()
+
+    with col_chat:
+        partner = st.session_state.current_chat_partner
+        if partner:
+            c1, c2 = st.columns([0.8, 0.2])
+            with c1: st.markdown(f"**{partner}**")
+            with c2: 
+                if st.button("🤖", help="AI Observer"): pass 
+
+            history = msc.get_direct_messages(username, partner)
+            my_nodes = msc.get_active_nodes_map(username)
+
+            with st.container(height=500, border=False):
+                for msg in history:
+                    # 逐行渲染，确保对齐
+                    c_msg, c_dot = st.columns([0.92, 0.08])
+                    
+                    with c_msg:
+                        if msg['sender'] == 'AI':
+                             st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+                        elif msg['sender'] == username:
+                            st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
+                    
+                    with c_dot:
+                        # 只有我自己发的有意义的话，显示点
+                        if msg['sender'] == username and msg['content'] in my_nodes:
+                            node = my_nodes[msg['content']]
+                            st.markdown('<div class="meaning-dot-wrapper">', unsafe_allow_html=True)
+                            with st.popover("●"):
+                                st.info(node['insight'])
+                            st.markdown('</div>', unsafe_allow_html=True)
+
+            if prompt := st.chat_input("Type..."):
+                msc.send_direct_message(username, partner, prompt)
+                with st.spinner(""):
+                    analysis = ai.analyze_meaning_background(prompt)
+                    if analysis.get("valid", False):
+                        vec = ai.get_embedding(prompt)
+                        msc.save_node(username, prompt, analysis, "私聊", vec)
+                        match = ai.find_resonance(vec, username, analysis)
+                        if match: st.toast("Resonance!", icon="⚡")
+                st.rerun()
+        else:
+            st.info("👈 Select a friend")
+
+# ==========================================
+# 🌍 页面：世界
+# ==========================================
+def render_world_page():
+    st.caption("MSC GLOBAL VIEW")
+    global_nodes = msc.get_global_nodes()
+    t1, t2 = st.tabs(["2D MAP", "3D GALAXY"])
+    with t1: viz.render_2d_world_map(global_nodes)
+    with t2: viz.render_3d_galaxy(global_nodes)
