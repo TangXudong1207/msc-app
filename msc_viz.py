@@ -237,3 +237,46 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
     render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
+# === 补全：雷达图详情页 (包含 AI 画像) ===
+@st.dialog("🧬 MSC 深度基因解码", width="large")
+def view_radar_details(radar_dict, username):
+    # 1. 布局：左边是大雷达图，右边是具体分数
+    c1, c2 = st.columns([1, 1])
+    
+    with c1:
+        # 渲染一个大一点的雷达图
+        render_radar_chart(radar_dict, height="350px")
+    
+    with c2:
+        st.markdown(f"### {username} 的核心参数")
+        # 漂亮的进度条展示各维度分数
+        for key, val in radar_dict.items():
+            # 颜色逻辑：高分绿色，低分灰色
+            color = "green" if val > 6 else ("orange" if val > 4 else "gray")
+            st.progress(val / 10, text=f"**{key}**: {val}")
+
+    st.divider()
+
+    # 2. AI 深度画像生成
+    st.markdown("### 🧠 AI Analysis")
+    
+    # 检查 Session State 防止重复生成省 Token
+    report_key = f"report_{username}_{sum(radar_dict.values())}"
+    
+    if report_key not in st.session_state:
+        with st.spinner("正在连接潜意识层，解析精神底色..."):
+            report = msc.analyze_persona_report(radar_dict)
+            st.session_state[report_key] = report
+    
+    # 3. 展示报告
+    report = st.session_state[report_key]
+    
+    # 现状卡片
+    with st.container(border=True):
+        st.markdown("#### 🌊 现状 · Status Quo")
+        st.info(report.get("status_quo", "分析中..."))
+    
+    # 成长卡片
+    with st.container(border=True):
+        st.markdown("#### 🌱 成长 · Evolution")
+        st.success(report.get("growth_path", "分析中..."))
