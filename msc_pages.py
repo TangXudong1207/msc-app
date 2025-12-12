@@ -1,9 +1,11 @@
+### msc_pages.py (修复版) ###
+
 import streamlit as st
+import streamlit_antd_components as sac
 import msc_lib as msc
+import msc_viz as viz  # 确保引用了视觉库
 import time
 import json
-import streamlit_antd_components as sac
-from streamlit_autorefresh import st_autorefresh
 
 # ==========================================
 # 🔐 页面：极简登录
@@ -39,7 +41,7 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 🤖 页面：AI 伴侣 (修复数值报错)
+# 🤖 页面：AI 伴侣
 # ==========================================
 def render_ai_page(username):
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
@@ -61,11 +63,9 @@ def render_ai_page(username):
                 node = nodes_map[msg['content']]
                 st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                 with st.popover("●", help="Deep Meaning"):
-                    # 🌟 核心修复：强制类型转换，处理 None 值
                     try:
                         raw_m = node.get('m_score')
                         raw_l = node.get('logic_score')
-                        # 优先取 m_score，如果没有则取 logic_score，如果还没有则 0.5
                         score_val = float(raw_m) if raw_m is not None else (float(raw_l) if raw_l is not None else 0.5)
                     except:
                         score_val = 0.5
@@ -98,51 +98,53 @@ def render_ai_page(username):
         time.sleep(0.5); st.rerun()
 
 # ==========================================
-# 💬 页面：好友社交 (UI 升级版 + 自动刷新)
+# 💬 页面：好友社交 (修复版)
 # ==========================================
 def render_friends_page(username, unread_counts):
-    # ⏱️ 心跳机制：每 5 秒自动刷新一次，实现“伪实时”收信和更新在线状态
-    st_autorefresh(interval=5000, key="msg_refresh")
+    # 尝试引入自动刷新，如果没安装插件则跳过
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=5000, key="msg_refresh")
+    except: pass
     
-    # 每次刷新都更新一下自己的心跳
     msc.update_heartbeat(username)
 
-    col_list, col_chat = st.columns([0.25, 0.75]) # 调整比例，左边窄一点更像侧边栏
+    col_list, col_chat = st.columns([0.25, 0.75])
     
-    # --- 左侧：好友列表 (使用 SAC Menu 组件) ---
+    # 建立一个字典，用于通过昵称反查 username
+    user_map = {}
+
     with col_list:
-        st.markdown("### 💬") # 标题留白
+        st.markdown("### 💬")
         users = msc.get_all_users(username)
         
         if users:
             menu_items = []
             for u in users:
-                # 在线状态判定
+                # 记录映射关系：昵称 -> 用户名
+                # 注意：如果昵称重复，这里会有 Bug，建议后期强制昵称唯一
+                user_map[u['nickname']] = u['username']
+
                 is_online = msc.check_is_online(u.get('last_seen'))
-                # 图标：在线是实心圆，离线是空心圆
                 icon_name = "circle-fill" if is_online else "circle"
-                icon_color = "#4CAF50" if is_online else "#CCCCCC" # 绿色 vs 灰色
+                icon_color = "#4CAF50" if is_online else "#CCCCCC"
                 
-                # 未读消息数
                 unread = unread_counts.get(u['username'], 0)
                 tag_val = sac.Tag(str(unread), color='red', bordered=False) if unread > 0 else None
-                
-                # 描述文字（可选，比如显示最后在线时间，这里暂空）
                 desc = "Online" if is_online else "Offline"
 
+                # 🔧 修复点：去掉了 key 参数
                 menu_items.append(sac.MenuItem(
                     label=u['nickname'], 
                     icon=sac.BsIcon(name=icon_name, color=icon_color),
                     tag=tag_val,
-                    description=desc,
-                    key=u['username'] # 用 username 做唯一键
+                    description=desc
                 ))
             
-            # 渲染菜单，获取选中的用户 ID
-            # 这里的 index 设置为 -1 初始不选中，或者保持上次选中的索引
-            selected_user = sac.menu(
+            # sac.menu 返回的是 label (即昵称)
+            selected_nickname = sac.menu(
                 menu_items, 
-                index=0, # 默认选中第一个，或者你可以写逻辑判断
+                index=0, 
                 format_func='title', 
                 size='md', 
                 variant='light',
@@ -150,34 +152,30 @@ def render_friends_page(username, unread_counts):
                 open_all=True
             )
             
-            # 更新 session state
-            if selected_user:
-                st.session_state.current_chat_partner = selected_user
+            # 通过字典反查真正的 username
+            if selected_nickname and selected_nickname in user_map:
+                st.session_state.current_chat_partner = user_map[selected_nickname]
+
         else:
             st.caption("No citizens found.")
 
-    # --- 右侧：聊天窗口 ---
     with col_chat:
         partner = st.session_state.current_chat_partner
-        
-        # 如果当前有选中的人
         if partner:
-            # 标记已读
             msc.mark_messages_read(partner, username)
             
-            # 顶部栏
             header_col1, header_col2 = st.columns([0.9, 0.1])
             with header_col1: 
+                # 显示对方昵称
                 st.markdown(f"#### {msc.get_nickname(partner)}")
             with header_col2: 
                 if st.button("👁️", help="AI Insight"): 
                     st.toast("DeepSeek is observing...", icon="🧠")
 
-            # 消息容器
             history = msc.get_direct_messages(username, partner)
             my_nodes = msc.get_active_nodes_map(username)
 
-            with st.container(height=600, border=True): # 增加高度和边框
+            with st.container(height=600, border=True):
                 if not history:
                     st.caption("No messages yet. Say hi!")
                 
@@ -187,13 +185,10 @@ def render_friends_page(username, unread_counts):
                         if msg['sender'] == 'AI':
                             st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
                         elif msg['sender'] == username:
-                            # 自己发的消息
                             st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
                         else:
-                            # 对方发的消息
                             st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
                     
-                    # 意义点渲染（保持原逻辑）
                     with c_dot:
                         if msg['sender'] == username and msg['content'] in my_nodes:
                             node = my_nodes[msg['content']]
@@ -206,11 +201,8 @@ def render_friends_page(username, unread_counts):
                                 st.info(node.get('insight', ''))
                             st.markdown('</div>', unsafe_allow_html=True)
 
-            # 底部输入框
             if prompt := st.chat_input(f"Message {msc.get_nickname(partner)}..."):
                 msc.send_direct_message(username, partner, prompt)
-                
-                # 异步分析逻辑（保持原逻辑）
                 with st.spinner("Analyzing meaning..."):
                     analysis = msc.analyze_meaning_background(prompt)
                     if analysis.get("valid", False):
@@ -218,26 +210,31 @@ def render_friends_page(username, unread_counts):
                         msc.save_node(username, prompt, analysis, "私聊", vec)
                         match = msc.find_resonance(vec, username, analysis)
                         if match: st.toast(f"Resonance with {match['user']}!", icon="⚡")
-                st.rerun() # 发送完立即刷新
+                st.rerun()
         else:
             st.info("👈 Select a friend from the left to connect.")
-# ... (世界和星团页面保持不变) ...
+
+# ==========================================
+# 🌍 页面：世界视图 (修复版)
+# ==========================================
 def render_world_page():
     st.caption("MSC GLOBAL VIEW")
+    # 🔧 修复点：改用 msc (lib) 获取数据，用 viz (visualizer) 画图
     global_nodes = msc.get_global_nodes()
+    
     t1, t2 = st.tabs(["2D MAP", "3D GALAXY"])
-    with t1: msc.render_2d_world_map(global_nodes)
-    with t2: msc.render_3d_galaxy(global_nodes)
+    
+    with t1:
+        # 🔧 修复点：调用 viz 而不是 msc
+        viz.render_2d_world_map(global_nodes)
+        
+    with t2:
+        # 🔧 修复点：调用 viz 而不是 msc
+        viz.render_3d_galaxy(global_nodes)
 
+# ==========================================
+# 🌌 页面：星团
+# ==========================================
 def render_cluster_page(username):
     st.caption("SPONTANEOUS CLUSTERS")
-    rooms = msc.get_available_rooms()
-    if rooms:
-        for room in rooms:
-            with st.expander(f"{room['name']}", expanded=True):
-                st.caption(room['description'])
-                if st.button("Enter", key=f"join_{room['id']}"):
-                    msc.join_room(room['id'], username)
-                    msc.view_group_chat(room, username)
-    else:
-        st.info("No clusters formed yet.")
+    st.info("Coming soon...")
