@@ -6,7 +6,7 @@ import msc_viz as viz
 import msc_pages as pages
 import json
 
-st.set_page_config(page_title="MSC v60.0 Modular", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v60.1 Fixed", layout="wide", initial_sidebar_state="expanded")
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
@@ -14,8 +14,14 @@ if "current_chat_partner" not in st.session_state: st.session_state.current_chat
 if not st.session_state.logged_in:
     pages.render_login_page()
 else:
-    db.update_heartbeat(st.session_state.username)
-    user_profile = db.get_user_profile(st.session_state.username)
+    # 心跳
+    if "username" in st.session_state:
+        db.update_heartbeat(st.session_state.username)
+        user_profile = db.get_user_profile(st.session_state.username)
+    else:
+        st.session_state.logged_in = False # 强制登出
+        st.rerun()
+        
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
@@ -23,8 +29,11 @@ else:
     rank_name, rank_icon = ai.calculate_rank(radar_dict)
     total_unread, unread_counts = db.get_unread_counts(st.session_state.username)
 
+    # 🌟 安全获取昵称
+    nickname = st.session_state.get('nickname', 'User')
+
     with st.sidebar:
-        st.markdown(f"### {rank_icon} {st.session_state.nickname}")
+        st.markdown(f"### {rank_icon} {nickname}")
         
         if "daily_q" not in st.session_state: st.session_state.daily_q = None
         if st.session_state.daily_q is None:
@@ -47,7 +56,7 @@ else:
         st.divider()
         all_nodes = db.get_all_nodes_for_map(st.session_state.username)
         if st.button("🔭 Full View", use_container_width=True): 
-            viz.view_fullscreen_map(all_nodes, st.session_state.nickname)
+            viz.view_fullscreen_map(all_nodes, nickname)
 
     if menu == 'Logout': st.session_state.logged_in = False; st.rerun()
     elif menu == 'AI Partner': pages.render_ai_page(st.session_state.username)
