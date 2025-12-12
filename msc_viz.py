@@ -94,3 +94,9 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 500 if is_fullscreen else 200}, "itemStyle": {"shadowBlur": 10}}]
     }
     st_echarts(options=option, height=height)
+# === 补全缺失的视图函数 ===
+@st.dialog("🔭 浩荡宇宙", width="large")
+def view_fullscreen_map(nodes, user_name):
+    st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
+    # 调用已有的渲染函数，开启全屏模式
+    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
