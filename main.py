@@ -115,7 +115,7 @@ else:
             if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
 
         viz.render_radar_chart(radar_dict, height="180px")
-         # === 新增：点击查看深度画像 ===
+ # === 新增：点击查看深度画像 ===
         if st.button("🧬 Deep Profile", use_container_width=True):
             viz.view_radar_details(radar_dict, st.session_state.nickname)
         menu = sac.menu([
