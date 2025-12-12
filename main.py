@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
+# 删除 import msc_ai as ai，因为功能已合并进 msc_lib
 import msc_viz as viz
 import msc_pages as pages
 import json
@@ -22,7 +23,7 @@ def inject_custom_css():
         
         /* 聊天气泡：我 (颜色变浅了) */
         .chat-bubble-me {
-            background-color: #555555; /* 🌟 之前是 #222 (太黑)，现在是 #555 (高级灰) */
+            background-color: #555555; 
             color: #fff; 
             padding: 12px 16px; 
             border-radius: 18px; 
@@ -87,7 +88,9 @@ else:
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
-   rank_name, rank_icon = msc.calculate_rank(radar_dict) # 改为 msc
+    
+    # 🔧 修正点：调用 msc 而不是 ai
+    rank_name, rank_icon = msc.calculate_rank(radar_dict) 
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
 
     with st.sidebar:
@@ -97,7 +100,7 @@ else:
         if st.session_state.daily_q is None:
             if st.button("📅 Insight", use_container_width=True):
                 with st.spinner("."):
-                    # 改为 msc 调用
+                    # 🔧 修正点：调用 msc 而不是 ai
                     st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
                     st.rerun()
         else:
