@@ -153,21 +153,24 @@ def call_ai_api(prompt):
         except: return {"error": True}
     except Exception as e: return {"error": True, "msg": str(e)}
 
-def get_normal_response(history_messages):
-    if not client_ai: yield "AI 未配置"; return
-    try:
-        api_messages = [{"role": "system", "content": config.PROMPT_CHATBOT}]
-        for msg in history_messages: 
-            if msg['role'] in ['user', 'assistant']:
-                api_messages.append({"role": msg["role"], "content": msg["content"]})
-        
-        return client_ai.chat.completions.create(
-            model=TARGET_MODEL, 
-            messages=api_messages, 
-            temperature=0.8, 
-            stream=True
-        )
-    except Exception as e: return f"Error: {e}"
+def analyze_persona_report(radar_data):
+    """
+    生成深度人物画像：现状 + 成长
+    """
+    # 将字典转为字符串给 AI 看
+    radar_str = json.dumps(radar_data, ensure_ascii=False)
+    
+    prompt = f"""
+    基于MSC系统的7维雷达数据：{radar_str}
+    请生成一份简短深刻的用户画像报告，必须包含以下两个字段的JSON：
+    1. "status_quo" (现状): 用心理学/哲学视角描述用户当前的精神底色。
+    2. "growth_path" (成长): 基于当前维度的短板或优势，预测用户可能的思想进化方向。
+    
+    输出格式示例: {{ "status_quo": "...", "growth_path": "..." }}
+    """
+    
+    # 复用已有的 AI 调用函数
+    return call_ai_api(prompt)
 
 def analyze_meaning_background(text):
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
