@@ -1,4 +1,4 @@
-## msc_viz.py (星河创世纪版：聚类与染色) ###
+### msc_viz.py (完整无删减版：含交互地图、雷达、考古卡片) ###
 
 import streamlit as st
 import plotly.express as px
@@ -7,22 +7,21 @@ import pandas as pd
 import json
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans  # 引入聚类算法
-from streamlit_echarts import st_echarts
+from sklearn.cluster import KMeans
+from streamlit_echarts import st_echarts, JsCode # 引入 JsCode
 import msc_config as config
 import msc_lib as msc 
 
 # ==========================================
 # 🎨 智能配色盘 (Intelligent Palette)
 # ==========================================
-# 为不同的星团分配具有哲学意味的颜色
 CLUSTER_COLORS = [
-    '#FF4B4B', # Red: 激情/冲突/焦虑 (Passion/Conflict)
-    '#1A73E8', # Blue: 理性/结构/冷静 (Reason/Structure)
-    '#FFA421', # Orange: 创造/活力/混乱 (Creativity/Chaos)
-    '#00C853', # Green: 生长/治愈/自然 (Growth/Nature)
-    '#9C27B0', # Purple: 灵性/神秘/超越 (Spirituality/Mystery)
-    '#00BCD4', # Cyan: 自由/未来/科技 (Freedom/Future)
+    '#FF4B4B', # Red: 激情/冲突
+    '#1A73E8', # Blue: 理性/结构
+    '#FFA421', # Orange: 创造/活力
+    '#00C853', # Green: 生长/治愈
+    '#9C27B0', # Purple: 灵性/神秘
+    '#00BCD4', # Cyan: 自由/未来
 ]
 
 def get_cluster_color(cluster_id):
@@ -38,7 +37,6 @@ def compute_clusters(nodes, n_clusters=5):
     vectors = []
     meta_data = []
     
-    # 1. 提取有效向量
     for node in nodes:
         if node['vector']:
             try:
@@ -47,26 +45,22 @@ def compute_clusters(nodes, n_clusters=5):
                 meta_data.append({
                     "care_point": node['care_point'],
                     "insight": node.get('insight', ''),
-                    "lat": np.random.uniform(-40, 60), # 暂用随机坐标模拟 2D 投影
+                    "lat": np.random.uniform(-40, 60),
                     "lon": np.random.uniform(-150, 150)
                 })
             except: pass
     
     if not vectors: return pd.DataFrame()
 
-    # 2. 动态决定星团数量 (不能超过节点总数)
     n_clusters = min(n_clusters, len(vectors))
     if n_clusters < 2: n_clusters = 1
 
-    # 3. K-Means 聚类 (寻找引力中心)
     kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
     labels = kmeans.fit_predict(vectors)
     
-    # 4. 降维 (为了 3D 展示)
     pca = PCA(n_components=3)
     coords_3d = pca.fit_transform(vectors)
 
-    # 5. 组装数据
     df = pd.DataFrame(meta_data)
     df['cluster'] = labels
     df['color'] = [get_cluster_color(l) for l in labels]
@@ -77,39 +71,29 @@ def compute_clusters(nodes, n_clusters=5):
     return df
 
 # ==========================================
-# 🌍 2D 世界地图 (彩色版)
+# 🌍 2D 世界地图 (Plotly)
 # ==========================================
 def render_2d_world_map(nodes):
     if not nodes: return
     
-    # 计算聚类
     df = compute_clusters(nodes, n_clusters=5)
     
     if df.empty:
         st.info("🌑 暂无足够的意义数据来形成星图。")
         return
 
-    # 添加总部
     hq_df = pd.DataFrame([{"lat": 39.9, "lon": 116.4, "care_point": "HQ", "color": "#FFFFFF", "size": 10}])
     
-    # 绘制散点
     fig = go.Figure()
     
-    # 绘制普通节点 (按颜色分类)
     fig.add_trace(go.Scattergeo(
         lon = df["lon"], lat = df["lat"],
         mode = 'markers',
-        text = df["care_point"], # 鼠标悬停显示
-        marker = dict(
-            size=6, 
-            color=df['color'], # 智能染色
-            opacity=0.8,
-            line=dict(width=0)
-        ),
+        text = df["care_point"], 
+        marker = dict(size=6, color=df['color'], opacity=0.8, line=dict(width=0)),
         name='Meaning Nodes'
     ))
     
-    # 绘制 HQ
     fig.add_trace(go.Scattergeo(
         lon = hq_df["lon"], lat = hq_df["lat"],
         mode = 'markers',
@@ -125,24 +109,23 @@ def render_2d_world_map(nodes):
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 🌌 3D 星河 (彩色涌现版)
+# 🌌 3D 星河 (Plotly)
 # ==========================================
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: 
         st.info("🌌 星河汇聚中... (需要至少3个节点才能计算空间)")
         return
         
-    df = compute_clusters(nodes, n_clusters=6) # 尝试分出 6 个星系
+    df = compute_clusters(nodes, n_clusters=6)
     
     if df.empty: return
     
     df['size'] = 6
     
-    # 使用 Plotly Express 自动按 Cluster 染色
     fig = px.scatter_3d(
         df, x='x', y='y', z='z', 
-        color='cluster', # 按聚类ID染色
-        color_continuous_scale=CLUSTER_COLORS, # 使用我们的哲学色盘
+        color='cluster', 
+        color_continuous_scale=CLUSTER_COLORS, 
         hover_name='care_point', 
         hover_data={'insight': True, 'cluster': False, 'x':False, 'y':False, 'z':False},
         template="plotly_dark", 
@@ -150,12 +133,7 @@ def render_3d_galaxy(nodes):
     )
     
     fig.update_layout(
-        scene=dict(
-            xaxis=dict(visible=False), 
-            yaxis=dict(visible=False), 
-            zaxis=dict(visible=False), 
-            bgcolor='black'
-        ), 
+        scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), 
         paper_bgcolor="black", 
         margin={"r":0,"t":0,"l":0,"b":0}, 
         height=600, 
@@ -169,25 +147,37 @@ def render_3d_galaxy(nodes):
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
-    option = {"backgroundColor": "transparent", "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]}
+    
+    option = {
+        "backgroundColor": "transparent", 
+        "radar": {
+            "indicator": [{"name": k, "max": 10} for k in keys], 
+            "splitArea": {"show": False}
+        }, 
+        "series": [{
+            "type": "radar", 
+            "data": [{
+                "value": scores, 
+                "areaStyle": {"color": "rgba(0,255,242,0.4)"}, 
+                "lineStyle": {"color": "#00fff2"}
+            }]
+        }]
+    }
     st_echarts(options=option, height=height)
 
 # ==========================================
-# 🔮 赛博朋克关系图 (Echarts - 连线染色版)
+# 🔮 赛博朋克关系图 (交互升级版)
 # ==========================================
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return
     
-    # 预计算聚类，为了给节点染色
+    # 1. 聚类染色
     cluster_df = compute_clusters(nodes, n_clusters=5)
-    # 建立 id -> color 映射
     id_to_color = {}
     if not cluster_df.empty:
-        # 假设 nodes 顺序和 cluster_df 顺序一致 (这是个简化假设，严谨需用 ID 匹配)
-        # 这里为了演示简单，直接按顺序给色
+        # 这里做一个简单的顺序映射 (简化版)，实际应根据ID映射
         for i, color in enumerate(cluster_df['color']):
-            if i < len(nodes):
-                id_to_color[str(nodes[i]['id'])] = color
+            if i < len(nodes): id_to_color[str(nodes[i]['id'])] = color
 
     graph_nodes, graph_links = [], []
     symbol_base = 30 if is_fullscreen else 15
@@ -208,16 +198,33 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
             else: vector = node['vector']
         
         nid = str(node['id'])
-        # 获取该节点的星团颜色，如果没有则默认为白色
         node_color = id_to_color.get(nid, "#ffffff")
 
+        # === 优化点：Label 只显示精简的 Care Point ===
+        # 如果 Care Point 太长，截断显示
+        label_text = node['care_point']
+        if len(label_text) > 6: label_text = label_text[:5] + "..."
+
         graph_nodes.append({
-            "name": nid, "id": nid,
+            "name": nid, 
+            "id": nid,
             "symbolSize": symbol_base * (0.8 + logic),
-            "value": node['care_point'],
-            "label": {"show": is_fullscreen, "formatter": node['care_point'][:5], "color": "#fff"},
+            "value": node['care_point'], # 鼠标悬停显示完整 Care Point
+            "label": {
+                "show": is_fullscreen, 
+                "formatter": label_text, # 只显示精简文字
+                "color": "#fff",
+                "fontSize": 10
+            },
+            # 存下完整数据供点击使用
+            "full_data": {
+                "insight": node.get('insight', 'No Insight'),
+                "content": node['content'],
+                "layer": node.get('meaning_layer', ''),
+                "username": node['username']
+            },
             "vector": vector, "keywords": keywords,
-            "itemStyle": {"color": node_color} # === 节点染色 ===
+            "itemStyle": {"color": node_color}
         })
 
     # 连线逻辑 (标签优先)
@@ -244,7 +251,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
                         if sim > 0.8: score += 0.2
                 except: pass
             
-            # 连线染色：如果两个节点同色，连线也用那个颜色；否则用青色
+            # 连线染色
             line_color = "#00fff2"
             if na.get("itemStyle", {}).get("color") == nb.get("itemStyle", {}).get("color"):
                 line_color = na["itemStyle"]["color"]
@@ -254,18 +261,58 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
             elif score >= 0.45: 
                 graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 1, "color": "#555", "type": "dashed", "curveness": 0.2}})
 
+    # === 关键：点击事件配置 ===
     option = {
         "backgroundColor": "#0e1117",
-        "tooltip": {},
-        "animationDurationUpdate": 1500,
-        "animationEasingUpdate": "quinticInOut",
+        "tooltip": {"formatter": "{b}: {c}"}, # 悬停显示简单信息
         "series": [{
             "type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, 
             "force": {"repulsion": 800 if is_fullscreen else 200, "gravity": 0.1, "edgeLength": 50}, 
             "itemStyle": {"shadowBlur": 10}, "lineStyle": {"color": "source", "curveness": 0.2}
         }]
     }
-    st_echarts(options=option, height=height)
+    
+    # 监听点击事件，返回被点击节点的 name (即 id)
+    events = {"click": "function(params) { return params.name }"}
+    
+    # 渲染图表
+    clicked_node_id = st_echarts(options=option, height=height, events=events, key=f"map_{height}")
+    
+    # 如果用户点击了节点，弹出详情卡片
+    if clicked_node_id:
+        target_node = next((n for n in graph_nodes if n['name'] == clicked_node_id), None)
+        if target_node:
+            view_node_card(target_node['full_data'])
+
+# === 新增：意义详情卡片 (Dialog) ===
+@st.dialog("✨ 意义晶体", width="large")
+def view_node_card(node_data):
+    # 1. 核心洞察区
+    st.markdown(f"### {node_data.get('layer', 'Core Meaning')}")
+    st.info(f"**Insight:** {node_data['insight']}")
+    
+    st.divider()
+    
+    # 2. 原始语境区 (考古)
+    st.caption("📜 原始对话回溯 (Original Context)")
+    
+    # 调用 lib 去找当时的聊天记录
+    original_chat = msc.get_node_context(node_data['username'], node_data['content'])
+    
+    if original_chat:
+        timestamp = str(original_chat.get('created_at', ''))[:16].replace('T', ' ')
+        st.markdown(f"""
+        <div style="background:#f0f2f6; padding:15px; border-radius:10px; border-left: 4px solid #1A73E8;">
+            <div style="font-size:12px; color:#666; margin-bottom:5px;">{timestamp}</div>
+            <div style="font-size:16px; font-weight:500;">"{node_data['content']}"</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🔗 定位到聊天上下文"):
+            st.toast("已定位到历史坐标 (模拟跳转)", icon="📍")
+    else:
+        st.markdown(f"> \"{node_data['content']}\"")
+        st.caption("无法追溯确切的时间戳")
 
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
