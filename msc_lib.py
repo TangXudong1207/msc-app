@@ -1,4 +1,4 @@
-### msc_lib.py (Vertex AI 增强版) ###
+### msc_lib.py (DeepSeek + Vertex 混合动力版) ###
 
 import streamlit as st
 import numpy as np
@@ -7,7 +7,7 @@ import re
 import time
 from datetime import datetime, timezone
 from openai import OpenAI
-# === 新增：引入 Google Cloud 库 ===
+# === Google Vertex ===
 from google.oauth2 import service_account
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
@@ -15,10 +15,10 @@ import msc_config as config
 import msc_db as db
 
 # ==========================================
-# 🛑 1. 初始化系统 (双模组：OpenAI + Vertex)
+# 🛑 1. 初始化系统
 # ==========================================
 def init_system():
-    # 1. 初始化 OpenAI (用于对话和分析)
+    # A. 思考引擎 (DeepSeek/OpenAI)
     try:
         client = OpenAI(
             api_key=st.secrets["API_KEY"],
@@ -28,22 +28,17 @@ def init_system():
     except:
         client = None; model = "gpt-3.5-turbo"
 
-    # 2. 初始化 Vertex AI (用于向量 Embedding)
-    # 需要在 secrets.toml 里配置 [gcp_service_account]
+    # B. 记忆引擎 (Google Vertex AI)
     vertex_model = None
     try:
         if "gcp_service_account" in st.secrets:
-            # 从 secrets 读取 JSON 内容并创建凭证
             creds_dict = dict(st.secrets["gcp_service_account"])
             creds = service_account.Credentials.from_service_account_info(creds_dict)
-            
-            # 初始化 Vertex
             vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
-            # 加载 Google 的 Gecko 模型 (专门做向量的)
             vertex_model = TextEmbeddingModel.from_pretrained("text-embedding-004")
-            print("✅ Google Vertex AI Connected!")
+            # print("✅ Vertex AI Active")
     except Exception as e:
-        print(f"⚠️ Vertex AI Init Failed: {e}")
+        pass # 静默失败，回退到 Mock
 
     return client, model, vertex_model
 
@@ -91,23 +86,22 @@ def get_all_nodes_for_map(username): return db.get_all_nodes_for_map(username)
 def get_global_nodes(): return db.get_global_nodes()
 
 # ==========================================
-# 🧮 3. 向量算法 (升级为 Vertex AI)
+# 🧮 3. 向量算法 (智能切换)
 # ==========================================
 def get_embedding(text):
     """
-    获取文本向量。
-    优先使用 Google Vertex AI (Gecko)，如果失败则回退到随机数 (仅供测试)。
+    智能路由：
+    1. 优先尝试 Google Vertex (云端高性能)
+    2. 失败则回退 Mock (本地/无网兜底)
     """
     if vertex_embed_model:
         try:
             embeddings = vertex_embed_model.get_embeddings([text])
             return embeddings[0].values
-        except Exception as e:
-            print(f"Embedding Error: {e}")
+        except: pass
     
-    # Fallback: 模拟向量 (1536维，兼容 OpenAI 格式) - 仅测试用！
-    # ⚠️ 注意：随机向量无法形成真正的聚类星云
-    return np.random.rand(768).tolist() # Gecko 通常是 768 维
+    # Mock (注意：这是随机的，无法形成稳定星云，仅供流程跑通)
+    return np.random.rand(768).tolist()
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
@@ -117,7 +111,7 @@ def cosine_similarity(v1, v2):
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
 # ==========================================
-# 🧠 4. AI 智能核心 (分析与生成)
+# 🧠 4. AI 智能核心
 # ==========================================
 def call_ai_api(prompt):
     if not client_ai: return {"error": "AI未连接"}
@@ -159,17 +153,13 @@ def get_normal_response(history_messages):
 def analyze_meaning_background(text):
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
     res = call_ai_api(prompt)
-    
-    # 简单的 M-Score 计算 (未来可替换为复杂的 IHIL 逻辑)
     if res.get("valid", False) or res.get("c_score", 0) > 0:
-        c = res.get('c_score', 0)
-        n = res.get('n_score', 0)
+        c = res.get('c_score', 0); n = res.get('n_score', 0)
         if n == 0: n = 0.5 
         m = c * n * 2
         res['m_score'] = m
         if m < config.LEVELS["Weak"]: res["valid"] = False
         else: res["valid"] = True
-    
     return res
 
 def generate_daily_question(username, radar_data):
@@ -180,8 +170,7 @@ def generate_daily_question(username, radar_data):
             last_3 = recent[-3:]
             ctx = f"关注点：{[n['care_point'] for n in last_3]}"
     except: ctx = ""
-
-    radar_str = json.dumps(radar_data, ensure_ascii=False) if isinstance(radar_data, dict) else str(radar_data)
+    radar_str = json.dumps(radar_data, ensure_ascii=False)
     prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。{ctx}。输出 JSON: {{ 'question': '...' }}"
     res = call_ai_api(prompt)
     return res.get("question", "今天，什么事情让你感到'活着'？")
@@ -190,18 +179,13 @@ def update_radar_score(username, input_scores):
     try:
         user_data = db.get_user_profile(username)
         current = user_data.get('radar_profile')
-        if not current: 
-            current = {k: 3.0 for k in input_scores.keys()}
-        elif isinstance(current, str): 
-            current = json.loads(current)
-        
+        if not current: current = {k: 3.0 for k in input_scores.keys()}
+        elif isinstance(current, str): current = json.loads(current)
         updated = {}
         alpha = config.RADAR_ALPHA
         for k, v in input_scores.items():
-            old_val = float(current.get(k, 3.0))
-            new_val = float(v)
+            old_val = float(current.get(k, 3.0)); new_val = float(v)
             updated[k] = round(old_val * (1-alpha) + new_val * alpha, 2)
-            
         db.update_radar_score(username, json.dumps(updated))
     except: pass
     
@@ -209,7 +193,6 @@ def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     others = db.get_global_nodes()
     if not others: return None
-    
     best_match, highest_score = None, 0
     for row in others:
         if row['username'] == current_user: continue
@@ -217,18 +200,12 @@ def find_resonance(current_vector, current_user, current_data):
             try:
                 o_vec = json.loads(row['vector'])
                 score = cosine_similarity(current_vector, o_vec)
-                
                 if score > config.LINK_THRESHOLD["Strong"] and score > highest_score:
                     highest_score = score
-                    best_match = {
-                        "user": row['username'], 
-                        "content": row['content'], 
-                        "score": round(score * 100, 1)
-                    }
+                    best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
             except: continue
     return best_match
     
-# === 新增：Persona Report ===
 def analyze_persona_report(radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
     prompt = f"""
