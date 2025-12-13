@@ -1,14 +1,12 @@
-### msc_sim.py (创世纪引擎：合成数据生成器) ###
+### msc_sim.py (融合版：创世纪控制台) ###
 
+import streamlit as st
 import msc_lib as msc
-import msc_db as db
-import json
 import random
 import time
-import streamlit as st
 
 # ==========================================
-# 🎭 1. 设定：创世纪原本 (Archetypes)
+# 🎭 1. 设定：灵魂原型 (Archetypes)
 # ==========================================
 ARCHETYPES = [
     {
@@ -47,78 +45,76 @@ TOPICS = [
 ]
 
 # ==========================================
-# 🧬 2. 核心逻辑：造人与对话
+# 🧬 2. 核心功能：批量造人
 # ==========================================
-def simulate_genesis(n_rounds=3):
-    """
-    运行创世纪模拟。
-    n_rounds: 每个角色针对每个话题发言的轮数
-    """
-    print(f"🚀 创世纪引擎启动... 准备生成 {len(ARCHETYPES)} 个数字生命。")
-    
-    # 1. 注册用户 (如果没有的话)
+def create_virtual_citizens():
+    created_count = 0
     for char in ARCHETYPES:
         username = f"sim_{char['nickname'].lower()}"
-        # 尝试注册，密码默认 123456
-        if db.get_user_profile(username)['radar_profile'] is None:
-            print(f"   ➕ 创建新生命: {char['nickname']}")
-            msc.add_user(username, "123456", char['nickname'], "Matrix")
-            # 初始化雷达
-            msc.update_radar_score(username, char['radar'])
-        else:
-            print(f"   ✅ 生命已存在: {char['nickname']}")
+        # 检查是否已存在
+        if not msc.get_user_profile(username).get('radar_profile'):
+            if msc.add_user(username, "123456", char['nickname'], "Matrix"):
+                msc.update_radar_score(username, char['radar'])
+                created_count += 1
+    return created_count
 
-    # 2. 开始思想碰撞
-    total_nodes = 0
+# ==========================================
+# 💉 3. 核心功能：思想注入
+# ==========================================
+def inject_thoughts(count=3):
+    """
+    让虚拟人针对话题发言
+    count: 生成几条对话
+    """
+    logs = []
     
-    for topic in TOPICS:
-        print(f"\n📢 议题开启: {topic}")
-        selected_chars = random.sample(ARCHETYPES, 3) # 每轮选3个人聊
+    for i in range(count):
+        # 随机选人，随机选话题
+        char = random.choice(ARCHETYPES)
+        topic = random.choice(TOPICS)
+        username = f"sim_{char['nickname'].lower()}"
         
-        for char in selected_chars:
-            username = f"sim_{char['nickname'].lower()}"
+        # 1. 让 AI (DeepSeek) 生成观点
+        prompt = f"""
+        角色设定：{char['style']}
+        话题：{topic}
+        任务：请用符合你角色设定的口吻，说一句简短深刻的话（50字以内）。
+        不要解释，直接输出内容。
+        """
+        
+        # 这里的 call_ai_api 会用 DeepSeek
+        response = msc.call_ai_api(f"{prompt} 输出 JSON: {{'content': '...'}}")
+        content = response.get('content', '')
+        
+        if content:
+            # 2. IHIL 分析 + Vertex 向量化
+            analysis = msc.analyze_meaning_background(content)
             
-            # 让 AI 生成观点
-            prompt = f"""
-            角色设定：{char['style']}
-            话题：{topic}
-            任务：请用符合你角色设定的口吻，说一句简短深刻的话（50字以内）。
-            不要解释，直接输出内容。
-            """
-            
-            print(f"   Thinking ({char['nickname']})...")
-            # 这里调用 msc_lib 的 AI 接口
-            response = msc.call_ai_api(f"{prompt} 输出 JSON: {{'content': '...'}}")
-            
-            content = response.get('content', '')
-            if content:
-                print(f"   💬 {char['nickname']}: {content}")
+            if analysis.get("valid", False):
+                # 这里的 get_embedding 会用 Google Vertex (如果在云端)
+                vec = msc.get_embedding(content)
+                msc.save_node(username, content, analysis, "Genesis_Sim", vec)
                 
-                # 3. IHIL 介入：生成 MSC 节点
-                # 模拟用户输入，走一遍完整的分析流程
-                analysis = msc.analyze_meaning_background(content)
-                
-                if analysis.get("valid", False):
-                    # 生成向量 (本地模型)
-                    vec = msc.get_embedding(content)
-                    # 存入数据库
-                    msc.save_node(username, content, analysis, "Genesis_Sim", vec)
-                    # 更新雷达
-                    if "radar_scores" in analysis:
-                        msc.update_radar_score(username, analysis["radar_scores"])
-                    
-                    total_nodes += 1
-                    print(f"      ✨ 节点已结晶 (M-Score: {analysis['m_score']:.2f})")
-                else:
-                    print("      💨 意义太弱，未结晶")
-            
-            time.sleep(1) # 防止 API 限流
-
-    print(f"\n🎉 创世纪完成！共生成 {total_nodes} 个意义节点。请前往 World 页面查看。")
+                logs.append(f"✅ {char['nickname']}: {content[:20]}... (M-Score: {analysis.get('m_score',0):.2f})")
+            else:
+                logs.append(f"⚪ {char['nickname']}: (Meaning too weak)")
+        
+        time.sleep(0.5) # 避免太快
+        
+    return logs
 
 # ==========================================
-# ▶️ 运行入口
+# 🎛️ 4. 控制台 UI (嵌入 Main 的 Sidebar)
 # ==========================================
-if __name__ == "__main__":
-    # 这是一个独立脚本，直接运行即可
-    simulate_genesis()
+def render_god_console():
+    with st.expander("⚡ Genesis Engine", expanded=False):
+        if st.button("👥 Summon 5 Archetypes"):
+            n = create_virtual_citizens()
+            st.success(f"Summoned {n} new souls.")
+            
+        if st.button("💉 Inject Thoughts (Batch)"):
+            with st.status("Simulating consciousness...", expanded=True) as status:
+                logs = inject_thoughts(3) # 每次生成3条，防止超时
+                for log in logs:
+                    st.write(log)
+                status.update(label="Injection Complete!", state="complete", expanded=False)
