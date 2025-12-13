@@ -1,4 +1,4 @@
-### msc_lib.py (DeepSeek + Vertex 混合动力版) ###
+### msc_lib.py (完整调试版) ###
 
 import streamlit as st
 import numpy as np
@@ -7,7 +7,6 @@ import re
 import time
 from datetime import datetime, timezone
 from openai import OpenAI
-# === Google Vertex ===
 from google.oauth2 import service_account
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
@@ -36,9 +35,8 @@ def init_system():
             creds = service_account.Credentials.from_service_account_info(creds_dict)
             vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
             vertex_model = TextEmbeddingModel.from_pretrained("text-embedding-004")
-            # print("✅ Vertex AI Active")
     except Exception as e:
-        pass # 静默失败，回退到 Mock
+        print(f"Vertex Init Error: {e}")
 
     return client, model, vertex_model
 
@@ -86,21 +84,14 @@ def get_all_nodes_for_map(username): return db.get_all_nodes_for_map(username)
 def get_global_nodes(): return db.get_global_nodes()
 
 # ==========================================
-# 🧮 3. 向量算法 (智能切换)
+# 🧮 3. 向量算法
 # ==========================================
 def get_embedding(text):
-    """
-    智能路由：
-    1. 优先尝试 Google Vertex (云端高性能)
-    2. 失败则回退 Mock (本地/无网兜底)
-    """
     if vertex_embed_model:
         try:
             embeddings = vertex_embed_model.get_embeddings([text])
             return embeddings[0].values
         except: pass
-    
-    # Mock (注意：这是随机的，无法形成稳定星云，仅供流程跑通)
     return np.random.rand(768).tolist()
 
 def cosine_similarity(v1, v2):
@@ -118,13 +109,8 @@ def call_ai_api(prompt):
     try:
         response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[
-                {"role": "system", "content": "Output valid JSON only. No markdown."}, 
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7, 
-            stream=False, 
-            response_format={"type": "json_object"} 
+            messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
+            temperature=0.7, stream=False, response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
         try:
@@ -134,21 +120,24 @@ def call_ai_api(prompt):
         except: return {"error": True}
     except Exception as e: return {"error": True, "msg": str(e)}
 
+# === 关键修改：非流式响应，强制返回字符串 ===
 def get_normal_response(history_messages):
-    if not client_ai: yield "AI 未配置"; return
+    if not client_ai: return "⚠️ AI Client Init Failed."
     try:
         api_messages = [{"role": "system", "content": config.PROMPT_CHATBOT}]
         for msg in history_messages: 
             if msg['role'] in ['user', 'assistant']:
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
         
-        return client_ai.chat.completions.create(
+        response = client_ai.chat.completions.create(
             model=TARGET_MODEL, 
             messages=api_messages, 
             temperature=0.8, 
-            stream=True
+            stream=False # 关闭流式
         )
-    except Exception as e: return f"Error: {e}"
+        return response.choices[0].message.content
+    except Exception as e: 
+        return f"❌ API Error: {str(e)}"
 
 def analyze_meaning_background(text):
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
@@ -163,17 +152,10 @@ def analyze_meaning_background(text):
     return res
 
 def generate_daily_question(username, radar_data):
-    try:
-        recent = db.get_all_nodes_for_map(username)
-        ctx = ""
-        if recent: 
-            last_3 = recent[-3:]
-            ctx = f"关注点：{[n['care_point'] for n in last_3]}"
-    except: ctx = ""
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。{ctx}。输出 JSON: {{ 'question': '...' }}"
+    prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。输出 JSON: {{ 'question': '...' }}"
     res = call_ai_api(prompt)
-    return res.get("question", "今天，什么事情让你感到'活着'？")
+    return res.get("question", "今天感觉如何？")
 
 def update_radar_score(username, input_scores):
     try:
@@ -184,8 +166,8 @@ def update_radar_score(username, input_scores):
         updated = {}
         alpha = config.RADAR_ALPHA
         for k, v in input_scores.items():
-            old_val = float(current.get(k, 3.0)); new_val = float(v)
-            updated[k] = round(old_val * (1-alpha) + new_val * alpha, 2)
+            old = float(current.get(k, 3.0)); val = float(v)
+            updated[k] = round(old * (1-alpha) + val * alpha, 2)
         db.update_radar_score(username, json.dumps(updated))
     except: pass
     
@@ -208,10 +190,5 @@ def find_resonance(current_vector, current_user, current_data):
     
 def analyze_persona_report(radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"""
-    基于MSC系统的7维雷达数据：{radar_str}
-    请生成一份简短深刻的用户画像报告，必须包含以下两个字段的JSON：
-    1. "status_quo" (现状): 用心理学/哲学视角描述用户当前的精神底色。
-    2. "growth_path" (成长): 基于当前维度的短板或优势，预测用户可能的思想进化方向。
-    """
+    prompt = f"分析雷达图 {radar_str}，输出JSON: {{'status_quo': '...', 'growth_path': '...'}}"
     return call_ai_api(prompt)
