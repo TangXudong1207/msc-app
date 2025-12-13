@@ -1,4 +1,4 @@
-### msc_viz.py (完整无删减版：含交互地图、雷达、考古卡片) ###
+### msc_viz.py (真正完整版：无缩减，修复交互) ###
 
 import streamlit as st
 import plotly.express as px
@@ -8,7 +8,7 @@ import json
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-from streamlit_echarts import st_echarts, JsCode # 引入 JsCode
+from streamlit_echarts import st_echarts, JsCode
 import msc_config as config
 import msc_lib as msc 
 
@@ -52,6 +52,7 @@ def compute_clusters(nodes, n_clusters=5):
     
     if not vectors: return pd.DataFrame()
 
+    # 动态决定星团数量
     n_clusters = min(n_clusters, len(vectors))
     if n_clusters < 2: n_clusters = 1
 
@@ -86,6 +87,7 @@ def render_2d_world_map(nodes):
     
     fig = go.Figure()
     
+    # 绘制普通节点
     fig.add_trace(go.Scattergeo(
         lon = df["lon"], lat = df["lat"],
         mode = 'markers',
@@ -94,6 +96,7 @@ def render_2d_world_map(nodes):
         name='Meaning Nodes'
     ))
     
+    # 绘制 HQ
     fig.add_trace(go.Scattergeo(
         lon = hq_df["lon"], lat = hq_df["lat"],
         mode = 'markers',
@@ -275,50 +278,55 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     # 监听点击事件，返回被点击节点的 name (即 id)
     events = {"click": "function(params) { return params.name }"}
     
-    # 渲染图表
-    clicked_node_id = st_echarts(options=option, height=height, events=events, key=f"map_{height}")
+    # 渲染图表，获取点击 ID
+    clicked_id = st_echarts(options=option, height=height, events=events, key=f"map_{height}")
     
-    # 如果用户点击了节点，弹出详情卡片
-    if clicked_node_id:
-        target_node = next((n for n in graph_nodes if n['name'] == clicked_node_id), None)
+    # 如果用户点击了节点，返回数据而不是弹窗
+    if clicked_id:
+        target_node = next((n for n in graph_nodes if n['name'] == clicked_id), None)
         if target_node:
-            view_node_card(target_node['full_data'])
+            return target_node['full_data'] # 返回数据给外部处理
+            
+    return None
 
-# === 新增：意义详情卡片 (Dialog) ===
-@st.dialog("✨ 意义晶体", width="large")
-def view_node_card(node_data):
-    # 1. 核心洞察区
-    st.markdown(f"### {node_data.get('layer', 'Core Meaning')}")
-    st.info(f"**Insight:** {node_data['insight']}")
-    
-    st.divider()
-    
-    # 2. 原始语境区 (考古)
-    st.caption("📜 原始对话回溯 (Original Context)")
-    
-    # 调用 lib 去找当时的聊天记录
-    original_chat = msc.get_node_context(node_data['username'], node_data['content'])
-    
-    if original_chat:
-        timestamp = str(original_chat.get('created_at', ''))[:16].replace('T', ' ')
-        st.markdown(f"""
-        <div style="background:#f0f2f6; padding:15px; border-radius:10px; border-left: 4px solid #1A73E8;">
-            <div style="font-size:12px; color:#666; margin-bottom:5px;">{timestamp}</div>
-            <div style="font-size:16px; font-weight:500;">"{node_data['content']}"</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🔗 定位到聊天上下文"):
-            st.toast("已定位到历史坐标 (模拟跳转)", icon="📍")
-    else:
-        st.markdown(f"> \"{node_data['content']}\"")
-        st.caption("无法追溯确切的时间戳")
-
+# ==========================================
+# 🔭 全屏地图容器 (修复套娃问题：Details Panel 模式)
+# ==========================================
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
-    render_cyberpunk_map(nodes, height="600px", is_fullscreen=True)
+    
+    # 1. 渲染地图，并接收点击返回的数据
+    clicked_data = render_cyberpunk_map(nodes, height="500px", is_fullscreen=True)
+    
+    # 2. 如果点击了，直接在地图下方显示详情面板 (而不是弹窗)
+    if clicked_data:
+        st.divider()
+        st.markdown(f"#### ✨ {clicked_data.get('layer', 'Selected Node')}")
+        
+        c1, c2 = st.columns([0.7, 0.3])
+        with c1:
+            st.info(f"**Insight:** {clicked_data['insight']}")
+            # 考古显示
+            original_chat = msc.get_node_context(clicked_data['username'], clicked_data['content'])
+            if original_chat:
+                timestamp = str(original_chat.get('created_at', ''))[:16].replace('T', ' ')
+                st.markdown(f"""
+                <div style="background:#f0f2f6; padding:10px; border-radius:5px; margin-top:10px; border-left: 3px solid #FF4B4B;">
+                    <small style="color:#666">{timestamp}</small><br>
+                    <b>"{clicked_data['content']}"</b>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.caption(f"> \"{clicked_data['content']}\"")
+        
+        with c2:
+            if st.button("📍 定位上下文", use_container_width=True):
+                st.toast("Time travel initiated...", icon="⏳")
 
+# ==========================================
+# 🧬 深度基因解码 (雷达图详情 + AI画像)
+# ==========================================
 @st.dialog("🧬 MSC 深度基因解码", width="large")
 def view_radar_details(radar_dict, username):
     c1, c2 = st.columns([1, 1])
