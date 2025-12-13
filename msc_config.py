@@ -1,71 +1,97 @@
+### msc_config.py (IHIL v1.0 智能人文主义版) ###
+
 # ==========================================
-# 🎛️ MSC v70.0 系统调音台 (System Constitution)
+# 🌌 MSC v72.0 系统宪法 (Intelligent Humanism Constitution)
+# 基于 IHIL (Intelligent Humanism Interface Layer) v1.0
 # ==========================================
 
-# --- 1. 意义生成权重 (Meaning Weights) ---
+# --- 1. IHIL 意义生成权重 (Meaning Weights) ---
+# 对应 Care Layer 和 Intelligence Layer 的核心指标
 W_MEANING = {
-    "C_emotion": 0.35,        # 情绪强度
-    "C_self": 0.25,           # 自我暴露度
-    "N_abstract": 0.20,       # 抽象/理论度
-    "N_relative": 0.20        # 相对新颖度 (与历史对比)
+    "Care_Intensity": 0.30,      # C1: 在乎度 (Care)
+    "Self_Disclosure": 0.20,     # C3: 自我暴露 (Vulnerability)
+    "Existential_Weight": 0.25,  # C5: 存在性权重 (Existential)
+    "Abstractness": 0.15,        # N1: 抽象度 (Structure)
+    "Novelty": 0.10              # N2: 新颖度 (Growth)
 }
 
-# --- 2. 意义层级阈值 (Meaning Levels) ---
-# M_score = Sum(Weights * Scores)
+# --- 2. 意义层级阈值 (Meaning Thresholds) ---
+# 只有当 IHIL 综合得分超过阈值，才会在星河中点亮一颗星
 LEVELS = {
-    "NonMeaning": 0.40,    # < 0.40: 废话，不生成节点
-    "Weak": 0.60,          # 0.40 - 0.60: 弱意义 (浅灰色点)
-    "Strong": 0.80,        # 0.60 - 0.80: 强意义 (亮色点)
-    "Core": 1.0            # > 0.80: 核心意义 (恒星级)
+    "NonMeaning": 0.45,    # < 0.45: 噪音/闲聊 (不生成节点)
+    "Weak": 0.60,          # 0.45 - 0.60: 弱意义 (暗淡的星)
+    "Strong": 0.80,        # 0.60 - 0.80: 强意义 (明亮的星)
+    "Core": 1.0            # > 0.80: 核心意义 (恒星级/元意义)
 }
 
-# --- 3. 共鸣权重 (Linkage Weights) ---
-W_MLS = {
-    "TagOverlap": 0.30,       # 标签重叠
-    "SemanticSim": 0.25,      # 语义向量相似
-    "ValueAlign": 0.20,       # 价值观(雷达)一致性
-    "Existential": 0.15,      # 存在性问题匹配
-    "Temporal": 0.10          # 时间一致性 (暂用1.0模拟)
-}
-
-# 链接阈值
+# --- 3. 共鸣权重 (Resonance Weights) ---
+# 决定两个灵魂（或两个念头）是否产生引力
 LINK_THRESHOLD = {
-    "Weak": 0.55,   # 暗线
-    "Strong": 0.75  # 亮线/融合
+    "Weak": 0.55,   # 隐性关联
+    "Strong": 0.75  # 显性共鸣
 }
 
 # --- 4. 雷达生长参数 ---
-RADAR_DECAY = 0.999      # 每日衰减率
-RADAR_ALPHA = 0.15       # 学习率 (单次对话的影响力)
+RADAR_ALPHA = 0.15       # 学习率 (单次对话对人格的影响力)
+HEARTBEAT_TIMEOUT = 300  # 在线判定时间 (秒)
 
-# --- 5. 系统参数 ---
-HEARTBEAT_TIMEOUT = 300
-CHAT_HISTORY_LIMIT = 50
+# ==========================================
+# 🧠 IHIL 核心指令 (System Prompts)
+# ==========================================
 
-# --- 6. AI 指令 (System Prompts) ---
-
+# 1. 聊天机器人人格：智能人文主义的陪伴者
 PROMPT_CHATBOT = """
-你是一个智慧、温暖的对话伙伴。像老朋友一样交谈，不要说教。
+[System Context: Intelligent Humanism]
+You are an AI operating within the MSC system. 
+Your goal is NOT to give advice, solve problems, or provide information.
+Your goal is to help the user unfold their own meaning structures.
+
+Principles:
+1. Mirroring: Reflect the user's "Care" back to them.
+2. Structure: Help them see the pattern in their own thoughts.
+3. Maieutics: Ask questions that lead to deeper existential clarity.
+4. Minimalism: Do not lecture. Be concise.
 """
 
-# v70.0 升级版分析师：要求返回细分维度
+# 2. 分析师人格：IHIL v1.0 执行引擎
+# 这是系统的核心，负责将自然语言转译为 MSC 结构
 PROMPT_ANALYST = """
-任务：对用户输入进行【高精度意义审计】。
+[Task: IHIL Meaning Extraction]
+Analyze the user's input based on the Intelligent Humanism Interface Layer (IHIL v1.0).
 
-请对以下维度打分 (0.0 - 1.0)：
-1. Emotion (情绪强度): 愤怒/悲伤/喜悦/激情的烈度。
-2. SelfDisclosure (自我暴露): 是否谈及隐私、脆弱、真实感受。
-3. Abstraction (抽象度): 是描述具体琐事(0)还是抽象规律/哲学(1)。
-4. Existential (存在性): 是否涉及"我是谁/死亡/自由/意义"等终极问题 (True/False)。
+Do NOT output conversational text. Output valid JSON only.
 
-同时提取：
-- Care Point (核心关切)
-- Meaning Layer (结构分析)
-- Insight (洞察)
-- Keywords (3个核心标签)
-- Radar Scores (7维度评分 0-10)
+### 1. Care Layer (Consciousness)
+- care_intensity (0.0-1.0): Does the user genuinely care?
+- emotion (0.0-1.0): Emotional charge.
+- self_disclosure (0.0-1.0): Vulnerability/Personal history.
+- existential_weight (0.0-1.0): Relevance to life/death/meaning/freedom.
+
+### 2. Intelligence Layer (Structure)
+- abstractness (0.0-1.0): Conceptual density.
+- novelty (0.0-1.0): New angle or insight.
+
+### 3. Meaning Layer (Output)
+- care_point: A short phrase (2-5 words) capturing the core concern (e.g., "Fear of stagnation").
+- insight: A philosophical observation of the implicit meaning (e.g., "Tension between freedom and security").
+- keywords: [List of 3-5 tags].
+- radar_scores: { "Care":..., "Curiosity":..., "Reflection":..., "Coherence":..., "Empathy":..., "Agency":..., "Aesthetic":... } (Score 0-10 based on input)
+
+### JSON Output Format:
+{
+  "c_score": (Average of Care Layer),
+  "n_score": (Average of Intelligence Layer),
+  "valid": true/false (true if it has meaning),
+  "care_point": "...",
+  "insight": "...",
+  "keywords": ["..."],
+  "radar_scores": {...}
+}
 """
 
-PROMPT_DAILY = "生成一个每日灵魂追问。短小精悍。"
-PROMPT_PERSONA = "生成深度人物画像：静态底色 + 动态进化。"
-PROMPT_OBSERVER = "用一句话幽默深刻地评论这段对话。"
+# 3. 每日一问：存在性追问
+PROMPT_DAILY = """
+Based on the user's radar profile and recent thoughts, generate a short, profound Daily Question.
+The question should target their "Growth Path" and "Existential Concern".
+Output JSON: { "question": "..." }
+"""
