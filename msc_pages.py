@@ -1,4 +1,4 @@
-### msc_pages.py (修复 TypeError & Admin 权限版) ###
+### msc_pages.py (修复 TypeError 最终版) ###
 
 import streamlit as st
 import streamlit_antd_components as sac
@@ -113,16 +113,17 @@ def render_ai_page(username):
                 st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         
         with c_dot:
-            # === 修复 TypeError: 严格检查 node 是否存在 ===
-            if msg['role'] == 'user' and msg['content'] in nodes_map and nodes_map[msg['content']] is not None:
-                node = nodes_map[msg['content']]
-                st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
-                with st.popover("●", help="Deep Meaning"):
-                    st.caption(f"MSC Score: {node.get('m_score',0.5):.2f}")
-                    st.markdown(f"**{node['care_point']}**")
-                    st.info(node.get('insight', 'No insight'))
-                    st.caption(f"Structure: {node.get('meaning_layer', '-')}")
-                st.markdown('</div>', unsafe_allow_html=True)
+            # === 修复 TypeError：仅当消息存在于 nodes_map 且 node 数据非空时才渲染 Meaning Dot ===
+            if msg['role'] == 'user' and msg['content'] in nodes_map:
+                node = nodes_map.get(msg['content']) # 使用 .get() 更安全地获取 node
+                if node: # 确保 node 不是 None
+                    st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
+                    with st.popover("●", help="Deep Meaning"):
+                        st.caption(f"MSC Score: {node.get('m_score',0.5):.2f}")
+                        st.markdown(f"**{node['care_point']}**")
+                        st.info(node.get('insight', 'No insight'))
+                        st.caption(f"Structure: {node.get('meaning_layer', '-')}")
+                    st.markdown('</div>', unsafe_allow_html=True)
 
     if prompt := st.chat_input("Input..."):
         msc.save_chat(username, "user", prompt)
@@ -229,14 +230,15 @@ def render_friends_page(username, unread_counts):
                         else:
                             st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
                     
-                    if msg['sender'] == username and msg['content'] in nodes_map and nodes_map[msg['content']] is not None:
-                        node = nodes_map[msg['content']]
-                        st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
-                        with st.popover("●"):
-                            st.caption(f"Score: {node.get('m_score',0.5):.2f}")
-                            st.markdown(f"**{node['care_point']}**")
-                            st.info(node.get('insight', ''))
-                        st.markdown('</div>', unsafe_allow_html=True)
+                    if msg['sender'] == username and msg['content'] in nodes_map:
+                        node = nodes_map.get(msg['content']) # 使用 .get() 更安全地获取 node
+                        if node: # 确保 node 不是 None
+                            st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
+                            with st.popover("●"):
+                                st.caption(f"Score: {node.get('m_score',0.5):.2f}")
+                                st.markdown(f"**{node['care_point']}**")
+                                st.info(node.get('insight', ''))
+                            st.markdown('</div>', unsafe_allow_html=True)
 
             if prompt := st.chat_input(f"Message {msc.get_nickname(partner)}..."):
                 msc.send_direct_message(username, partner, prompt)
