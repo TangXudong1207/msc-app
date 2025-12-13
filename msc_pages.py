@@ -175,7 +175,7 @@ def render_ai_page(username):
         time.sleep(0.5)
         st.rerun()
 # ==========================================
-# 💬 好友页面 (完整功能版)
+# 💬 好友页面 (已修复报错)
 # ==========================================
 def render_friends_page(username, unread_counts):
     try:
@@ -184,101 +184,65 @@ def render_friends_page(username, unread_counts):
     except: pass
     
     msc.update_heartbeat(username)
-
     col_list, col_chat = st.columns([0.25, 0.75])
     user_map = {}
 
     with col_list:
         st.markdown("### 💬")
         users = msc.get_all_users(username)
-        
         if users:
             menu_items = []
             for u in users:
                 user_map[u['nickname']] = u['username']
                 is_online = msc.check_is_online(u.get('last_seen'))
                 icon_name = "circle-fill" if is_online else "circle"
-                icon_color = "#4CAF50" if is_online else "#CCCCCC"
-                
                 unread = unread_counts.get(u['username'], 0)
-                tag_val = sac.Tag(str(unread), color='red', bordered=False) if unread > 0 else None
-                desc = "Online" if is_online else "Offline"
-
-                menu_items.append(sac.MenuItem(
-                    label=u['nickname'], 
-                    icon=sac.BsIcon(name=icon_name, color=icon_color),
-                    tag=tag_val,
-                    description=desc
-                ))
+                tag_val = sac.Tag(str(unread), color='red') if unread > 0 else None
+                menu_items.append(sac.MenuItem(label=u['nickname'], icon=sac.BsIcon(name=icon_name, color="#4CAF50"), tag=tag_val))
             
-            selected_nickname = sac.menu(
-                menu_items, 
-                index=0, 
-                format_func='title', 
-                size='md', 
-                variant='light',
-                indent=10,
-                open_all=True
-            )
-            
-            if selected_nickname and selected_nickname in user_map:
-                st.session_state.current_chat_partner = user_map[selected_nickname]
-        else:
-            st.caption("No citizens found.")
-
+            selected = sac.menu(menu_items, index=0, format_func='title', size='md', variant='light', open_all=True)
+            if selected and selected in user_map: st.session_state.current_chat_partner = user_map[selected]
+    
     with col_chat:
         partner = st.session_state.current_chat_partner
         if partner:
             msc.mark_messages_read(partner, username)
-            
-            header_col1, header_col2 = st.columns([0.9, 0.1])
-            with header_col1: 
-                st.markdown(f"#### {msc.get_nickname(partner)}")
-            with header_col2: 
-                if st.button("👁️", help="AI Insight"): 
-                    st.toast("DeepSeek is observing...", icon="🧠")
-
+            st.markdown(f"#### {msc.get_nickname(partner)}")
             history = msc.get_direct_messages(username, partner)
             my_nodes = msc.get_active_nodes_map(username)
 
-            with st.container(height=600, border=True):
-                if not history:
-                    st.caption("No messages yet. Say hi!")
-                
+            with st.container(height=500, border=True):
                 for msg in history:
                     c_msg, c_dot = st.columns([0.94, 0.06])
                     with c_msg:
-                        if msg['sender'] == 'AI':
-                            st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
-                        elif msg['sender'] == username:
-                            st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
+                        if msg['sender'] == 'AI': st.markdown(f"<div class='chat-bubble-ai'>🤖 {msg['content']}</div>", unsafe_allow_html=True)
+                        elif msg['sender'] == username: st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
+                        else: st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
                     
                     if msg['sender'] == username and msg['content'] in my_nodes:
                         node = my_nodes.get(msg['content'])
+                        # === 修复核心：好友页面也加上了安全检查 ===
                         if node:
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                             with st.popover("●"):
-                                st.caption(f"Score: {node.get('m_score',0.5):.2f}")
+                                try: score = float(node.get('m_score') or 0.5)
+                                except: score = 0.5
+                                st.caption(f"Score: {score:.2f}")
                                 st.markdown(f"**{node.get('care_point','')}**")
-                                st.info(node.get('insight', ''))
                             st.markdown('</div>', unsafe_allow_html=True)
 
-            if prompt := st.chat_input(f"Message {msc.get_nickname(partner)}..."):
+            if prompt := st.chat_input(f"Message..."):
                 msc.send_direct_message(username, partner, prompt)
-                
-                with st.spinner("Analyzing meaning..."):
+                with st.spinner("Analyzing..."):
                     analysis = msc.analyze_meaning_background(prompt)
                     if analysis.get("valid", False):
                         vec = msc.get_embedding(prompt)
                         msc.save_node(username, prompt, analysis, "私聊", vec)
-                        
                         match = msc.find_resonance(vec, username, analysis)
-                        if match: st.toast(f"Resonance with {match['user']}!", icon="⚡")
+                        if match: st.toast(f"Resonance!", icon="⚡")
                 st.rerun()
         else:
-            st.info("👈 Select a friend from the left to connect.")
+            st.info("👈 Select a friend.")
 
 # ==========================================
 # 🌍 世界页面 (完整功能版)
