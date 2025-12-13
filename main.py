@@ -130,7 +130,8 @@ else:
         all_nodes = msc.get_all_nodes_for_map(st.session_state.username)
         if st.button("🔭 Full View", use_container_width=True): 
             viz.view_fullscreen_map(all_nodes, st.session_state.nickname)
-
+ # 创世纪入口
+        msc_sim.render_god_console()
     if menu == 'Logout': st.session_state.logged_in = False; st.rerun()
     elif menu == 'AI Partner': pages.render_ai_page(st.session_state.username)
     elif menu == 'Chat': pages.render_friends_page(st.session_state.username, unread_counts)
