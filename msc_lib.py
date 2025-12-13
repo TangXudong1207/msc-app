@@ -1,4 +1,4 @@
-### msc_lib.py (本地向量版 - 星河点亮) ###
+### msc_lib.py (Vertex AI 增强版) ###
 
 import streamlit as st
 import numpy as np
@@ -7,35 +7,47 @@ import re
 import time
 from datetime import datetime, timezone
 from openai import OpenAI
-from sklearn.decomposition import PCA
+# === 新增：引入 Google Cloud 库 ===
+from google.oauth2 import service_account
+import vertexai
+from vertexai.language_models import TextEmbeddingModel
 import msc_config as config
 import msc_db as db
 
-# === 新增：引入本地向量库 ===
-# 使用 @st.cache_resource 确保模型只加载一次，不会拖慢速度
-from sentence_transformers import SentenceTransformer
-
-@st.cache_resource
-def load_embedding_model():
-    # 使用一个超轻量级的中文模型 (约 20MB)，下载飞快
-    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-
 # ==========================================
-# 🛑 1. 初始化系统
+# 🛑 1. 初始化系统 (双模组：OpenAI + Vertex)
 # ==========================================
 def init_system():
+    # 1. 初始化 OpenAI (用于对话和分析)
     try:
         client = OpenAI(
             api_key=st.secrets["API_KEY"],
             base_url=st.secrets["BASE_URL"]
         )
         model = st.secrets["MODEL_NAME"]
-        return client, model
-    except Exception as e:
-        print(f"系统初始化警告: {e}")
-        return None, "gpt-3.5-turbo"
+    except:
+        client = None; model = "gpt-3.5-turbo"
 
-client_ai, TARGET_MODEL = init_system()
+    # 2. 初始化 Vertex AI (用于向量 Embedding)
+    # 需要在 secrets.toml 里配置 [gcp_service_account]
+    vertex_model = None
+    try:
+        if "gcp_service_account" in st.secrets:
+            # 从 secrets 读取 JSON 内容并创建凭证
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            creds = service_account.Credentials.from_service_account_info(creds_dict)
+            
+            # 初始化 Vertex
+            vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
+            # 加载 Google 的 Gecko 模型 (专门做向量的)
+            vertex_model = TextEmbeddingModel.from_pretrained("text-embedding-004")
+            print("✅ Google Vertex AI Connected!")
+    except Exception as e:
+        print(f"⚠️ Vertex AI Init Failed: {e}")
+
+    return client, model, vertex_model
+
+client_ai, TARGET_MODEL, vertex_embed_model = init_system()
 
 # ==========================================
 # 🌉 2. 数据库桥梁
@@ -46,15 +58,13 @@ def get_nickname(username): return db.get_nickname(username)
 def get_user_profile(username): return db.get_user_profile(username)
 def get_all_users(current_user): return db.get_all_users(current_user)
 def update_heartbeat(username): db.update_heartbeat(username)
-
 def check_is_online(last_seen_str):
     if not last_seen_str: return False
     try:
         if last_seen_str.endswith('Z'): last_seen = datetime.fromisoformat(last_seen_str.replace('Z', '+00:00'))
         else: last_seen = datetime.fromisoformat(last_seen_str)
         if last_seen.tzinfo is None: last_seen = last_seen.replace(tzinfo=timezone.utc)
-        diff = datetime.now(timezone.utc) - last_seen
-        return diff.total_seconds() < config.HEARTBEAT_TIMEOUT
+        return (datetime.now(timezone.utc) - last_seen).total_seconds() < config.HEARTBEAT_TIMEOUT
     except: return False
 
 def calculate_rank(radar_data):
@@ -69,34 +79,35 @@ def calculate_rank(radar_data):
     elif total < 54: return "构建者", "💎"
     else: return "领航员", "👑"
 
-def save_chat(u, r, c): db.save_chat(u, r, c)
-def get_active_chats(u): return db.get_active_chats(u)
+def save_chat(username, role, content): db.save_chat(username, role, content)
+def get_active_chats(username): return db.get_active_chats(username)
 def get_direct_messages(u1, u2): return db.get_direct_messages(u1, u2)
-def send_direct_message(s, r, c): return db.send_direct_message(s, r, c)
-def get_unread_counts(c): return db.get_unread_counts(c)
-def mark_messages_read(s, r): db.mark_read(s, r)
-def save_node(u, c, d, m, v): db.save_node(u, c, d, m, v)
-def get_active_nodes_map(u): return db.get_active_nodes_map(u)
-def get_all_nodes_for_map(u): return db.get_all_nodes_for_map(u)
+def send_direct_message(sender, receiver, content): return db.send_direct_message(sender, receiver, content)
+def get_unread_counts(curr): return db.get_unread_counts(curr)
+def mark_messages_read(sender, receiver): db.mark_read(sender, receiver)
+def save_node(username, content, data, mode, vector): db.save_node(username, content, data, mode, vector)
+def get_active_nodes_map(username): return db.get_active_nodes_map(username)
+def get_all_nodes_for_map(username): return db.get_all_nodes_for_map(username)
 def get_global_nodes(): return db.get_global_nodes()
 
 # ==========================================
-# 🧮 3. 数学与向量算法 (升级版)
+# 🧮 3. 向量算法 (升级为 Vertex AI)
 # ==========================================
 def get_embedding(text):
     """
-    使用本地模型将文本转化为 384 维向量
-    这会让相似的意义在空间中真正靠近
+    获取文本向量。
+    优先使用 Google Vertex AI (Gecko)，如果失败则回退到随机数 (仅供测试)。
     """
-    try:
-        model = load_embedding_model()
-        # 转化为 list 方便 JSON 存储
-        vector = model.encode(text).tolist()
-        return vector
-    except Exception as e:
-        print(f"Embedding Error: {e}")
-        # 降级方案：如果模型加载失败，返回随机向量防止报错
-        return np.random.rand(384).tolist()
+    if vertex_embed_model:
+        try:
+            embeddings = vertex_embed_model.get_embeddings([text])
+            return embeddings[0].values
+        except Exception as e:
+            print(f"Embedding Error: {e}")
+    
+    # Fallback: 模拟向量 (1536维，兼容 OpenAI 格式) - 仅测试用！
+    # ⚠️ 注意：随机向量无法形成真正的聚类星云
+    return np.random.rand(768).tolist() # Gecko 通常是 768 维
 
 def cosine_similarity(v1, v2):
     if not v1 or not v2: return 0
@@ -106,7 +117,7 @@ def cosine_similarity(v1, v2):
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
 # ==========================================
-# 🧠 4. AI 智能核心 (IHIL v1.0)
+# 🧠 4. AI 智能核心 (分析与生成)
 # ==========================================
 def call_ai_api(prompt):
     if not client_ai: return {"error": "AI未连接"}
@@ -117,7 +128,9 @@ def call_ai_api(prompt):
                 {"role": "system", "content": "Output valid JSON only. No markdown."}, 
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7, stream=False, response_format={"type": "json_object"} 
+            temperature=0.7, 
+            stream=False, 
+            response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
         try:
@@ -134,50 +147,61 @@ def get_normal_response(history_messages):
         for msg in history_messages: 
             if msg['role'] in ['user', 'assistant']:
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
-        return client_ai.chat.completions.create(model=TARGET_MODEL, messages=api_messages, temperature=0.8, stream=True)
+        
+        return client_ai.chat.completions.create(
+            model=TARGET_MODEL, 
+            messages=api_messages, 
+            temperature=0.8, 
+            stream=True
+        )
     except Exception as e: return f"Error: {e}"
 
 def analyze_meaning_background(text):
-    # 使用 IHIL v1.0 分析
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
     res = call_ai_api(prompt)
+    
+    # 简单的 M-Score 计算 (未来可替换为复杂的 IHIL 逻辑)
     if res.get("valid", False) or res.get("c_score", 0) > 0:
-        c = res.get('c_score', 0); n = res.get('n_score', 0)
+        c = res.get('c_score', 0)
+        n = res.get('n_score', 0)
         if n == 0: n = 0.5 
         m = c * n * 2
         res['m_score'] = m
         if m < config.LEVELS["Weak"]: res["valid"] = False
         else: res["valid"] = True
+    
     return res
 
 def generate_daily_question(username, radar_data):
     try:
         recent = db.get_all_nodes_for_map(username)
         ctx = ""
-        if recent: ctx = f"关注点：{[n['care_point'] for n in recent[-3:]]}"
+        if recent: 
+            last_3 = recent[-3:]
+            ctx = f"关注点：{[n['care_point'] for n in last_3]}"
     except: ctx = ""
+
     radar_str = json.dumps(radar_data, ensure_ascii=False) if isinstance(radar_data, dict) else str(radar_data)
     prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。{ctx}。输出 JSON: {{ 'question': '...' }}"
     res = call_ai_api(prompt)
     return res.get("question", "今天，什么事情让你感到'活着'？")
 
-def analyze_persona_report(radar_data):
-    radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"基于MSC系统的7维雷达数据：{radar_str}。生成JSON报告：{{ 'status_quo': '心理学视角描述现状', 'growth_path': '预测思想进化方向' }}"
-    return call_ai_api(prompt)
-
 def update_radar_score(username, input_scores):
     try:
         user_data = db.get_user_profile(username)
         current = user_data.get('radar_profile')
-        if not current: current = {k: 3.0 for k in input_scores.keys()}
-        elif isinstance(current, str): current = json.loads(current)
+        if not current: 
+            current = {k: 3.0 for k in input_scores.keys()}
+        elif isinstance(current, str): 
+            current = json.loads(current)
+        
         updated = {}
         alpha = config.RADAR_ALPHA
         for k, v in input_scores.items():
             old_val = float(current.get(k, 3.0))
             new_val = float(v)
             updated[k] = round(old_val * (1-alpha) + new_val * alpha, 2)
+            
         db.update_radar_score(username, json.dumps(updated))
     except: pass
     
@@ -185,6 +209,7 @@ def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     others = db.get_global_nodes()
     if not others: return None
+    
     best_match, highest_score = None, 0
     for row in others:
         if row['username'] == current_user: continue
@@ -192,23 +217,24 @@ def find_resonance(current_vector, current_user, current_data):
             try:
                 o_vec = json.loads(row['vector'])
                 score = cosine_similarity(current_vector, o_vec)
+                
                 if score > config.LINK_THRESHOLD["Strong"] and score > highest_score:
                     highest_score = score
-                    best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+                    best_match = {
+                        "user": row['username'], 
+                        "content": row['content'], 
+                        "score": round(score * 100, 1)
+                    }
             except: continue
     return best_match
-# === 新增：考古功能 (根据节点找回原始对话) ===
-def get_node_context(username, node_content):
+    
+# === 新增：Persona Report ===
+def analyze_persona_report(radar_data):
+    radar_str = json.dumps(radar_data, ensure_ascii=False)
+    prompt = f"""
+    基于MSC系统的7维雷达数据：{radar_str}
+    请生成一份简短深刻的用户画像报告，必须包含以下两个字段的JSON：
+    1. "status_quo" (现状): 用心理学/哲学视角描述用户当前的精神底色。
+    2. "growth_path" (成长): 基于当前维度的短板或优势，预测用户可能的思想进化方向。
     """
-    通过节点内容，反向查找原始的聊天记录和时间
-    """
-    # 这里我们用直接查询的方式 (简单版)
-    # 逻辑：在 chats 表里找 content 匹配的记录
-    # 注意：这需要 db 层支持，我们这里先模拟由 supabase 直接查，或者复用 get_active_chats
-    try:
-        all_chats = db.get_active_chats(username)
-        for chat in all_chats:
-            if chat['content'] == node_content:
-                return chat
-        return None
-    except: return None
+    return call_ai_api(prompt)
