@@ -5,6 +5,7 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
+import msc_sim  # 引入创世纪引擎
 
 # ==========================================
 # 🎨 CSS：极简科技风 (v72.0 柔和版)
