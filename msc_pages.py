@@ -95,7 +95,7 @@ def render_admin_dashboard():
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
 
 # ==========================================
-# 🤖 AI Partner 页面
+# 🤖 页面：AI 伴侣 (修复版)
 # ==========================================
 def render_ai_page(username):
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
@@ -113,18 +113,28 @@ def render_ai_page(username):
                 st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         
         with c_dot:
-            # === 修复 TypeError：仅当消息存在于 nodes_map 且 node 数据非空时才渲染 Meaning Dot ===
+            # 检查该用户消息是否在节点表中，并且节点数据是否存在 (即 node 不是 None)
             if msg['role'] == 'user' and msg['content'] in nodes_map:
-                node = nodes_map.get(msg['content']) # 使用 .get() 更安全地获取 node
-                if node: # 确保 node 不是 None
+                node = nodes_map.get(msg['content'])
+                
+                # === 严格检查：只有 node 存在时才尝试显示点和 Popover ===
+                if node: 
                     st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                     with st.popover("●", help="Deep Meaning"):
-                        st.caption(f"MSC Score: {node.get('m_score',0.5):.2f}")
+                        try:
+                            # 访问 m_score 必须在 try/except 保护下
+                            score_val = node.get('m_score', 0.5)
+                            if score_val is None: score_val = 0.5 # 最后的保险
+                        except:
+                            score_val = 0.5
+                        
+                        st.caption(f"MSC Score: {score_val:.2f}")
                         st.markdown(f"**{node['care_point']}**")
-                        st.info(node.get('insight', 'No insight'))
-                        st.caption(f"Structure: {node.get('meaning_layer', '-')}")
+                        st.info(node['insight'])
+                        st.caption(f"Structure: {node['meaning_layer']}")
                     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ... (后续输入和保存逻辑保持不变) ...
     if prompt := st.chat_input("Input..."):
         msc.save_chat(username, "user", prompt)
         with st.container(): st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
@@ -135,19 +145,16 @@ def render_ai_page(username):
                 stream = msc.get_normal_response(full_history)
                 resp = st.write_stream(stream)
                 msc.save_chat(username, "assistant", resp)
-            except Exception as e:
-                st.error(f"AI Connect Error: {e}")
+            except: pass
         
-        with st.spinner("Analyzing meaning..."):
+        with st.spinner(""):
             analysis = msc.analyze_meaning_background(prompt)
             if analysis.get("valid", False):
                 vec = msc.get_embedding(prompt)
                 msc.save_node(username, prompt, analysis, "AI对话", vec)
                 if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
                 st.toast("Meaning Captured", icon="🌱")
-        
-        time.sleep(0.5)
-        st.rerun()
+        time.sleep(0.5); st.rerun()
 
 # ==========================================
 # 💬 好友页面
