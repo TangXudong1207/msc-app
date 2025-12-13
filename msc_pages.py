@@ -94,7 +94,7 @@ def render_admin_dashboard():
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
 
 # ==========================================
-# 🤖 AI Partner (修复版)
+# 🤖 页面：AI 伴侣 (防弹版)
 # ==========================================
 def render_ai_page(username):
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
@@ -112,14 +112,34 @@ def render_ai_page(username):
                 st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         
         with c_dot:
+            # 只有当消息对应有节点数据时才显示
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map.get(msg['content'])
+                
+                # === 修复核心：绝对安全的数值处理 ===
                 if node:
                     st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                     with st.popover("●", help="Deep Meaning"):
-                        st.caption(f"Score: {node.get('m_score',0.5):.2f}")
-                        st.markdown(f"**{node.get('care_point','')}**")
-                        st.info(node.get('insight', 'No insight'))
+                        # 1. 尝试获取分数
+                        raw_score = node.get('m_score')
+                        
+                        # 2. 强制类型转换，如果是 None 或非数字，直接给默认值
+                        try:
+                            score_val = float(raw_score)
+                        except (TypeError, ValueError):
+                            score_val = 0.5
+                        
+                        # 3. 安全格式化
+                        st.caption(f"MSC Score: {score_val:.2f}")
+                        
+                        # 4. 其他信息
+                        care_point = node.get('care_point') or "Unknown"
+                        insight = node.get('insight') or "No insight generated"
+                        layer = node.get('meaning_layer') or "-"
+                        
+                        st.markdown(f"**{care_point}**")
+                        st.info(insight)
+                        st.caption(f"Structure: {layer}")
                     st.markdown('</div>', unsafe_allow_html=True)
 
     if prompt := st.chat_input("Input..."):
@@ -128,10 +148,21 @@ def render_ai_page(username):
         
         full_history = chat_history + [{'role':'user', 'content':prompt}]
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                response_text = msc.get_normal_response(full_history)
-                st.write(response_text)
-                msc.save_chat(username, "assistant", response_text)
+            try:
+                # 非流式调用
+                stream = msc.get_normal_response(full_history)
+                # 检查是否为字符串错误
+                if isinstance(stream, str) and stream.startswith(("⚠️", "❌")):
+                    st.error(stream)
+                    resp = stream
+                else:
+                    # 如果是普通字符串，直接显示
+                    st.write(stream)
+                    resp = stream
+                
+                msc.save_chat(username, "assistant", resp)
+            except Exception as e:
+                st.error(f"AI Error: {e}")
         
         with st.spinner("Analyzing..."):
             analysis = msc.analyze_meaning_background(prompt)
@@ -143,7 +174,6 @@ def render_ai_page(username):
         
         time.sleep(0.5)
         st.rerun()
-
 # ==========================================
 # 💬 好友页面 (完整功能版)
 # ==========================================
