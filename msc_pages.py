@@ -143,7 +143,20 @@ def render_ai_page(username):
         with st.chat_message("assistant"):
             try:
                 stream = msc.get_normal_response(full_history)
-                resp = st.write_stream(stream)
+                
+                # 检查 stream 是否是字符串（即错误信息）
+                if isinstance(stream, str):
+                    resp = f"Error: {stream}"
+                    st.error(resp)
+                else:
+                    resp = st.write_stream(stream)
+                    
+                msc.save_chat(username, "assistant", resp)
+                
+            except Exception as e: 
+                # 捕获其他可能的错误
+                st.error(f"AI Stream Error: {e}")
+                resp = f"AI Stream Error: {e}"
                 msc.save_chat(username, "assistant", resp)
             except: pass
         
