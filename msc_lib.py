@@ -197,3 +197,18 @@ def find_resonance(current_vector, current_user, current_data):
                     best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
             except: continue
     return best_match
+# === 新增：考古功能 (根据节点找回原始对话) ===
+def get_node_context(username, node_content):
+    """
+    通过节点内容，反向查找原始的聊天记录和时间
+    """
+    # 这里我们用直接查询的方式 (简单版)
+    # 逻辑：在 chats 表里找 content 匹配的记录
+    # 注意：这需要 db 层支持，我们这里先模拟由 supabase 直接查，或者复用 get_active_chats
+    try:
+        all_chats = db.get_active_chats(username)
+        for chat in all_chats:
+            if chat['content'] == node_content:
+                return chat
+        return None
+    except: return None
