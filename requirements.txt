@@ -10,3 +10,4 @@ pandas
 networkx
 streamlit-antd-components
 streamlit-autorefresh
+sentence-transformers
