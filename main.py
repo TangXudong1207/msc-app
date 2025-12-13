@@ -68,7 +68,7 @@ else:
         if st.button("🧬 Deep Profile", use_container_width=True):
             viz.view_radar_details(radar_dict, st.session_state.nickname)
         
-        # === 动态构建菜单 ===
+         # === 动态构建菜单 ===
         menu_items = [
             sac.MenuItem('AI Partner', icon='robot'),
             sac.MenuItem('Chat', icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
@@ -77,7 +77,8 @@ else:
         
         # 👑 只有管理员能看到 God Mode
         if st.session_state.is_admin:
-            menu_items.append(sac.MenuItem('God Mode', icon='eye-fill', type='group'))
+            # === 修复点：去掉了 type='group'，现在它是可点击的按钮了 ===
+            menu_items.append(sac.MenuItem('God Mode', icon='eye-fill'))
         
         menu_items.append(sac.MenuItem('System', type='group', children=[sac.MenuItem('Logout', icon='box-arrow-right')]))
 
