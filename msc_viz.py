@@ -1,4 +1,4 @@
-### msc_viz.py (完整版：含3D粒子地球) ###
+### msc_viz.py (修复版：含粒子地图) ###
 
 import streamlit as st
 import plotly.express as px
@@ -23,68 +23,14 @@ def get_cluster_color(cluster_id):
     return CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
 
 # ==========================================
-# 🧠 核心算法：聚类 (带清洗)
-# ==========================================
-def compute_clusters(nodes, n_clusters=5):
-    raw_vectors = []
-    raw_meta = []
-    
-    for node in nodes:
-        if node['vector']:
-            try:
-                v = json.loads(node['vector'])
-                if isinstance(v, list) and len(v) > 0:
-                    raw_vectors.append(v)
-                    raw_meta.append({
-                        "care_point": node['care_point'],
-                        "insight": node.get('insight', ''),
-                        "id": str(node['id'])
-                    })
-            except: pass
-    
-    if not raw_vectors: return pd.DataFrame()
-
-    # 清洗：只保留众数长度的向量
-    lengths = [len(v) for v in raw_vectors]
-    if not lengths: return pd.DataFrame()
-    from collections import Counter
-    target_len = Counter(lengths).most_common(1)[0][0]
-    
-    clean_vectors, clean_meta = [], []
-    for i, v in enumerate(raw_vectors):
-        if len(v) == target_len:
-            clean_vectors.append(v)
-            clean_meta.append(raw_meta[i])
-            
-    if len(clean_vectors) < 2: return pd.DataFrame()
-
-    real_n_clusters = min(n_clusters, len(clean_vectors))
-    try:
-        kmeans = KMeans(n_clusters=real_n_clusters, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(clean_vectors)
-        pca = PCA(n_components=3)
-        coords_3d = pca.fit_transform(clean_vectors)
-
-        df = pd.DataFrame(clean_meta)
-        df['cluster'] = labels
-        df['color'] = [get_cluster_color(l) for l in labels]
-        df['x'] = coords_3d[:, 0]
-        df['y'] = coords_3d[:, 1]
-        df['z'] = coords_3d[:, 2]
-        return df
-    except Exception as e:
-        print(f"Cluster Error: {e}")
-        return pd.DataFrame()
-
-# ==========================================
-# 🌍 3D 粒子地球 (Real-World Particle Map)
+# 🌍 3D 粒子地球 (核心函数：必须存在！)
 # ==========================================
 def render_3d_particle_map(nodes):
     """
     使用 Plotly 3D Scatter 渲染地球上的发光粒子
     """
     if not nodes: 
-        st.info("No data points yet.")
+        st.info("No geospatial signals detected yet.")
         return
 
     lats, lons, texts, colors, sizes = [], [], [], [], []
@@ -186,7 +132,60 @@ def render_3d_particle_map(nodes):
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 🌌 3D 星河 (Abstract Galaxy)
+# 聚类计算 (辅助)
+# ==========================================
+def compute_clusters(nodes, n_clusters=5):
+    raw_vectors = []
+    raw_meta = []
+    
+    for node in nodes:
+        if node['vector']:
+            try:
+                v = json.loads(node['vector'])
+                if isinstance(v, list) and len(v) > 0:
+                    raw_vectors.append(v)
+                    raw_meta.append({
+                        "care_point": node['care_point'],
+                        "insight": node.get('insight', ''),
+                        "id": str(node['id'])
+                    })
+            except: pass
+    
+    if not raw_vectors: return pd.DataFrame()
+
+    lengths = [len(v) for v in raw_vectors]
+    if not lengths: return pd.DataFrame()
+    from collections import Counter
+    target_len = Counter(lengths).most_common(1)[0][0]
+    
+    clean_vectors, clean_meta = [], []
+    for i, v in enumerate(raw_vectors):
+        if len(v) == target_len:
+            clean_vectors.append(v)
+            clean_meta.append(raw_meta[i])
+            
+    if len(clean_vectors) < 2: return pd.DataFrame()
+
+    real_n_clusters = min(n_clusters, len(clean_vectors))
+    try:
+        kmeans = KMeans(n_clusters=real_n_clusters, random_state=42, n_init=10)
+        labels = kmeans.fit_predict(clean_vectors)
+        pca = PCA(n_components=3)
+        coords_3d = pca.fit_transform(clean_vectors)
+
+        df = pd.DataFrame(clean_meta)
+        df['cluster'] = labels
+        df['color'] = [get_cluster_color(l) for l in labels]
+        df['x'] = coords_3d[:, 0]
+        df['y'] = coords_3d[:, 1]
+        df['z'] = coords_3d[:, 2]
+        return df
+    except Exception as e:
+        print(f"Cluster Error: {e}")
+        return pd.DataFrame()
+
+# ==========================================
+# 🌌 3D 星河
 # ==========================================
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: 
@@ -196,22 +195,12 @@ def render_3d_galaxy(nodes):
     if df.empty: return
     
     df['size'] = 6
-    fig = px.scatter_3d(
-        df, x='x', y='y', z='z', 
-        color='cluster', 
-        color_continuous_scale=CLUSTER_COLORS, 
-        hover_name='care_point', 
-        template="plotly_dark", 
-        opacity=0.9
-    )
-    fig.update_layout(
-        scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), 
-        paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False
-    )
+    fig = px.scatter_3d(df, x='x', y='y', z='z', color='cluster', color_continuous_scale=CLUSTER_COLORS, hover_name='care_point', template="plotly_dark", opacity=0.9)
+    fig.update_layout(scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 🕸️ 雷达图 (Echarts)
+# 🕸️ 雷达图
 # ==========================================
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
@@ -220,7 +209,7 @@ def render_radar_chart(radar_dict, height="200px"):
     st_echarts(options=option, height=height)
 
 # ==========================================
-# 🔮 赛博朋克关系图 (Echarts)
+# 🔮 赛博朋克关系图
 # ==========================================
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return
@@ -260,7 +249,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
             "itemStyle": {"color": node_color}
         })
 
-    # 连线逻辑
     node_count = len(graph_nodes)
     start_idx = max(0, node_count - 50)
     for i in range(start_idx, node_count):
