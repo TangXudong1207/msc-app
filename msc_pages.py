@@ -92,19 +92,23 @@ def render_admin_dashboard():
                     for log in logs: st.write(log)
 
     with c2:
-        st.markdown("### 🌌 Real-time Galaxy")
-        viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
-    st.caption("Time Control")
-        # === 新增：时间流逝按钮 ===
+        st.markdown("### 🌍 World Pulse (RSS)")
+        
+        # 1. 扫描按钮
+        if st.button("📡 Scan Global Tensions", use_container_width=True, type="primary"):
+            # ... (原有的扫描逻辑) ...
+            pass 
+
+        # === 2. 新增：时间流逝按钮 ===
         if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True):
-            with st.spinner("Time is passing..."):
-                # 调用 db 里的新函数
-                # 注意：需要在 msc_lib 里做一个转发，或者直接在这里 import msc_db
-                # 为了规范，建议在 msc_lib 里加一个 process_time_decay
-                count = msc.process_time_decay() # 需在 lib 里补这个桥梁
-                st.success(f"{count} nodes have sedimented into history.")
-                time.sleep(1)
-                st.rerun()
+            with st.spinner("Time is passing... History is being written..."):
+                count = msc.process_time_decay()
+                if count > 0:
+                    st.success(f"{count} tensions have cooled down and become history.")
+                    time.sleep(1)
+                    st.rerun() # 刷新看效果
+                else:
+                    st.info("No tensions are old enough to sediment yet.")
 
 # ==========================================
 # 🤖 AI Partner
