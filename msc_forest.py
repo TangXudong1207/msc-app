@@ -1,4 +1,4 @@
-### msc_forest.py ###
+### msc_forest.py (稳定修复版) ###
 
 import streamlit as st
 from streamlit_echarts import st_echarts
@@ -18,35 +18,63 @@ def generate_heightmap(radar_dict, size=20):
             z = rng.uniform(0, 2)
             dist = ((x - size/2)**2 + (y - size/2)**2) ** 0.5
             
-            if dist < size/2: z += (agency / 2.0) * (1 - dist/(size/2))
+            if dist < size/2:
+                z += (agency / 2.0) * (1 - dist/(size/2))
+            
             z = z * (0.5 + coherence/20.0)
-            if z < (empathy / 2.5): z = -1 * (empathy / 5.0) 
+            
+            if z < (empathy / 2.5):
+                z = -1 * (empathy / 5.0) 
             
             data.append([x, y, round(z, 2)])
+            
     return data
 
 def render_forest_scene(radar_dict):
     st.markdown("### 🏔️ Mind Topography")
+    
     data = generate_heightmap(radar_dict, size=16)
     
     option = {
         "backgroundColor": "transparent",
+        "tooltip": {},
+        # === 修复核心：使用 VisualMap 替代 JsCode ===
         "visualMap": {
-            "show": False, "dimension": 2, "min": -5, "max": 10,
-            "inRange": {"color": ['#0d47a1', '#2196f3', '#c8e6c9', '#2e7d32', '#5d4037', '#eceff1']}
+            "show": False,
+            "dimension": 2, # 根据 Z 轴高度上色
+            "min": -5,
+            "max": 10,
+            "inRange": {
+                # 深海蓝 -> 浅蓝 -> 平原绿 -> 森林深绿 -> 岩石褐 -> 雪山白
+                "color": ['#0d47a1', '#2196f3', '#c8e6c9', '#2e7d32', '#5d4037', '#eceff1']
+            }
         },
         "xAxis3D": {"type": 'category', "show": False},
         "yAxis3D": {"type": 'category', "show": False},
         "zAxis3D": {"type": 'value', "show": False},
         "grid3D": {
-            "boxHeight": 80,
-            "viewControl": {"autoRotate": True, "alpha": 45, "beta": 30},
-            "light": {"main": {"intensity": 1.2, "shadow": True}, "ambient": {"intensity": 0.3}}
+            "boxWidth": 200, "boxDepth": 200, "boxHeight": 80,
+            "viewControl": {
+                "projection": 'orthographic',
+                "autoRotate": True,
+                "alpha": 45,
+                "beta": 30
+            },
+            "light": {
+                "main": {"intensity": 1.2, "shadow": True},
+                "ambient": {"intensity": 0.3}
+            }
         },
-        "series": [{"type": 'bar3D', "data": data, "shading": 'lambert'}]
+        "series": [{
+            "type": 'bar3D',
+            "data": data,
+            "shading": 'lambert',
+            "label": {"show": False}
+        }]
     }
     
     st_echarts(options=option, height="350px")
+    
     avg = sum(radar_dict.values()) / 7
     status = "Stable" if avg > 5 else "Unstable"
-    st.caption(f"Terrain Status: **{status}**")
+    st.caption(f"Terrain Status: **{status}** | Grid: 16x16")
