@@ -1,7 +1,7 @@
-### msc_forest.py (ECharts 3D 修复版) ###
+### msc_forest.py (ECharts 3D 纯净版：修复 JSON 序列化错误) ###
 
 import streamlit as st
-from streamlit_echarts import st_echarts, JsCode # <--- 关键修复：这里直接引用 JsCode
+from streamlit_echarts import st_echarts
 import random
 import numpy as np
 
@@ -14,7 +14,6 @@ def generate_heightmap(radar_dict, size=20):
     empathy = radar_dict.get("Empathy", 3.0)
     coherence = radar_dict.get("Coherence", 3.0)
     
-    # 随机种子保证地貌固定
     rng = np.random.default_rng(seed=int(sum(radar_dict.values()) * 100))
     
     for y in range(size):
@@ -22,14 +21,11 @@ def generate_heightmap(radar_dict, size=20):
             z = rng.uniform(0, 2)
             dist = ((x - size/2)**2 + (y - size/2)**2) ** 0.5
             
-            # Agency 造山
             if dist < size/2:
                 z += (agency / 2.0) * (1 - dist/(size/2))
             
-            # Coherence 平滑
             z = z * (0.5 + coherence/20.0)
             
-            # Empathy 造海
             if z < (empathy / 2.5):
                 z = -1 * (empathy / 5.0) 
             
@@ -38,35 +34,33 @@ def generate_heightmap(radar_dict, size=20):
     return data
 
 # ==========================================
-# 🎨 渲染器：3D Bar Chart
+# 🎨 渲染器：3D Bar Chart (VisualMap 版)
 # ==========================================
 def render_forest_scene(radar_dict):
     st.markdown("### 🏔️ Mind Topography")
     
     data = generate_heightmap(radar_dict, size=16)
     
-    # JS 颜色逻辑：根据高度上色
-    color_logic = """
-    function(params) {
-        var z = params.value[2];
-        if (z < 0) return '#0d47a1';       // 深海
-        if (z < 1) return '#2196f3';       // 浅海
-        if (z < 3) return '#c8e6c9';       // 平原
-        if (z < 5) return '#2e7d32';       // 森林
-        if (z < 7) return '#5d4037';       // 岩石
-        return '#eceff1';                  // 雪顶
-    }
-    """
-    
     option = {
         "backgroundColor": "transparent",
         "tooltip": {},
+        # === 修复点：使用 VisualMap 代替 JsCode ===
+        # 根据 Z 轴 (高度) 自动映射颜色，无需 JS 函数
         "visualMap": {
             "show": False,
+            "dimension": 2, # 绑定到 Z 轴
             "min": -5,
             "max": 10,
             "inRange": {
-                "color": ['#0d47a1', '#2196f3', '#c8e6c9', '#2e7d32', '#5d4037', '#eceff1']
+                # 这是一个从深海到雪山的渐变色带
+                "color": [
+                    '#0d47a1', # 深蓝 (深海)
+                    '#2196f3', # 浅蓝 (浅海)
+                    '#c8e6c9', # 浅绿 (平原)
+                    '#2e7d32', # 深绿 (森林)
+                    '#5d4037', # 褐色 (岩石)
+                    '#eceff1'  # 白色 (雪顶)
+                ]
             }
         },
         "xAxis3D": {"type": 'category', "show": False},
@@ -92,10 +86,8 @@ def render_forest_scene(radar_dict):
             "type": 'bar3D',
             "data": data,
             "shading": 'lambert',
-            "label": {"show": False},
-            "itemStyle": {
-                "color":  JsCode(color_logic) # 现在这里认识 JsCode 了
-            }
+            "label": {"show": False}
+            # itemStyle 里的 color: JsCode 已经被删除了
         }]
     }
     
