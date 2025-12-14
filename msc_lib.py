@@ -17,13 +17,11 @@ import msc_db as db
 # 🛑 1. 初始化
 # ==========================================
 def init_system():
-    # A. 思考 (DeepSeek)
     try:
         client = OpenAI(api_key=st.secrets["API_KEY"], base_url=st.secrets["BASE_URL"])
         model = st.secrets["MODEL_NAME"]
     except: client = None; model = "gpt-3.5-turbo"
 
-    # B. 记忆 (Vertex AI)
     vertex_model = None
     try:
         if "gcp_service_account" in st.secrets:
@@ -118,7 +116,6 @@ def analyze_meaning_background(text):
         res["valid"] = res['m_score'] >= config.LEVELS["Weak"]
     return res
 
-# === 新增：张力分析 ===
 def analyze_tension(text):
     prompt = f"{config.PROMPT_TENSION}\nContent: \"{text}\""
     return call_ai_api(prompt)
@@ -134,8 +131,20 @@ def update_radar_score(u, scores):
     except: pass
 
 def find_resonance(vec, u, d):
-    # (同前)
-    return None
+    if not vec: return None
+    others = db.get_global_nodes()
+    if not others: return None
+    best_match, highest_score = None, 0
+    for row in others:
+        if row['username'] == u: continue
+        if row['vector']:
+            try:
+                score = cosine_similarity(vec, json.loads(row['vector']))
+                if score > config.LINK_THRESHOLD["Strong"] and score > highest_score:
+                    highest_score = score
+                    best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+            except: continue
+    return best_match
 
 def analyze_persona_report(r):
     return call_ai_api(f"Persona Report for {json.dumps(r)} JSON: {{'status_quo':'...', 'growth_path':'...'}}")
