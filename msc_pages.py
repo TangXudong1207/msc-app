@@ -1,4 +1,4 @@
-### msc_pages.py (终极完整版：含时间沉淀按钮) ###
+### msc_pages.py (绝对完整版) ###
 
 import streamlit as st
 import streamlit_antd_components as sac
@@ -53,7 +53,7 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 👁️ 上帝视角 (Admin)
+# 👁️ 上帝视角控制台 (Admin Only)
 # ==========================================
 def render_admin_dashboard():
     st.markdown("## 👁️ God Mode: The Architect's View")
@@ -66,6 +66,7 @@ def render_admin_dashboard():
     k1.metric("Citizens", len(all_users))
     k2.metric("Nodes", len(global_nodes))
     k3.metric("Status", "Online", delta="Vertex AI")
+    
     st.divider()
     
     c1, c2 = st.columns([0.4, 0.6])
@@ -73,11 +74,11 @@ def render_admin_dashboard():
     with c1:
         st.markdown("### 🌍 World Pulse (RSS)")
         
-        # === 1. 扫描按钮 ===
+        # === 1. 扫描按钮 (带 key 防止冲突) ===
         if "news_logs" not in st.session_state:
             st.session_state.news_logs = []
 
-        if st.button("📡 Scan Global Tensions", use_container_width=True, type="primary"):
+        if st.button("📡 Scan Global Tensions", use_container_width=True, type="primary", key="btn_scan_news"):
             with st.status("Scanning global frequencies...", expanded=True) as status:
                 try:
                     new_logs = news.fetch_real_news(limit=2)
@@ -86,8 +87,8 @@ def render_admin_dashboard():
                 except Exception as e:
                     st.error(f"News Error: {e}")
         
-        # === 2. 时间流逝按钮 (新功能) ===
-        if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True):
+        # === 2. 时间流逝按钮 (带 key) ===
+        if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True, key="btn_advance_time"):
             with st.spinner("Time is passing... History is being written..."):
                 count = msc.process_time_decay()
                 if count > 0:
@@ -107,12 +108,14 @@ def render_admin_dashboard():
 
         st.markdown("### 🛠️ Genesis Engine")
         with st.container(border=True):
-            if st.button("👥 Summon Archetypes (Batch)", use_container_width=True):
+            # === 3. 造人按钮 (带 key) ===
+            if st.button("👥 Summon Archetypes (Batch)", use_container_width=True, key="btn_summon"):
                 n = sim.create_virtual_citizens()
                 if n == 0: st.warning("All archetypes already exist.")
                 else: st.success(f"Born: {n}")
                 
-            if st.button("💉 Inject Thoughts (Auto)", use_container_width=True):
+            # === 4. 注入思想按钮 (带 key) ===
+            if st.button("💉 Inject Thoughts (Auto)", use_container_width=True, key="btn_inject"):
                 with st.status("Simulating consciousness...", expanded=True) as status:
                     logs = sim.inject_thoughts(3)
                     for log in logs: st.write(log)
@@ -120,8 +123,12 @@ def render_admin_dashboard():
                     time.sleep(1)
                     st.rerun()
 
+        st.markdown("### 📊 Clusters")
+        st.info("Cluster 0: 🔴 High Emotion\n\nCluster 1: 🔵 Logic & Tech\n\nCluster 2: 🟢 Daily Life")
+
     with c2:
         st.markdown("### 🌌 Real-time Galaxy")
+        # 这里复用了 viz 里的地图渲染
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
 
 # ==========================================
@@ -143,13 +150,17 @@ def render_ai_page(username):
                 st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         
         with c_dot:
+            # === 修复核心：绝对安全的数值处理 ===
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map.get(msg['content'])
                 if node:
                     st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                     with st.popover("●", help="Deep Meaning"):
-                        try: score_val = float(node.get('m_score') or 0.5)
-                        except: score_val = 0.5
+                        # 安全获取分数
+                        try:
+                            score_val = float(node.get('m_score') or 0.5)
+                        except:
+                            score_val = 0.5
                         
                         st.caption(f"MSC Score: {score_val:.2f}")
                         st.markdown(f"**{node.get('care_point', 'Unknown')}**")
@@ -164,6 +175,7 @@ def render_ai_page(username):
         full_history = chat_history + [{'role':'user', 'content':prompt}]
         with st.chat_message("assistant"):
             try:
+                # 非流式调用，强制捕获错误
                 stream = msc.get_normal_response(full_history)
                 if isinstance(stream, str) and stream.startswith(("⚠️", "❌")):
                     st.error(stream)
