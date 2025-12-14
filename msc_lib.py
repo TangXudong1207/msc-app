@@ -228,3 +228,7 @@ def analyze_persona_report(radar_data):
     2. "growth_path" (成长): 基于当前维度的短板或优势，预测用户可能的思想进化方向。
     """
     return call_ai_api(prompt)
+# ... (文件末尾)
+
+def process_time_decay():
+    return db.process_time_decay()
