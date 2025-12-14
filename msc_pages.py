@@ -1,4 +1,4 @@
-## msc_pages.py (最终稳定版) ###
+### msc_pages.py (ABSOLUTE FULL VERSION) ###
 
 import streamlit as st
 import streamlit_antd_components as sac
@@ -95,8 +95,8 @@ def render_admin_dashboard():
                 st.rerun()
 
     with c2:
-        st.markdown("### 🌌 Beacon Map")
-        viz.render_3d_beacon_map(global_nodes)
+        st.markdown("### 🌌 Real-time Galaxy")
+        viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
 
 # ==========================================
 # 🤖 AI Partner 页面
@@ -113,6 +113,7 @@ def render_ai_page(username):
             if msg['role'] == 'user': st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
             else: st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
         with c_dot:
+            # === 防弹逻辑：确保节点存在 ===
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map.get(msg['content'])
                 if node:
@@ -129,7 +130,7 @@ def render_ai_page(username):
         msc.save_chat(username, "user", prompt)
         with st.container(): st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
-        # 非流式调用，强制捕获错误
+        # 非流式 AI 调用
         full_history = chat_history + [{'role':'user', 'content':prompt}]
         with st.chat_message("assistant"):
             try:
@@ -225,7 +226,4 @@ def render_friends_page(username, unread_counts):
 # ==========================================
 def render_world_page():
     st.caption("MSC GLOBAL VIEW: The Thought Beacons")
-    global_nodes = msc.get_global_nodes()
-    
-    # 既然要做光柱，我们就不分 Tab 了，直接展示最震撼的 3D 地图
-    viz.render_3d_beacon_map(global_nodes)
+    viz.render_3d_beacon_map(msc.get_global_nodes())
