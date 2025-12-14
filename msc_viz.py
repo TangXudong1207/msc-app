@@ -1,4 +1,4 @@
-### msc_viz.py (终极完整版：包含光柱、聚类与关系图) ###
+### msc_viz.py (ABSOLUTE FULL VERSION) ###
 
 import streamlit as st
 import pydeck as pdk
@@ -33,6 +33,7 @@ def compute_clusters(nodes, n_clusters=5):
         if node['vector']:
             try:
                 v = json.loads(node['vector'])
+                # 确保是列表且不为空
                 if isinstance(v, list) and len(v) > 0:
                     raw_vectors.append(v)
                     raw_meta.append({
@@ -95,12 +96,29 @@ def render_3d_beacon_map(nodes):
             keywords = str(node.get('keywords', ''))
             if 'Red' in keywords: color = [255, 50, 50]   # 红色冲突
             elif 'Green' in keywords: color = [50, 255, 50] # 绿色希望
-            else: color = [50, 100, 255] # 蓝色焦虑
+            else: color = [50, 100, 255] # 蓝色张力
             
-            # 模拟坐标
-            lat = np.random.uniform(20, 50)
-            lon = np.random.uniform(-120, 120)
-            weight = 50 
+            # 读取真实坐标
+            try:
+                # 兼容多种数据结构
+                if 'location' in node:
+                    # 如果 location 字段本身就是 JSON 字符串
+                    if isinstance(node['location'], str):
+                        loc = json.loads(node['location'])
+                        lat = loc['lat']; lon = loc['lon']
+                    # 如果 location 是字典
+                    elif isinstance(node['location'], dict):
+                        lat = node['location']['lat']; lon = node['location']['lon']
+                    # 如果是列表 (旧版)
+                    elif isinstance(node['location'], list):
+                        lat = node['location'][1]; lon = node['location'][0]
+                else:
+                    # 模拟坐标
+                    lat = np.random.uniform(20, 60); lon = np.random.uniform(-120, 120)
+            except: 
+                lat = 30; lon = 0
+            
+            weight = 80 # 新闻光柱很高
             
         # 2. 用户节点 (User Thought)
         else:
@@ -121,17 +139,18 @@ def render_3d_beacon_map(nodes):
 
     df = pd.DataFrame(map_data)
 
+    # PyDeck 图层配置
     # Layer 1: 六边形光柱
     layer_hex = pdk.Layer(
         "HexagonLayer", df,
         get_position=["lon", "lat"],
         auto_highlight=True,
-        elevation_scale=500,
+        elevation_scale=100,
         elevation_range=[0, 3000],
         extruded=True,
         coverage=0.8,
         get_fill_color="color",
-        pickable=True
+        pickable=True,
     )
     
     # Layer 2: 散点光晕
@@ -140,13 +159,12 @@ def render_3d_beacon_map(nodes):
         get_position=["lon", "lat"],
         get_color="color",
         get_radius=50000,
-        opacity=0.3,
-        stroked=True,
+        opacity=0.4,
         filled=True,
-        radius_min_pixels=2
+        stroked=False
     )
 
-    view_state = pdk.ViewState(latitude=30, longitude=0, zoom=1.5, pitch=45)
+    view_state = pdk.ViewState(latitude=30, longitude=0, zoom=1, pitch=45)
 
     deck = pdk.Deck(
         layers=[layer_hex, layer_scatter],
@@ -154,6 +172,7 @@ def render_3d_beacon_map(nodes):
         tooltip={"text": "{tooltip}"},
         map_style="mapbox://styles/mapbox/dark-v10"
     )
+    
     st.pydeck_chart(deck)
 
 # ==========================================
@@ -209,7 +228,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
 
     # 2. 连线逻辑 (标签优先)
     node_count = len(graph_nodes)
-    start_idx = max(0, node_count - 50) # 只显示最近50个节点的连线，防止卡顿
+    start_idx = max(0, node_count - 50) 
     
     for i in range(start_idx, node_count):
         for j in range(i + 1, node_count):
@@ -239,7 +258,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
 
     option = {"backgroundColor": "#0e1117", "tooltip": {"formatter": "{b}"}, "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 800 if is_fullscreen else 200, "gravity": 0.1, "edgeLength": 50}, "itemStyle": {"shadowBlur": 10}, "lineStyle": {"color": "source", "curveness": 0.2}}]}
     
-    # 交互点击事件
     events = {"click": "function(params) { return params.name }"}
     clicked_id = st_echarts(options=option, height=height, events=events, key=f"map_{height}")
     
@@ -283,7 +301,6 @@ def view_radar_details(radar_dict, username):
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
-    # 这里调用完整的 cyberpunk map
     clicked_data = render_cyberpunk_map(nodes, height="500px", is_fullscreen=True)
     if clicked_data:
         st.divider()
