@@ -5,7 +5,6 @@ import msc_lib as msc
 import random
 import time
 
-# 模拟热点
 HOTSPOTS = [
     {"loc": "Silicon Valley", "lat": 37.38, "lon": -122.08, "topic": "AI Consciousness"},
     {"loc": "Middle East", "lat": 31.04, "lon": 34.85, "topic": "Border Conflict"},
@@ -19,7 +18,6 @@ def fetch_and_digest_news():
     for spot in HOTSPOTS:
         raw_news = f"Breaking news from {spot['loc']} about {spot['topic']}..."
         
-        # 提取张力
         analysis = msc.analyze_tension(raw_news)
         
         if analysis and "tension_pair" in analysis:
@@ -38,7 +36,6 @@ def fetch_and_digest_news():
                 "location": {"lat": spot['lat'], "lon": spot['lon']}
             }
             
-            # 存入数据库
             vec = msc.get_embedding(content)
             msc.save_node("World_Observer", content, node_data, "News", vec)
             
