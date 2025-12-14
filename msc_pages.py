@@ -94,6 +94,17 @@ def render_admin_dashboard():
     with c2:
         st.markdown("### 🌌 Real-time Galaxy")
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
+    st.caption("Time Control")
+        # === 新增：时间流逝按钮 ===
+        if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True):
+            with st.spinner("Time is passing..."):
+                # 调用 db 里的新函数
+                # 注意：需要在 msc_lib 里做一个转发，或者直接在这里 import msc_db
+                # 为了规范，建议在 msc_lib 里加一个 process_time_decay
+                count = msc.process_time_decay() # 需在 lib 里补这个桥梁
+                st.success(f"{count} nodes have sedimented into history.")
+                time.sleep(1)
+                st.rerun()
 
 # ==========================================
 # 🤖 AI Partner
