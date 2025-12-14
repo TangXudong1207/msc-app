@@ -6,11 +6,11 @@
 
 # --- 1. IHIL 意义生成权重 ---
 W_MEANING = {
-    "Care_Intensity": 0.30,      # C1: 在乎度
-    "Self_Disclosure": 0.20,     # C3: 自我暴露
-    "Existential_Weight": 0.25,  # C5: 存在性权重
-    "Abstractness": 0.15,        # N1: 抽象度
-    "Novelty": 0.10              # N2: 新颖度
+    "Care_Intensity": 0.30,
+    "Self_Disclosure": 0.20,
+    "Existential_Weight": 0.25,
+    "Abstractness": 0.15,
+    "Novelty": 0.10
 }
 
 # --- 2. 阈值 ---
@@ -29,7 +29,7 @@ LINK_THRESHOLD = {
 # --- 3. 系统参数 ---
 RADAR_ALPHA = 0.15
 HEARTBEAT_TIMEOUT = 300
-USER_WEIGHT_MULTIPLIER = 100 # 用户思考权重放大倍数 (百里挑一)
+USER_WEIGHT_MULTIPLIER = 100 
 
 # ==========================================
 # 🧠 AI 指令集
