@@ -1,4 +1,4 @@
-### msc_main.py (最终整合版) ###
+### msc_main.py ###
 
 import streamlit as st
 import streamlit_antd_components as sac
@@ -6,29 +6,48 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
-import msc_forest as forest # === 新增引用 ===
-# 注意：这里不需要再显式 import msc_sim 了，因为 sim 逻辑封装在 pages 里了
+import msc_forest as forest # 引用森林
 
 # ==========================================
-# 🎨 CSS
+# 🎨 CSS：极简科技风
 # ==========================================
 def inject_custom_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        
         .stApp { background-color: #FFFFFF; font-family: 'Roboto', sans-serif; color: #222; }
         [data-testid="stSidebar"] { background-color: #FAFAFA; border-right: 1px solid #E0E0E0; }
-        .chat-bubble-me { background-color: #555555; color: #fff; padding: 12px 16px; border-radius: 18px; border-bottom-right-radius: 4px; margin-bottom: 8px; display: inline-block; float: right; clear: both; max-width: 85%; font-size: 15px; }
-        .chat-bubble-other { background-color: #F7F7F7; color: #333; padding: 12px 16px; border-radius: 18px; border-bottom-left-radius: 4px; margin-bottom: 8px; display: inline-block; float: left; clear: both; max-width: 85%; font-size: 15px; border: 1px solid #EAEAEA; }
+        
+        /* 聊天气泡 */
+        .chat-bubble-me {
+            background-color: #555555; color: #fff; padding: 12px 16px; border-radius: 18px; 
+            border-bottom-right-radius: 4px; margin-bottom: 8px; display: inline-block; 
+            float: right; clear: both; max-width: 85%; font-size: 15px; 
+        }
+        .chat-bubble-other {
+            background-color: #F7F7F7; color: #333; padding: 12px 16px; border-radius: 18px; 
+            border-bottom-left-radius: 4px; margin-bottom: 8px; display: inline-block; 
+            float: left; clear: both; max-width: 85%; font-size: 15px; border: 1px solid #EAEAEA;
+        }
+        .chat-bubble-ai {
+            background: transparent; color: #888; border: 1px dashed #ddd; 
+            padding: 8px 12px; border-radius: 12px; margin: 15px auto; 
+            text-align: center; font-size: 0.85em; width: fit-content; clear: both;
+        }
+        
+        .meaning-dot-btn { display: flex; align-items: center; justify-content: center; height: 100%; padding-top: 10px; }
+        .meaning-dot-btn button { border: none !important; background: transparent !important; color: #CCC !important; font-size: 18px !important; }
+        .meaning-dot-btn button:hover { color: #1A73E8 !important; transform: scale(1.2); }
+        
         .daily-card { border: 1px solid #eee; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px; background: #fff; }
         .daily-title { font-size: 10px; color: #999; letter-spacing: 1px; margin-bottom: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="MSC v72.0 Soft", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v73.0 Beacon", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
-# 初始化 Session State
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
@@ -42,7 +61,6 @@ else:
     msc.update_heartbeat(st.session_state.username)
     user_profile = msc.get_user_profile(st.session_state.username)
     
-    # 获取雷达数据
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
@@ -64,21 +82,20 @@ else:
             st.markdown(f"<div class='daily-card'><div class='daily-title'>DAILY</div>{st.session_state.daily_q}</div>", unsafe_allow_html=True)
             if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
 
-        # 雷达图与深度画像
-        forest.render_forest_scene(radar_dict) # 🌲 渲染森林！
+        # === 森林替代了雷达图 ===
+        forest.render_forest_scene(radar_dict)
         if st.button("🧬 Deep Profile", use_container_width=True):
-            viz.view_radar_details(radar_dict, st.session_state.nickname)
+            viz.view_radar_details(radar_dict, st.session_state.username)
         
-         # === 动态构建菜单 ===
+        # 菜单
         menu_items = [
             sac.MenuItem('AI Partner', icon='robot'),
             sac.MenuItem('Chat', icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
             sac.MenuItem('World', icon='globe'),
         ]
         
-        # 👑 只有管理员能看到 God Mode
+        # 管理员入口
         if st.session_state.is_admin:
-            # === 修复点：去掉了 type='group'，现在它是可点击的按钮了 ===
             menu_items.append(sac.MenuItem('God Mode', icon='eye-fill'))
         
         menu_items.append(sac.MenuItem('System', type='group', children=[sac.MenuItem('Logout', icon='box-arrow-right')]))
@@ -90,7 +107,6 @@ else:
         if st.button("🔭 Full View", use_container_width=True): 
             viz.view_fullscreen_map(all_nodes, st.session_state.nickname)
 
-    # === 页面路由 ===
     if menu == 'Logout': 
         st.session_state.logged_in = False
         st.session_state.is_admin = False
@@ -98,4 +114,4 @@ else:
     elif menu == 'AI Partner': pages.render_ai_page(st.session_state.username)
     elif menu == 'Chat': pages.render_friends_page(st.session_state.username, unread_counts)
     elif menu == 'World': pages.render_world_page()
-    elif menu == 'God Mode': pages.render_admin_dashboard() # 管理员专属页面
+    elif menu == 'God Mode': pages.render_admin_dashboard()
