@@ -51,6 +51,7 @@ def get_nickname(username): return db.get_nickname(username)
 def get_user_profile(username): return db.get_user_profile(username)
 def get_all_users(current_user): return db.get_all_users(current_user)
 def update_heartbeat(username): db.update_heartbeat(username)
+def process_time_decay(): return db.process_time_decay()
 def check_is_online(last_seen_str):
     if not last_seen_str: return False
     try:
