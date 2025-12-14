@@ -15,3 +15,6 @@ sentence-transformers
 google-cloud-aiplatform
 google-auth
 pydeck
+# === 新增 ===
+feedparser
+geopy
