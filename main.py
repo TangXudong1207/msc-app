@@ -6,6 +6,7 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
+import msc_forest as forest # === 新增引用 ===
 # 注意：这里不需要再显式 import msc_sim 了，因为 sim 逻辑封装在 pages 里了
 
 # ==========================================
@@ -64,7 +65,7 @@ else:
             if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
 
         # 雷达图与深度画像
-        viz.render_radar_chart(radar_dict, height="180px")
+        forest.render_forest_scene(radar_dict) # 🌲 渲染森林！
         if st.button("🧬 Deep Profile", use_container_width=True):
             viz.view_radar_details(radar_dict, st.session_state.nickname)
         
