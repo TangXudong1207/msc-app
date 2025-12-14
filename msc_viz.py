@@ -1,4 +1,4 @@
-### msc_viz.py (修复版：含粒子地图) ###
+### msc_viz.py (完整视觉引擎) ###
 
 import streamlit as st
 import plotly.express as px
@@ -23,126 +23,13 @@ def get_cluster_color(cluster_id):
     return CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
 
 # ==========================================
-# 🌍 3D 粒子地球 (双层宇宙版：沉积 vs 活跃)
-# ==========================================
-def render_3d_particle_map(nodes):
-    if not nodes: 
-        st.info("No data points yet.")
-        return
-
-    # 分离活跃节点和沉积节点
-    active_lats, active_lons, active_texts, active_colors, active_sizes = [], [], [], [], []
-    sediment_lats, sediment_lons, sediment_colors = [], [], []
-    
-    for node in nodes:
-        # 提取坐标
-        loc = None
-        try:
-            if isinstance(node.get('location'), str): loc = json.loads(node['location'])
-            elif isinstance(node.get('location'), dict): loc = node['location']
-        except: pass
-        
-        if not loc and node['username'] == 'World_Observer':
-             # 兜底坐标
-             loc = {'lat': np.random.uniform(-40, 60), 'lon': np.random.uniform(-150, 150)}
-        
-        if loc:
-            # 判断生死
-            # 如果 mode 是 'Sediment'，放入地下层
-            if node.get('mode') == 'Sediment':
-                sediment_lats.append(loc.get('lat', 0))
-                sediment_lons.append(loc.get('lon', 0))
-                
-                # 沉积物的颜色要暗淡
-                k = str(node.get('keywords', ''))
-                if 'Red' in k: c = '#550000' # 暗红
-                elif 'Green' in k: c = '#003300' # 暗绿
-                else: c = '#002244' # 暗蓝
-                sediment_colors.append(c)
-                
-            # 否则是活跃层
-            else:
-                active_lats.append(loc.get('lat', 0))
-                active_lons.append(loc.get('lon', 0))
-                active_texts.append(f"<b>{node['care_point']}</b><br>{node.get('insight','')}")
-                
-                k = str(node.get('keywords', ''))
-                if 'Red' in k: c = '#ff2b2b'
-                elif 'Green' in k: c = '#00ff88'
-                else: c = '#00ccff'
-                active_colors.append(c)
-                active_sizes.append(np.random.randint(10, 20)) # 活跃点很大
-
-    fig = go.Figure()
-
-    # 1. 绘制地球基底
-    fig.add_trace(go.Scattergeo(
-        lon=[], lat=[], mode='lines', line=dict(width=1, color='#222'),
-    ))
-
-    # 2. 绘制沉积层 (地质纹理) - 数量多，颜色暗，点小
-    if sediment_lats:
-        fig.add_trace(go.Scattergeo(
-            lon=sediment_lons, lat=sediment_lats,
-            mode='markers',
-            marker=dict(
-                size=4, # 很小
-                color=sediment_colors,
-                opacity=0.6,
-                symbol='square' # 用方块表示地砖
-            ),
-            hoverinfo='skip', # 沉淀物不交互
-            name='History Layer'
-        ))
-
-    # 3. 绘制活跃层 (发光粒子) - 悬浮，亮
-    if active_lats:
-        fig.add_trace(go.Scattergeo(
-            lon=active_lons, lat=active_lats,
-            mode='markers',
-            text=active_texts,
-            hoverinfo='text',
-            marker=dict(
-                size=active_sizes,
-                color=active_colors,
-                opacity=1.0,
-                line=dict(width=2, color='white')
-            ),
-            name='Active Pulse'
-        ))
-        
-        # 光晕
-        fig.add_trace(go.Scattergeo(
-            lon=active_lons, lat=active_lats,
-            mode='markers',
-            marker=dict(
-                size=[s*2 for s in active_sizes],
-                color=active_colors,
-                opacity=0.3,
-                line=dict(width=0)
-            ),
-            hoverinfo='skip',
-            name='Glow'
-        ))
-
-    fig.update_layout(
-        geo=dict(
-            scope='world', projection_type='orthographic',
-            showland=True, landcolor='rgb(10, 10, 10)',
-            showocean=True, oceancolor='rgb(5, 5, 5)',
-            bgcolor='black', showlakes=False, showcountries=True, countrycolor='#333'
-        ),
-        paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-# ==========================================
-# 聚类计算 (辅助)
+# 🧠 核心算法：聚类 (带数据清洗)
 # ==========================================
 def compute_clusters(nodes, n_clusters=5):
     raw_vectors = []
     raw_meta = []
     
+    # 1. 提取
     for node in nodes:
         if node['vector']:
             try:
@@ -158,6 +45,7 @@ def compute_clusters(nodes, n_clusters=5):
     
     if not raw_vectors: return pd.DataFrame()
 
+    # 2. 清洗 (长度对齐)
     lengths = [len(v) for v in raw_vectors]
     if not lengths: return pd.DataFrame()
     from collections import Counter
@@ -171,6 +59,7 @@ def compute_clusters(nodes, n_clusters=5):
             
     if len(clean_vectors) < 2: return pd.DataFrame()
 
+    # 3. 计算
     real_n_clusters = min(n_clusters, len(clean_vectors))
     try:
         kmeans = KMeans(n_clusters=real_n_clusters, random_state=42, n_init=10)
@@ -190,7 +79,123 @@ def compute_clusters(nodes, n_clusters=5):
         return pd.DataFrame()
 
 # ==========================================
-# 🌌 3D 星河
+# 🌍 3D 粒子地球 (双层宇宙版：沉积 vs 活跃)
+# ==========================================
+def render_3d_particle_map(nodes):
+    """
+    渲染地质层(History) 和 思想层(Active)
+    """
+    if not nodes: 
+        st.info("No data points yet.")
+        return
+
+    # 分离活跃节点和沉积节点
+    active_lats, active_lons, active_texts, active_colors, active_sizes = [], [], [], [], []
+    sediment_lats, sediment_lons, sediment_colors = [], [], []
+    
+    # 增加用户层
+    user_lats, user_lons, user_texts, user_colors = [], [], [], []
+
+    for node in nodes:
+        # 提取坐标
+        loc = None
+        try:
+            if isinstance(node.get('location'), str): loc = json.loads(node['location'])
+            elif isinstance(node.get('location'), dict): loc = node['location']
+        except: pass
+        
+        # 兜底坐标 (仅针对新闻)
+        if not loc and node['username'] == 'World_Observer':
+             loc = {'lat': np.random.uniform(-40, 60), 'lon': np.random.uniform(-150, 150)}
+        
+        # 1. 新闻节点
+        if node['username'] == 'World_Observer' and loc:
+            k = str(node.get('keywords', ''))
+            if 'Red' in k: base_c = (255, 43, 43)
+            elif 'Green' in k: base_c = (0, 255, 136)
+            else: base_c = (0, 204, 255)
+
+            if node.get('mode') == 'Sediment':
+                sediment_lats.append(loc.get('lat', 0))
+                sediment_lons.append(loc.get('lon', 0))
+                sediment_colors.append(f'rgb({base_c[0]//4}, {base_c[1]//4}, {base_c[2]//4})')
+            else:
+                active_lats.append(loc.get('lat', 0))
+                active_lons.append(loc.get('lon', 0))
+                active_texts.append(f"<b>{node['care_point']}</b><br>{node.get('insight','')}")
+                active_colors.append(f'rgb{base_c}')
+                active_sizes.append(np.random.randint(10, 20))
+        
+        # 2. 用户节点 (尝试吸附，这里做简单可视化)
+        elif node['username'] != 'World_Observer':
+            # 如果用户有坐标，用坐标；没有则随机
+            if loc: 
+                lat, lon = loc.get('lat', 0), loc.get('lon', 0)
+            else:
+                lat, lon = np.random.uniform(-40, 60), np.random.uniform(-150, 150)
+            
+            user_lats.append(lat)
+            user_lons.append(lon)
+            user_texts.append(f"@{node['username']}: {node['care_point']}")
+            user_colors.append('#FFD700') # 金色
+
+    fig = go.Figure()
+
+    # 1. 地球基底
+    fig.add_trace(go.Scattergeo(
+        lon=[], lat=[], mode='lines', line=dict(width=1, color='#222'),
+    ))
+
+    # 2. 沉积层 (暗淡方块)
+    if sediment_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=sediment_lons, lat=sediment_lats,
+            mode='markers',
+            marker=dict(size=4, color=sediment_colors, opacity=0.6, symbol='square'),
+            hoverinfo='skip', name='History Layer'
+        ))
+
+    # 3. 活跃新闻层 (发光粒子)
+    if active_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=active_lons, lat=active_lats,
+            mode='markers',
+            text=active_texts, hoverinfo='text',
+            marker=dict(size=active_sizes, color=active_colors, opacity=1.0, line=dict(width=2, color='white')),
+            name='Active Pulse'
+        ))
+        # 光晕
+        fig.add_trace(go.Scattergeo(
+            lon=active_lons, lat=active_lats,
+            mode='markers',
+            marker=dict(size=[s*2.5 for s in active_sizes], color=active_colors, opacity=0.3, line=dict(width=0)),
+            hoverinfo='skip', name='Glow'
+        ))
+
+    # 4. 用户思想层 (金色星辰)
+    if user_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=user_lons, lat=user_lats,
+            mode='markers',
+            text=user_texts, hoverinfo='text',
+            marker=dict(size=5, color=user_colors, opacity=0.8, symbol='star'),
+            name='Human Thought'
+        ))
+
+    fig.update_layout(
+        geo=dict(
+            scope='world', projection_type='orthographic',
+            showland=True, landcolor='rgb(10, 10, 10)',
+            showocean=True, oceancolor='rgb(5, 5, 5)',
+            bgcolor='black', showlakes=False, showcountries=True, countrycolor='#333'
+        ),
+        paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+# ==========================================
+# 🌌 3D 星河 (Abstract Galaxy)
 # ==========================================
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: 
@@ -200,12 +205,22 @@ def render_3d_galaxy(nodes):
     if df.empty: return
     
     df['size'] = 6
-    fig = px.scatter_3d(df, x='x', y='y', z='z', color='cluster', color_continuous_scale=CLUSTER_COLORS, hover_name='care_point', template="plotly_dark", opacity=0.9)
-    fig.update_layout(scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False)
+    fig = px.scatter_3d(
+        df, x='x', y='y', z='z', 
+        color='cluster', 
+        color_continuous_scale=CLUSTER_COLORS, 
+        hover_name='care_point', 
+        template="plotly_dark", 
+        opacity=0.9
+    )
+    fig.update_layout(
+        scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), 
+        paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 🕸️ 雷达图
+# 🕸️ 雷达图 (Echarts)
 # ==========================================
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
@@ -214,7 +229,7 @@ def render_radar_chart(radar_dict, height="200px"):
     st_echarts(options=option, height=height)
 
 # ==========================================
-# 🔮 赛博朋克关系图
+# 🔮 赛博朋克关系图 (完整版)
 # ==========================================
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return
@@ -315,7 +330,7 @@ def view_radar_details(radar_dict, username):
     
     report_key = f"report_{username}_{sum(radar_dict.values())}"
     if report_key not in st.session_state:
-        with st.spinner("正在连接潜意识层，解析精神底色..."):
+        with st.spinner("Analyzing..."):
             report = msc.analyze_persona_report(radar_dict)
             st.session_state[report_key] = report
     report = st.session_state[report_key]
