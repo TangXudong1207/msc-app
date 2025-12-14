@@ -1,4 +1,4 @@
-### msc_pages.py (优化版：新闻持久化显示) ###
+### msc_pages.py (安全语法修复版) ###
 
 import streamlit as st
 import streamlit_antd_components as sac
@@ -51,12 +51,11 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 👁️ 上帝视角 (Admin)
+# 👁️ 上帝视角
 # ==========================================
 def render_admin_dashboard():
-    st.markdown("## 👁️ God Mode")
+    st.markdown("## 👁️ God Mode: The Architect's View")
     
-    # 1. 关键指标
     all_users = msc.get_all_users("admin")
     global_nodes = msc.get_global_nodes()
     
@@ -67,30 +66,20 @@ def render_admin_dashboard():
     st.divider()
     
     c1, c2 = st.columns([0.4, 0.6])
-    
     with c1:
         st.markdown("### 🌍 World Pulse (RSS)")
-        
-        # === 修复：使用 Session State 存储新闻日志 ===
-        if "news_logs" not in st.session_state:
-            st.session_state.news_logs = []
-
+        if "news_logs" not in st.session_state: st.session_state.news_logs = []
         if st.button("📡 Scan Global Tensions", use_container_width=True, type="primary"):
-            with st.status("Scanning global frequencies...", expanded=True) as status:
+            with st.status("Scanning...", expanded=True) as status:
                 try:
                     new_logs = news.fetch_real_news(limit=2)
-                    st.session_state.news_logs = new_logs + st.session_state.news_logs # 追加日志
+                    st.session_state.news_logs = new_logs + st.session_state.news_logs
                     status.update(label="Scan Complete!", state="complete", expanded=False)
-                except Exception as e:
-                    st.error(f"News Error: {e}")
-        
-        # 显示历史日志 (最新的在前)
+                except Exception as e: st.error(f"News Error: {e}")
         if st.session_state.news_logs:
             with st.container(height=300, border=True):
-                for log in st.session_state.news_logs:
-                    st.caption(log)
-        else:
-            st.info("No news scanned yet.")
+                for log in st.session_state.news_logs: st.caption(log)
+        else: st.info("No news scanned yet.")
 
         st.markdown("### 🛠️ Genesis Engine")
         with st.container(border=True):
@@ -152,12 +141,11 @@ def render_ai_page(username):
             if analysis.get("valid", False):
                 vec = msc.get_embedding(prompt)
                 msc.save_node(username, prompt, analysis, "AI对话", vec)
-                if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
                 st.toast("Meaning Captured", icon="🌱")
         time.sleep(0.5); st.rerun()
 
 # ==========================================
-# 💬 好友页面
+# 💬 好友页面 (修复语法问题)
 # ==========================================
 def render_friends_page(username, unread_counts):
     try:
@@ -174,7 +162,8 @@ def render_friends_page(username, unread_counts):
             menu_items = []
             for u in users:
                 user_map[u['nickname']] = u['username']
-                icon_name = "circle-fill" if is_online := msc.check_is_online(u.get('last_seen')) else "circle"
+                is_online = msc.check_is_online(u.get('last_seen'))
+                icon_name = "circle-fill" if is_online else "circle"
                 color = "#4CAF50" if is_online else "#CCCCCC"
                 unread = unread_counts.get(u['username'], 0)
                 tag_val = sac.Tag(str(unread), color='red') if unread > 0 else None
@@ -200,7 +189,9 @@ def render_friends_page(username, unread_counts):
                         if node:
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                             with st.popover("●"):
-                                st.caption(f"Score: {node.get('m_score',0.5):.2f}")
+                                try: score = float(node.get('m_score') or 0.5)
+                                except: score = 0.5
+                                st.caption(f"Score: {score:.2f}")
                                 st.markdown(f"**{node.get('care_point','')}**")
                             st.markdown('</div>', unsafe_allow_html=True)
             if prompt := st.chat_input(f"Message..."):
