@@ -23,114 +23,119 @@ def get_cluster_color(cluster_id):
     return CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
 
 # ==========================================
-# 🌍 3D 粒子地球 (核心函数：必须存在！)
+# 🌍 3D 粒子地球 (双层宇宙版：沉积 vs 活跃)
 # ==========================================
 def render_3d_particle_map(nodes):
-    """
-    使用 Plotly 3D Scatter 渲染地球上的发光粒子
-    """
     if not nodes: 
-        st.info("No geospatial signals detected yet.")
+        st.info("No data points yet.")
         return
 
-    lats, lons, texts, colors, sizes = [], [], [], [], []
+    # 分离活跃节点和沉积节点
+    active_lats, active_lons, active_texts, active_colors, active_sizes = [], [], [], [], []
+    sediment_lats, sediment_lons, sediment_colors = [], [], []
     
     for node in nodes:
-        # 尝试提取坐标
+        # 提取坐标
         loc = None
         try:
             if isinstance(node.get('location'), str): loc = json.loads(node['location'])
             elif isinstance(node.get('location'), dict): loc = node['location']
         except: pass
         
-        # 如果有坐标，或者是 News 节点
+        if not loc and node['username'] == 'World_Observer':
+             # 兜底坐标
+             loc = {'lat': np.random.uniform(-40, 60), 'lon': np.random.uniform(-150, 150)}
+        
         if loc:
-            lat = loc.get('lat', 0)
-            lon = loc.get('lon', 0)
-        elif node['username'] == 'World_Observer':
-            # 如果新闻没解析出坐标，随机撒点 (兜底)
-            lat = np.random.uniform(-40, 60)
-            lon = np.random.uniform(-150, 150)
-        else:
-            continue # 普通无坐标节点不显示在地球上
-
-        lats.append(lat)
-        lons.append(lon)
-        texts.append(f"<b>{node['care_point']}</b><br>{node.get('insight','')}")
-        
-        # 颜色映射 (新闻根据 Tension 变色)
-        keywords = str(node.get('keywords', ''))
-        if 'Red' in keywords: c = '#ff2b2b'   # 冲突红
-        elif 'Green' in keywords: c = '#00ff88' # 希望绿
-        else: c = '#00ccff' # 默认科技蓝
-        colors.append(c)
-        
-        # 大小映射 (模拟张力强度)
-        sizes.append(np.random.randint(8, 18))
-
-    if not lats:
-        st.info("No geospatial signals detected yet.")
-        return
+            # 判断生死
+            # 如果 mode 是 'Sediment'，放入地下层
+            if node.get('mode') == 'Sediment':
+                sediment_lats.append(loc.get('lat', 0))
+                sediment_lons.append(loc.get('lon', 0))
+                
+                # 沉积物的颜色要暗淡
+                k = str(node.get('keywords', ''))
+                if 'Red' in k: c = '#550000' # 暗红
+                elif 'Green' in k: c = '#003300' # 暗绿
+                else: c = '#002244' # 暗蓝
+                sediment_colors.append(c)
+                
+            # 否则是活跃层
+            else:
+                active_lats.append(loc.get('lat', 0))
+                active_lons.append(loc.get('lon', 0))
+                active_texts.append(f"<b>{node['care_point']}</b><br>{node.get('insight','')}")
+                
+                k = str(node.get('keywords', ''))
+                if 'Red' in k: c = '#ff2b2b'
+                elif 'Green' in k: c = '#00ff88'
+                else: c = '#00ccff'
+                active_colors.append(c)
+                active_sizes.append(np.random.randint(10, 20)) # 活跃点很大
 
     fig = go.Figure()
 
-    # 1. 绘制地球基底 (暗黑线框风格)
+    # 1. 绘制地球基底
     fig.add_trace(go.Scattergeo(
-        lon=[], lat=[],
-        mode='lines',
-        line=dict(width=1, color='#333'),
+        lon=[], lat=[], mode='lines', line=dict(width=1, color='#222'),
     ))
 
-    # 2. 绘制发光粒子 (核心层)
-    fig.add_trace(go.Scattergeo(
-        lon=lons, lat=lats,
-        mode='markers',
-        text=texts,
-        hoverinfo='text',
-        marker=dict(
-            size=sizes,
-            color=colors,
-            opacity=1.0,
-            line=dict(width=2, color='white') # 白芯制造发光感
-        ),
-        name='Tension Core'
-    ))
-    
-    # 3. 绘制光晕 (外层 - 制造霓虹感)
-    fig.add_trace(go.Scattergeo(
-        lon=lons, lat=lats,
-        mode='markers',
-        marker=dict(
-            size=[s*2.5 for s in sizes], # 光晕大
-            color=colors,
-            opacity=0.3, # 半透明
-            line=dict(width=0)
-        ),
-        hoverinfo='skip',
-        name='Glow'
-    ))
+    # 2. 绘制沉积层 (地质纹理) - 数量多，颜色暗，点小
+    if sediment_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=sediment_lons, lat=sediment_lats,
+            mode='markers',
+            marker=dict(
+                size=4, # 很小
+                color=sediment_colors,
+                opacity=0.6,
+                symbol='square' # 用方块表示地砖
+            ),
+            hoverinfo='skip', # 沉淀物不交互
+            name='History Layer'
+        ))
+
+    # 3. 绘制活跃层 (发光粒子) - 悬浮，亮
+    if active_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=active_lons, lat=active_lats,
+            mode='markers',
+            text=active_texts,
+            hoverinfo='text',
+            marker=dict(
+                size=active_sizes,
+                color=active_colors,
+                opacity=1.0,
+                line=dict(width=2, color='white')
+            ),
+            name='Active Pulse'
+        ))
+        
+        # 光晕
+        fig.add_trace(go.Scattergeo(
+            lon=active_lons, lat=active_lats,
+            mode='markers',
+            marker=dict(
+                size=[s*2 for s in active_sizes],
+                color=active_colors,
+                opacity=0.3,
+                line=dict(width=0)
+            ),
+            hoverinfo='skip',
+            name='Glow'
+        ))
 
     fig.update_layout(
         geo=dict(
-            scope='world',
-            projection_type='orthographic', # 3D 球体
-            showland=True,
-            landcolor='rgb(15, 15, 15)',
-            showocean=True,
-            oceancolor='rgb(5, 5, 5)',
-            bgcolor='black',
-            showlakes=False,
-            showcountries=True,
-            countrycolor='#333'
+            scope='world', projection_type='orthographic',
+            showland=True, landcolor='rgb(10, 10, 10)',
+            showocean=True, oceancolor='rgb(5, 5, 5)',
+            bgcolor='black', showlakes=False, showcountries=True, countrycolor='#333'
         ),
-        paper_bgcolor='black',
-        margin={"r":0,"t":0,"l":0,"b":0},
-        height=600,
-        showlegend=False
+        paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False
     )
     
     st.plotly_chart(fig, use_container_width=True)
-
 # ==========================================
 # 聚类计算 (辅助)
 # ==========================================
