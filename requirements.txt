@@ -14,3 +14,4 @@ sentence-transformers
 # === 新增：Google Vertex AI 驱动 ===
 google-cloud-aiplatform
 google-auth
+pydeck
