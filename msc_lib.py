@@ -38,7 +38,7 @@ def init_system():
             vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
             
             # 加载 Gemini Pro
-            vertex_gemini = GenerativeModel("gemini-2.5-flash-lite-preview-09-2025") 
+            vertex_gemini = GenerativeModel("gemini-3-pro-preview") 
             # 加载 Gecko
             vertex_embed = TextEmbeddingModel.from_pretrained("text-embedding-004")
     except Exception as e:
