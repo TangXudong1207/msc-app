@@ -109,37 +109,82 @@ def cosine_similarity(v1, v2):
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
 # ==========================================
-# 🧠 4. AI 智能核心 (双引擎路由)
+# 🧠 4. AI 智能核心 (双引擎智能切换版)
 # ==========================================
 def call_ai_api(prompt, use_google=False):
     """
     通用 AI 调用接口。
-    参数 use_google=True 时，强制使用 Gemini (用于新闻分析)。
-    否则默认使用 OpenAI/DeepSeek (用于对话)。
+    逻辑：优先尝试 Google Gemini (如果指定且可用)，如果失败 (404/Auth)，自动降级回 DeepSeek。
     """
     # 1. 尝试 Google Gemini
     if use_google and gemini_model:
         try:
-            # Gemini 需要纯文本 prompt，我们在 prompt 里已经包含了 "Output JSON" 指令
+            # Gemini 需要纯文本 prompt
             response = gemini_model.generate_content(prompt)
             content = response.text
-            # 清洗 Markdown (```json ... ```)
+            # 清洗 Markdown
             content = re.sub(r"```json\n|\n```", "", content)
-            try:
-                return json.loads(content)
-            except: 
-                return {"content": content} # 如果不是 JSON，直接返回文本
+            try: return json.loads(content)
+            except: return {"content": content}
         except Exception as e:
-            print(f"Gemini Error: {e}")
-            # 如果 Google 失败，回退到 DeepSeek (往下走)
+            # 关键：捕获所有 Google 错误，打印日志，然后让程序继续往下走 (Fallthrough)
+            print(f"⚠️ Gemini Failed (Switching to DeepSeek): {e}")
+            pass 
 
-    # 2. 回退/默认 DeepSeek
+    # 2. 回退/默认 DeepSeek (OpenAI 协议)
     if not client_ai: return {"error": "AI未连接"}
     try:
         response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
-            temperature=0.7, stream=False, response_format={"type": "json_object"} 
+            messages=[
+                {"role": "system", "content": "Output valid JSON only."}, 
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7, 
+            stream=False, 
+            response_format={"type": "json_object"} 
+        )
+        content = response.choices[0].message.content
+        try:
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return json.loads(match.group(0))
+            else: return json.loads(content)
+        except: return {"error": True}
+    except Exception as e: return {"error": True, "msg": str(e)}# ==========================================
+# 🧠 4. AI 智能核心 (双引擎智能切换版)
+# ==========================================
+def call_ai_api(prompt, use_google=False):
+    """
+    通用 AI 调用接口。
+    逻辑：优先尝试 Google Gemini (如果指定且可用)，如果失败 (404/Auth)，自动降级回 DeepSeek。
+    """
+    # 1. 尝试 Google Gemini
+    if use_google and gemini_model:
+        try:
+            # Gemini 需要纯文本 prompt
+            response = gemini_model.generate_content(prompt)
+            content = response.text
+            # 清洗 Markdown
+            content = re.sub(r"```json\n|\n```", "", content)
+            try: return json.loads(content)
+            except: return {"content": content}
+        except Exception as e:
+            # 关键：捕获所有 Google 错误，打印日志，然后让程序继续往下走 (Fallthrough)
+            print(f"⚠️ Gemini Failed (Switching to DeepSeek): {e}")
+            pass 
+
+    # 2. 回退/默认 DeepSeek (OpenAI 协议)
+    if not client_ai: return {"error": "AI未连接"}
+    try:
+        response = client_ai.chat.completions.create(
+            model=TARGET_MODEL,
+            messages=[
+                {"role": "system", "content": "Output valid JSON only."}, 
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7, 
+            stream=False, 
+            response_format={"type": "json_object"} 
         )
         content = response.choices[0].message.content
         try:
@@ -148,7 +193,6 @@ def call_ai_api(prompt, use_google=False):
             else: return json.loads(content)
         except: return {"error": True}
     except Exception as e: return {"error": True, "msg": str(e)}
-
 def get_normal_response(history_messages):
     if not client_ai: return "⚠️ AI Client Init Failed."
     try:
