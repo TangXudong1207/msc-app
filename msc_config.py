@@ -1,100 +1,4 @@
-### msc_config.py ###
-
-# ==========================================
-# 🌌 MSC v73.0 系统宪法 (Intelligent Humanism)
-# ==========================================
-
-# --- 1. IHIL 意义生成权重 ---
-W_MEANING = {
-    "Care_Intensity": 0.30,
-    "Self_Disclosure": 0.20,
-    "Existential_Weight": 0.25,
-    "Abstractness": 0.15,
-    "Novelty": 0.10
-}
-
-# --- 2. 阈值 ---
-LEVELS = {
-    "NonMeaning": 0.45,
-    "Weak": 0.60,
-    "Strong": 0.80,
-    "Core": 1.0
-}
-
-LINK_THRESHOLD = {
-    "Weak": 0.55,
-    "Strong": 0.75
-}
-
-# --- 3. 系统参数 ---
-RADAR_ALPHA = 0.15
-HEARTBEAT_TIMEOUT = 300
-USER_WEIGHT_MULTIPLIER = 100 
-
-# ==========================================
-# 🧠 AI 指令集
-# ==========================================
-
-PROMPT_CHATBOT = """
-[System Context: Intelligent Humanism]
-You are an AI operating within the MSC system. 
-Your goal is NOT to give advice, solve problems, or provide information.
-Your goal is to help the user unfold their own meaning structures.
-Principles: Mirroring, Structure, Maieutics, Minimalism.
-"""
-
-PROMPT_ANALYST = """
-[Task: IHIL Meaning Extraction]
-Analyze the user's input based on IHIL v1.0.
-Output JSON only.
-
-### 1. Care Layer
-- care_intensity (0.0-1.0)
-- emotion (0.0-1.0)
-- self_disclosure (0.0-1.0)
-- existential_weight (0.0-1.0)
-
-### 2. Intelligence Layer
-- abstractness (0.0-1.0)
-- novelty (0.0-1.0)
-
-### 3. Meaning Layer
-- care_point: Short phrase (2-5 words).
-- insight: Philosophical observation.
-- keywords: [List of tags].
-- radar_scores: { "Care":..., "Curiosity":..., "Reflection":..., "Coherence":..., "Empathy":..., "Agency":..., "Aesthetic":... }
-
-### JSON Output Format:
-{
-  "c_score": (Average of Care),
-  "n_score": (Average of Intelligence),
-  "valid": true/false,
-  "care_point": "...",
-  "insight": "...",
-  "keywords": ["..."],
-  "radar_scores": {...}
-}
-"""
-
-PROMPT_DAILY = """
-Based on the user's radar profile, generate a short, profound Daily Question.
-Output JSON: { "question": "..." }
-"""
-
-# === 新增：张力分析 ===
-PROMPT_TENSION = """
-[Task: Philosophical Tension Extraction]
-Analyze the input text. Do NOT summarize. Extract the underlying conflict of values.
-
-Output JSON:
-{
-    "tension_pair": ["Value A", "Value B"],
-    "stance": "A" or "B" or "Neutral",
-    "intensity": 0.0-1.0,
-    "emotional_color": "Red" (Conflict) or "Blue" (Anxiety) or "Green" (Hope)
-}
-"""
-### msc_config.py (v74.0 Global Grid Edition) ###
+### msc_config.py (v74.0 Complete) ###
 
 # ==========================================
 # 🎨 1. MSC 12-Dimension Meaning Spectrum
@@ -117,16 +21,14 @@ SPECTRUM = {
 # ==========================================
 # 🌍 2. 全球扫描网格 (Global Scan Grid)
 # ==========================================
-# 定义三级扫描策略，含覆盖与去重规则
-
 GLOBAL_GRID = {
     # === Tier 1: The Core (G20 + Hotspots) ===
     # 频率: Daily / 权重: High / 数量: Top 10
     "Tier_1_G20": {
         "frequency": "Daily",
         "limit": 10,
-        "weight_multiplier": 2.0, # 引力加倍
-        "focus": [
+        "weight_multiplier": 2.0,
+        "countries": [
             "USA", "China", "Russia", "Germany", "UK", "France", "Japan", 
             "India", "Brazil", "Saudi Arabia", "Israel", "Iran", "Turkey", 
             "Canada", "Australia", "South Korea", "Indonesia", "Mexico", 
@@ -136,7 +38,6 @@ GLOBAL_GRID = {
 
     # === Tier 2: The Hubs (Regional Blocks) ===
     # 频率: Weekly / 权重: Medium / 数量: Top 5
-    # 必须排除 Tier 1 已扫描的国家
     "Tier_2_Regions": {
         "frequency": "Weekly",
         "limit": 5,
@@ -164,7 +65,7 @@ GLOBAL_GRID = {
             },
             "Eastern_Europe": {
                 "focus": ["Poland", "Hungary", "Romania", "Belarus"],
-                "exclude": ["Russia", "Ukraine"] # Ukraine 虽热，但若未进G20单列，可在此，或手动提级
+                "exclude": ["Russia", "Ukraine"]
             },
             "Western_Europe": {
                 "focus": ["Netherlands", "Belgium", "Switzerland"],
@@ -222,8 +123,7 @@ GLOBAL_GRID = {
     },
 
     # === Tier 3: The Periphery (Passive Targets) ===
-    # 频率: Monthly / 权重: Low / 数量: Top 1-3
-    # 这里的意义往往是被指向的
+    # 频率: Monthly / 权重: Low / 数量: Top 2
     "Tier_3_Polar": {
         "frequency": "Monthly",
         "limit": 2,
@@ -234,25 +134,34 @@ GLOBAL_GRID = {
 }
 
 # ==========================================
-# ⏳ 3. 时间与温度 (Time & Temperature)
+# ⏳ 3. 时间与温度 (TTL in Hours)
 # ==========================================
-# TTL (Time To Live) in Hours
-# 活跃期过后，节点将沉淀为历史 (Sediment)
 TTL_CONFIG = {
-    "Hubris": 360,        # 娱乐/泡沫: 15天 (15*24)
-    "Conflict": 720,      # 政治/冲突: 30天 (30*24)
+    "Hubris": 360,        # 15 Days
+    "Conflict": 720,      # 30 Days
     "Structure": 720,
-    "Rationality": 2160,  # 经济/技术: 90天 (90*24)
+    "Rationality": 2160,  # 90 Days
     "Disruption": 2160,
-    "Regeneration": 4320, # 艺术/哲学: 180天 (180*24)
+    "Regeneration": 4320, # 180 Days
     "Depth": 4320,
     "Mystery": 4320,
-    "Singularity": 8760   # 奇点: 1年 (365*24)
+    "Earth": 4320,
+    "Empathy": 2160,
+    "Nihilism": 2160,
+    "Singularity": 8760   # 1 Year
 }
 
 # ==========================================
 # ⚙️ 4. 系统基础参数
 # ==========================================
+W_MEANING = {
+    "Care_Intensity": 0.30,
+    "Self_Disclosure": 0.20,
+    "Existential_Weight": 0.25,
+    "Abstractness": 0.15,
+    "Novelty": 0.10
+}
+
 LEVELS = {"NonMeaning": 0.45, "Weak": 0.60, "Strong": 0.80, "Core": 1.0}
 LINK_THRESHOLD = {"Weak": 0.55, "Strong": 0.75}
 RADAR_ALPHA = 0.15
@@ -272,7 +181,7 @@ Principles: Mirroring, Structure, Maieutics, Minimalism.
 
 PROMPT_ANALYST = """
 [Task: IHIL Meaning Extraction]
-Analyze input based on IHIL v1.0. Output JSON.
+Analyze input based on IHIL v1.0. Output valid JSON only.
 Check for: Care Intensity, Self Disclosure, Existential Weight, Abstractness, Novelty.
 Output:
 {
@@ -295,13 +204,13 @@ Analyze the text. Extract value conflict.
 Output JSON: { "tension_pair": ["A", "B"], "emotional_color": "Red/Blue/..." }
 """
 
-# === Oracle 引擎指令 (适配 G20/区域逻辑) ===
-# 注意：该 Prompt 会在代码中根据区域动态拼接
+# === Oracle 引擎核心模板 ===
+# 注意：{scope_description} 和 {limit} 会在运行时被替换
 PROMPT_ORACLE_TEMPLATE = """
 [Task: Global Tension Extraction]
 Role: Planetary Observer.
 Target Scope: {scope_description}
-Action: Identify TOP {limit} significant events. 
+Action: Identify TOP {limit} significant events currently happening or trending.
 Logic: Extract the underlying tension (Fact vs Emotion, or Value A vs Value B).
 
 Assign one Dimension (Color) from MSC Spectrum:
