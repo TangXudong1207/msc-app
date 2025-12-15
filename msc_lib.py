@@ -1,4 +1,4 @@
-### msc_lib.py (绝对完整版) ###
+### msc_lib.py (双引擎增强版：Google First) ###
 
 import streamlit as st
 import numpy as np
@@ -9,41 +9,47 @@ from datetime import datetime, timezone
 from openai import OpenAI
 from google.oauth2 import service_account
 import vertexai
+from vertexai.generative_models import GenerativeModel, Part
 from vertexai.language_models import TextEmbeddingModel
 import msc_config as config
 import msc_db as db
 
 # ==========================================
-# 🛑 1. 初始化系统
+# 🛑 1. 初始化系统 (双引擎)
 # ==========================================
 def init_system():
-    # A. 思考引擎 (DeepSeek/OpenAI)
+    # A. OpenAI/DeepSeek 客户端 (备用/中文分析)
     try:
-        client = OpenAI(
+        client_openai = OpenAI(
             api_key=st.secrets["API_KEY"],
             base_url=st.secrets["BASE_URL"]
         )
-        model = st.secrets["MODEL_NAME"]
+        model_openai = st.secrets["MODEL_NAME"]
     except:
-        client = None; model = "gpt-3.5-turbo"
+        client_openai = None; model_openai = "gpt-3.5-turbo"
 
-    # B. 记忆引擎 (Google Vertex AI)
-    vertex_model = None
+    # B. Google Vertex AI (主要/全球新闻)
+    vertex_gemini = None
+    vertex_embed = None
     try:
         if "gcp_service_account" in st.secrets:
             creds_dict = dict(st.secrets["gcp_service_account"])
             creds = service_account.Credentials.from_service_account_info(creds_dict)
             vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
-            vertex_model = TextEmbeddingModel.from_pretrained("text-embedding-004")
+            
+            # 加载 Gemini Pro
+            vertex_gemini = GenerativeModel("gemini-1.5-pro-preview-0409") # 或者 gemini-1.0-pro
+            # 加载 Gecko
+            vertex_embed = TextEmbeddingModel.from_pretrained("text-embedding-004")
     except Exception as e:
         print(f"Vertex Init Error: {e}")
 
-    return client, model, vertex_model
+    return client_openai, model_openai, vertex_gemini, vertex_embed
 
-client_ai, TARGET_MODEL, vertex_embed_model = init_system()
+client_ai, TARGET_MODEL, gemini_model, vertex_embed_model = init_system()
 
 # ==========================================
-# 🌉 2. 数据库桥梁
+# 🌉 2. 数据库桥梁 (保持不变)
 # ==========================================
 def login_user(username, password): return db.login_user(username, password)
 def add_user(username, password, nickname, country="Other"): return db.add_user(username, password, nickname, country)
@@ -51,7 +57,6 @@ def get_nickname(username): return db.get_nickname(username)
 def get_user_profile(username): return db.get_user_profile(username)
 def get_all_users(current_user): return db.get_all_users(current_user)
 def update_heartbeat(username): db.update_heartbeat(username)
-def process_time_decay(): return db.process_time_decay()
 def check_is_online(last_seen_str):
     if not last_seen_str: return False
     try:
@@ -83,24 +88,17 @@ def save_node(username, content, data, mode, vector): db.save_node(username, con
 def get_active_nodes_map(username): return db.get_active_nodes_map(username)
 def get_all_nodes_for_map(username): return db.get_all_nodes_for_map(username)
 def get_global_nodes(): return db.get_global_nodes()
+def process_time_decay(): return db.process_time_decay()
 
 # ==========================================
-# 🧮 3. 向量算法
+# 🧮 3. 向量算法 (Vertex 优先)
 # ==========================================
 def get_embedding(text):
-    """
-    智能路由：
-    1. 优先尝试 Google Vertex (云端高性能)
-    2. 失败则回退 Mock (本地/无网兜底)
-    """
     if vertex_embed_model:
         try:
             embeddings = vertex_embed_model.get_embeddings([text])
             return embeddings[0].values
-        except Exception as e:
-            print(f"Vertex Embedding Failed: {e}")
-    
-    # Mock (随机向量)
+        except: pass
     return np.random.rand(768).tolist()
 
 def cosine_similarity(v1, v2):
@@ -111,9 +109,31 @@ def cosine_similarity(v1, v2):
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
 # ==========================================
-# 🧠 4. AI 智能核心
+# 🧠 4. AI 智能核心 (双引擎路由)
 # ==========================================
-def call_ai_api(prompt):
+def call_ai_api(prompt, use_google=False):
+    """
+    通用 AI 调用接口。
+    参数 use_google=True 时，强制使用 Gemini (用于新闻分析)。
+    否则默认使用 OpenAI/DeepSeek (用于对话)。
+    """
+    # 1. 尝试 Google Gemini
+    if use_google and gemini_model:
+        try:
+            # Gemini 需要纯文本 prompt，我们在 prompt 里已经包含了 "Output JSON" 指令
+            response = gemini_model.generate_content(prompt)
+            content = response.text
+            # 清洗 Markdown (```json ... ```)
+            content = re.sub(r"```json\n|\n```", "", content)
+            try:
+                return json.loads(content)
+            except: 
+                return {"content": content} # 如果不是 JSON，直接返回文本
+        except Exception as e:
+            print(f"Gemini Error: {e}")
+            # 如果 Google 失败，回退到 DeepSeek (往下走)
+
+    # 2. 回退/默认 DeepSeek
     if not client_ai: return {"error": "AI未连接"}
     try:
         response = client_ai.chat.completions.create(
@@ -129,7 +149,6 @@ def call_ai_api(prompt):
         except: return {"error": True}
     except Exception as e: return {"error": True, "msg": str(e)}
 
-# === 非流式响应 ===
 def get_normal_response(history_messages):
     if not client_ai: return "⚠️ AI Client Init Failed."
     try:
@@ -142,7 +161,7 @@ def get_normal_response(history_messages):
             model=TARGET_MODEL, 
             messages=api_messages, 
             temperature=0.8, 
-            stream=False # 关闭流式
+            stream=False 
         )
         return response.choices[0].message.content
     except Exception as e: 
@@ -150,49 +169,33 @@ def get_normal_response(history_messages):
 
 def analyze_meaning_background(text):
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
-    res = call_ai_api(prompt)
-    
+    res = call_ai_api(prompt, use_google=False) # 用户分析用 DeepSeek
     if res.get("valid", False) or res.get("c_score", 0) > 0:
-        c = res.get('c_score', 0)
-        n = res.get('n_score', 0)
+        c = res.get('c_score', 0); n = res.get('n_score', 0)
         if n == 0: n = 0.5 
         m = c * n * 2
         res['m_score'] = m
         if m < config.LEVELS["Weak"]: res["valid"] = False
         else: res["valid"] = True
-    
     return res
-
-# === 关键：张力分析 (之前可能缺失的部分) ===
-def analyze_tension(text):
-    """
-    提取文本背后的哲学张力 (用于新闻地图)
-    """
-    prompt = f"{config.PROMPT_TENSION}\nContent: \"{text}\""
-    return call_ai_api(prompt)
 
 def generate_daily_question(username, radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
     prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。输出 JSON: {{ 'question': '...' }}"
-    res = call_ai_api(prompt)
-    return res.get("question", "今天，什么事情让你感到'活着'？")
+    res = call_ai_api(prompt, use_google=False)
+    return res.get("question", "今天感觉如何？")
 
 def update_radar_score(username, input_scores):
     try:
         user_data = db.get_user_profile(username)
         current = user_data.get('radar_profile')
-        if not current: 
-            current = {k: 3.0 for k in input_scores.keys()}
-        elif isinstance(current, str): 
-            current = json.loads(current)
-        
+        if not current: current = {k: 3.0 for k in input_scores.keys()}
+        elif isinstance(current, str): current = json.loads(current)
         updated = {}
         alpha = config.RADAR_ALPHA
         for k, v in input_scores.items():
-            old_val = float(current.get(k, 3.0))
-            new_val = float(v)
-            updated[k] = round(old_val * (1-alpha) + new_val * alpha, 2)
-            
+            old = float(current.get(k, 3.0)); val = float(v)
+            updated[k] = round(old * (1-alpha) + val * alpha, 2)
         db.update_radar_score(username, json.dumps(updated))
     except: pass
     
@@ -200,7 +203,6 @@ def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     others = db.get_global_nodes()
     if not others: return None
-    
     best_match, highest_score = None, 0
     for row in others:
         if row['username'] == current_user: continue
@@ -208,27 +210,13 @@ def find_resonance(current_vector, current_user, current_data):
             try:
                 o_vec = json.loads(row['vector'])
                 score = cosine_similarity(current_vector, o_vec)
-                
                 if score > config.LINK_THRESHOLD["Strong"] and score > highest_score:
                     highest_score = score
-                    best_match = {
-                        "user": row['username'], 
-                        "content": row['content'], 
-                        "score": round(score * 100, 1)
-                    }
+                    best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
             except: continue
     return best_match
     
 def analyze_persona_report(radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"""
-    基于MSC系统的7维雷达数据：{radar_str}
-    请生成一份简短深刻的用户画像报告，必须包含以下两个字段的JSON：
-    1. "status_quo" (现状): 用心理学/哲学视角描述用户当前的精神底色。
-    2. "growth_path" (成长): 基于当前维度的短板或优势，预测用户可能的思想进化方向。
-    """
-    return call_ai_api(prompt)
-# ... (文件末尾)
-
-def process_time_decay():
-    return db.process_time_decay()
+    prompt = f"分析雷达图 {radar_str}，输出JSON: {{'status_quo': '...', 'growth_path': '...'}}"
+    return call_ai_api(prompt, use_google=False)
