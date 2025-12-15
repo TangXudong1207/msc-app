@@ -1,4 +1,4 @@
-### msc_pages.py (绝对完整版) ###
+### msc_pages.py (Ultimate Version: Global Grid Ready) ###
 
 import streamlit as st
 import streamlit_antd_components as sac
@@ -9,7 +9,7 @@ import msc_news_real as news
 import time
 
 # ==========================================
-# 🔐 登录页 (含管理员后门)
+# 🔐 登录页
 # ==========================================
 def render_login_page():
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -72,22 +72,27 @@ def render_admin_dashboard():
     c1, c2 = st.columns([0.4, 0.6])
     
     with c1:
-        st.markdown("### 🌍 World Pulse (RSS)")
+        st.markdown("### 🌍 World Pulse (Global Grid)")
+        st.caption("Scanning G20 + Key Regional Tensions via Oracle Engine.")
         
-        # === 1. 扫描按钮 (带 key 防止冲突) ===
+        # === 1. 全球扫描按钮 ===
         if "news_logs" not in st.session_state:
             st.session_state.news_logs = []
 
-        if st.button("📡 Scan Global Tensions", use_container_width=True, type="primary", key="btn_scan_news"):
-            with st.status("Scanning global frequencies...", expanded=True) as status:
+        if st.button("📡 Scan Global Grid (Full)", use_container_width=True, type="primary", key="btn_scan_news"):
+            with st.status("Initializing Orbital Scan...", expanded=True) as status:
                 try:
-                    new_logs = news.fetch_real_news(limit=2)
+                    # 注意：fetch_real_news_auto 现在会遍历所有区域，这可能需要几十秒
+                    # 如果超时，可以改回 fetch_real_news(limit=5)
+                    st.write("Targeting G20 & Regions...")
+                    new_logs = news.fetch_real_news(limit_per_region=3) 
+                    
                     st.session_state.news_logs = new_logs + st.session_state.news_logs
-                    status.update(label="Scan Complete!", state="complete", expanded=False)
+                    status.update(label="Global Scan Complete!", state="complete", expanded=False)
                 except Exception as e:
-                    st.error(f"News Error: {e}")
+                    st.error(f"Oracle Error: {e}")
         
-        # === 2. 时间流逝按钮 (带 key) ===
+        # === 2. 时间流逝按钮 ===
         if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True, key="btn_advance_time"):
             with st.spinner("Time is passing... History is being written..."):
                 count = msc.process_time_decay()
@@ -100,7 +105,7 @@ def render_admin_dashboard():
 
         # 显示日志
         if st.session_state.news_logs:
-            with st.container(height=200, border=True):
+            with st.container(height=250, border=True):
                 for log in st.session_state.news_logs:
                     st.caption(log)
 
@@ -108,13 +113,11 @@ def render_admin_dashboard():
 
         st.markdown("### 🛠️ Genesis Engine")
         with st.container(border=True):
-            # === 3. 造人按钮 (带 key) ===
             if st.button("👥 Summon Archetypes (Batch)", use_container_width=True, key="btn_summon"):
                 n = sim.create_virtual_citizens()
                 if n == 0: st.warning("All archetypes already exist.")
                 else: st.success(f"Born: {n}")
                 
-            # === 4. 注入思想按钮 (带 key) ===
             if st.button("💉 Inject Thoughts (Auto)", use_container_width=True, key="btn_inject"):
                 with st.status("Simulating consciousness...", expanded=True) as status:
                     logs = sim.inject_thoughts(3)
@@ -123,11 +126,8 @@ def render_admin_dashboard():
                     time.sleep(1)
                     st.rerun()
 
-        st.markdown("### 📊 Clusters")
-        st.info("Cluster 0: 🔴 High Emotion\n\nCluster 1: 🔵 Logic & Tech\n\nCluster 2: 🟢 Daily Life")
-
     with c2:
-        st.markdown("### 🌌 Real-time Galaxy")
+        st.markdown("### 🌌 Galaxy Monitor")
         # 这里复用了 viz 里的地图渲染
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
 
