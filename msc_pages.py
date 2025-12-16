@@ -53,12 +53,11 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 👁️ 上帝视角 (Admin) - 极简去噪版
+# 👁️ 上帝视角控制台 (Admin Only)
 # ==========================================
 def render_admin_dashboard():
     st.markdown("## 👁️ God Mode: The Architect's View")
     
-    # 1. 关键指标
     all_users = msc.get_all_users("admin")
     global_nodes = msc.get_global_nodes()
     
@@ -66,6 +65,7 @@ def render_admin_dashboard():
     k1.metric("Citizens", len(all_users))
     k2.metric("Nodes", len(global_nodes))
     k3.metric("Status", "Online", delta="Vertex AI")
+    
     st.divider()
     
     c1, c2 = st.columns([0.4, 0.6])
@@ -73,63 +73,69 @@ def render_admin_dashboard():
     with c1:
         st.markdown("### 🌍 World Pulse (RSS)")
         
-        # === 1. 扫描按钮 (静默模式) ===
-        if st.button("📡 Scan Global Grid (Full)", use_container_width=True, type="primary", key="btn_scan_news"):
-            with st.status("Initializing Orbital Scan...", expanded=True) as status:
+        if "news_logs" not in st.session_state:
+            st.session_state.news_logs = []
+
+        if st.button("📡 Scan Global Tensions", use_container_width=True, type="primary", key="btn_scan_news"):
+            with st.status("Scanning global frequencies...", expanded=True) as status:
                 try:
-                    st.write("Targeting G20 & Regions...")
-                    # 依然调用全量扫描，但忽略返回的 logs，只在乎数据库是否更新
-                    _ = news.fetch_real_news_auto() 
-                    status.update(label="Global Scan Complete!", state="complete", expanded=False)
-                    time.sleep(1)
-                    st.rerun() # 刷新地图
+                    new_logs = news.fetch_real_news(limit=2)
+                    st.session_state.news_logs = new_logs + st.session_state.news_logs
+                    status.update(label="Scan Complete!", state="complete", expanded=False)
                 except Exception as e:
-                    st.error(f"Oracle Error: {e}")
+                    st.error(f"News Error: {e}")
         
-        # === 2. 时间流逝按钮 ===
         if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True, key="btn_advance_time"):
-            with st.spinner("Time is passing..."):
+            with st.spinner("Time is passing... History is being written..."):
                 count = msc.process_time_decay()
-                if count > 0: st.success(f"{count} tensions sedimented.")
-                else: st.info("No sedimentation.")
-                time.sleep(1)
-                st.rerun()
+                if count > 0:
+                    st.success(f"{count} tensions have cooled down and become history.")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.info("No tensions are old enough to sediment yet.")
+
+        if st.session_state.news_logs:
+            with st.container(height=200, border=True):
+                for log in st.session_state.news_logs:
+                    st.caption(log)
 
         st.divider()
-        st.markdown("### 🕵️ Data Inspector (Debug)")
-        
-        # 从数据库拉取最新的 10 条新闻节点
-        # 注意：这里我们通过 msc_lib 调用 db，确保 msc_lib 里有 get_global_nodes
-        latest_nodes = msc.get_global_nodes() 
-        
-        # 筛选出 mode='News_Stream' 的节点
-        news_nodes = [n for n in latest_nodes if n.get('mode') == 'News_Stream']
-        
-        if news_nodes:
-            st.success(f"Found {len(news_nodes)} active news nodes in DB.")
-            # 转换成 DataFrame 展示，方便看具体字段
-            df_debug = pd.DataFrame(news_nodes)
-            # 只展示关键列，防止太乱
-            cols = ['content', 'care_point', 'location', 'created_at']
-            # 安全筛选列 (防止某些列不存在)
-            valid_cols = [c for c in cols if c in df_debug.columns]
-            st.dataframe(df_debug[valid_cols].head(10), use_container_width=True)
-        else:
-            st.warning("⚠️ Database Query returned 0 news nodes. (Check save_node logic)")
-             st.markdown("### 🛠️ Genesis Engine")
+
+        st.markdown("### 🛠️ Genesis Engine")
         with st.container(border=True):
-            if st.button("👥 Summon Archetypes", use_container_width=True, key="btn_summon"):
+            if st.button("👥 Summon Archetypes (Batch)", use_container_width=True, key="btn_summon"):
                 n = sim.create_virtual_citizens()
-                if n > 0: st.success(f"Born: {n}")
-                else: st.warning("Full.")
+                if n == 0: st.warning("All archetypes already exist.")
+                else: st.success(f"Born: {n}")
                 
-            if st.button("💉 Inject Thoughts", use_container_width=True, key="btn_inject"):
-                with st.spinner("Simulating..."):
-                    _ = sim.inject_thoughts(3) # 忽略 logs
-                    st.success("Done.")
+            if st.button("💉 Inject Thoughts (Auto)", use_container_width=True, key="btn_inject"):
+                with st.status("Simulating consciousness...", expanded=True) as status:
+                    logs = sim.inject_thoughts(3)
+                    for log in logs: st.write(log)
+                    status.update(label="Injection Complete!", state="complete", expanded=False)
+                    time.sleep(1)
+                    st.rerun()
+
+        # === 🔍 调试：数据透视眼 ===
+        st.divider()
+        st.markdown("### 🕵️ Data Inspector")
+        # 筛选 News_Stream 类型的节点
+        news_nodes = [n for n in global_nodes if n.get('mode') == 'News_Stream']
+        if news_nodes:
+            st.success(f"Found {len(news_nodes)} news nodes in DB.")
+            df_debug = pd.DataFrame(news_nodes)
+            # 尝试展示关键列
+            cols = ['content', 'care_point', 'location', 'created_at']
+            valid_cols = [c for c in cols if c in df_debug.columns]
+            st.dataframe(df_debug[valid_cols].head(5), use_container_width=True)
+        else:
+            st.warning("⚠️ No 'News_Stream' nodes found in DB.")
+
     with c2:
         st.markdown("### 🌌 Real-time Galaxy")
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
+
 # ==========================================
 # 🤖 AI Partner 页面 (防弹修复版)
 # ==========================================
