@@ -113,7 +113,37 @@ def render_admin_dashboard():
                     st.caption(log)
 
         st.divider()
+        st.markdown("### 🔍 System Diagnostics")
+        
+        # === 新增：单点测试按钮 ===
+        if st.button("🛠️ Test Oracle Connection (Ping G20)", use_container_width=True):
+            st.write("Pinging Oracle Engine...")
+            try:
+                # 只扫描 G20，且只取 Top 1，这是最小负载测试
+                # 我们直接调用 msc_news_real 里的底层函数 scan_grid_tier
+                tier_config = {
+                    "frequency": "Test",
+                    "limit": 1,
+                    "weight_multiplier": 1.0,
+                    "countries": ["USA", "China"] # 只测两个国家
+                }
+                
+                # 临时调用底层扫描
+                logs = news.scan_grid_tier("Tier_1_G20", tier_config)
+                
+                if logs:
+                    st.success(f"Connection Successful! Generated {len(logs)} logs.")
+                    st.json(logs) # 直接展示原始内容，不藏着掖着
+                else:
+                    st.error("Oracle connected but returned EMPTY list.")
+                    
+            except Exception as e:
+                st.error(f"CRITICAL ERROR: {str(e)}")
+                # 打印详细堆栈
+                import traceback
+                st.code(traceback.format_exc())
 
+        st.divider()
         st.markdown("### 🛠️ Genesis Engine")
         with st.container(border=True):
             if st.button("👥 Summon Archetypes (Batch)", use_container_width=True, key="btn_summon"):
