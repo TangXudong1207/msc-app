@@ -96,19 +96,26 @@ def render_admin_dashboard():
                 st.rerun()
 
         st.divider()
-
-        st.markdown("### 🛠️ Genesis Engine")
-        with st.container(border=True):
-            if st.button("👥 Summon Archetypes", use_container_width=True, key="btn_summon"):
-                n = sim.create_virtual_citizens()
-                if n > 0: st.success(f"Born: {n}")
-                else: st.warning("Full.")
-                
-            if st.button("💉 Inject Thoughts", use_container_width=True, key="btn_inject"):
-                with st.spinner("Simulating..."):
-                    _ = sim.inject_thoughts(3) # 忽略 logs
-                    st.success("Done.")
-
+        st.markdown("### 🕵️ Data Inspector (Debug)")
+        
+        # 从数据库拉取最新的 10 条新闻节点
+        # 注意：这里我们通过 msc_lib 调用 db，确保 msc_lib 里有 get_global_nodes
+        latest_nodes = msc.get_global_nodes() 
+        
+        # 筛选出 mode='News_Stream' 的节点
+        news_nodes = [n for n in latest_nodes if n.get('mode') == 'News_Stream']
+        
+        if news_nodes:
+            st.success(f"Found {len(news_nodes)} active news nodes in DB.")
+            # 转换成 DataFrame 展示，方便看具体字段
+            df_debug = pd.DataFrame(news_nodes)
+            # 只展示关键列，防止太乱
+            cols = ['content', 'care_point', 'location', 'created_at']
+            # 安全筛选列 (防止某些列不存在)
+            valid_cols = [c for c in cols if c in df_debug.columns]
+            st.dataframe(df_debug[valid_cols].head(10), use_container_width=True)
+        else:
+            st.warning("⚠️ Database Query returned 0 news nodes. (Check save_node logic)")
     with c2:
         st.markdown("### 🌌 Real-time Galaxy")
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
