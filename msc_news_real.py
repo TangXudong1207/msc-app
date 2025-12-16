@@ -1,28 +1,16 @@
-### msc_news_real.py (RSS Grounding Edition) ###
+### msc_news_real.py (Oracle: Global Scan Grid - Restored) ###
 
 import msc_lib as msc
 import msc_config as config
-import feedparser
 import json
 import time
 import random
 
 # ==========================================
-# 📡 真实信号源 (RSS Feeds)
-# ==========================================
-# 选取全球最具代表性的英文 RSS 源 (中文源容易有反爬虫)
-RSS_SOURCES = {
-    "World_General": "http://feeds.bbci.co.uk/news/world/rss.xml", # BBC World
-    "Tech_Frontier": "https://feeds.feedburner.com/TheHackersNews", # Tech
-    "Science_Nature": "https://www.sciencedaily.com/rss/matter_energy.xml", # Science
-    "Global_Economy": "https://www.cnbc.com/id/10000664/device/rss/rss.html", # Finance
-    "Middle_East": "https://www.aljazeera.com/xml/rss/all.xml" # Al Jazeera
-}
-
-# ==========================================
 # 🗺️ 坐标字典 (Geo-Mapping)
 # ==========================================
 GEO_DB = {
+    # Tier 1 G20
     "USA": {"lat": 38.90, "lon": -77.03}, "China": {"lat": 39.90, "lon": 116.40},
     "Russia": {"lat": 55.75, "lon": 37.61}, "UK": {"lat": 51.50, "lon": -0.12},
     "France": {"lat": 48.85, "lon": 2.35}, "Germany": {"lat": 52.52, "lon": 13.40},
@@ -33,105 +21,168 @@ GEO_DB = {
     "Saudi Arabia": {"lat": 24.71, "lon": 46.67}, "South Africa": {"lat": -25.74, "lon": 28.22},
     "Argentina": {"lat": -34.60, "lon": -58.38}, "Mexico": {"lat": 19.43, "lon": -99.13},
     "Indonesia": {"lat": -6.20, "lon": 106.84}, "Israel": {"lat": 31.76, "lon": 35.21},
-    "Iran": {"lat": 35.68, "lon": 51.38}, "Ukraine": {"lat": 50.45, "lon": 30.52},
-    "Gaza": {"lat": 31.50, "lon": 34.46}, "Taiwan": {"lat": 25.03, "lon": 121.56},
+    "Iran": {"lat": 35.68, "lon": 51.38},
+    
+    # Tier 2 Regions
+    "North Korea": {"lat": 39.03, "lon": 125.76}, "Taiwan Region": {"lat": 25.03, "lon": 121.56},
+    "Ukraine": {"lat": 50.45, "lon": 30.52}, "Poland": {"lat": 52.22, "lon": 21.01},
+    "Vietnam": {"lat": 21.02, "lon": 105.83}, "Thailand": {"lat": 13.75, "lon": 100.50},
+    "Pakistan": {"lat": 33.68, "lon": 73.04}, "Egypt": {"lat": 30.04, "lon": 31.23},
+    "Nigeria": {"lat": 9.08, "lon": 7.39}, "Kenya": {"lat": -1.29, "lon": 36.82},
+    "Chile": {"lat": -33.44, "lon": -70.66}, "New Zealand": {"lat": -41.28, "lon": 174.77},
+    
+    # Tier 3 Polar
+    "Arctic": {"lat": 80.00, "lon": 0.00}, "Antarctica": {"lat": -82.86, "lon": 135.00},
+    
+    # General
     "Global": {"lat": 0, "lon": 0}
 }
 
 def get_coords(name):
+    # 1. 精确查找
+    if name in GEO_DB: return GEO_DB[name]
+    # 2. 模糊查找
     for k, v in GEO_DB.items():
         if k.lower() in name.lower() or name.lower() in k.lower(): return v
-    return {"lat": random.uniform(-40, 60), "lon": random.uniform(-150, 150)} # 兜底
+    # 3. 兜底
+    return {"lat": 0, "lon": 0}
 
-def fetch_real_news_auto():
+def scan_grid_tier(tier_name, tier_config):
     """
-    1. 爬取真实 RSS
-    2. 让 AI 阅读并提取张力
-    3. 存入数据库
+    执行单个层级的扫描 (Google 引擎优先)
     """
     all_logs = []
+    limit = tier_config["limit"]
+    weight = tier_config.get("weight_multiplier", 1.0)
     
-    # 1. 采集阶段
-    raw_articles = []
-    for src_name, url in RSS_SOURCES.items():
-        try:
-            feed = feedparser.parse(url)
-            # 每个源取前 2 条最新新闻
-            for entry in feed.entries[:2]:
-                raw_articles.append({
-                    "title": entry.title,
-                    "summary": entry.get('summary', '')[:150], # 截断
-                    "source": src_name
-                })
-        except: continue
+    # 构造 Prompt 的 Scope 描述
+    scope_desc = ""
+    
+    if tier_name == "Tier_1_G20":
+        countries = ", ".join(tier_config["countries"])
+        scope_desc = f"G20 Major Powers & Hotspots. Focus ONLY on: {countries}."
         
-    if not raw_articles:
-        return ["⚠️ RSS Fetch Failed. Check internet connection."]
+        # === 执行 G20 扫描 ===
+        logs = _execute_scan(scope_desc, limit, weight, "Tier_1")
+        all_logs.extend(logs)
 
-    # 2. 分析阶段 (批量处理，省 Token)
-    # 把所有标题打包发给 AI
-    titles_text = "\n".join([f"- {a['title']}" for a in raw_articles])
+    elif tier_name == "Tier_2_Regions":
+        # 遍历 Tier 2 下的所有子区域
+        for region_name, region_rules in tier_config["regions"].items():
+            focus_list = ", ".join(region_rules["focus"])
+            exclude_list = ", ".join(region_rules["exclude"])
+            
+            scope_desc = f"Region: {region_name}. Focus on: {focus_list}. EXCLUDE: {exclude_list}."
+            
+            # === 执行区域扫描 ===
+            logs = _execute_scan(scope_desc, limit, weight, region_name)
+            all_logs.extend(logs)
+            time.sleep(1) # 区域间冷却
+
+    elif tier_name == "Tier_3_Polar":
+        focus_list = ", ".join(tier_config["focus"])
+        scope_desc = f"Polar Regions (Arctic/Antarctica). Focus on: {focus_list} as targets of geopolitics or climate."
+        
+        # === 执行极地扫描 ===
+        logs = _execute_scan(scope_desc, limit, weight, "Polar")
+        all_logs.extend(logs)
+
+    return all_logs
+
+def _execute_scan(scope_desc, limit, weight, layer_tag):
+    """
+    底层扫描执行函数
+    """
+    logs = []
     
+    # 1. 组装 Prompt
+    # 注意：这里稍微修改了 Prompt，允许 AI 推断趋势，防止 Empty List
     prompt = f"""
-    [Task: Analyze Real News Tension]
-    Below are real-time news headlines. 
-    For each, identify the Key Country/Location and the underlying Value Tension.
+    [Task: Global Tension Analysis]
+    Role: Planetary Observer.
+    Target Scope: {scope_desc}
     
-    News List:
-    {titles_text}
+    Identify {limit} significant geopolitical/social trends or tensions.
+    If real-time news is unavailable, infer based on long-term regional conflicts or issues.
     
     Output JSON List:
     [
       {{
-        "title": "Exact headline from input",
+        "title": "Event Title",
         "tension": "Value A vs Value B",
-        "dimension": "Conflict/Rationality/etc (Pick from MSC Spectrum)",
-        "origin": "Country Name",
+        "dimension": "Conflict (Choose from: Conflict, Disruption, Hubris, Regeneration, Rationality, Mystery, Structure, Earth, Empathy, Nihilism, Depth, Singularity)",
+        "origin": "Country Name" (Must be from target scope),
+        "impact": "Target Region",
         "intensity": 0.8
       }}
     ]
     """
     
-    # 调用 AI (优先 Google)
+    # 2. 调用 AI (Google First)
     response = msc.call_ai_api(prompt, use_google=True)
     
-    # 3. 解析与存储
-    analyzed_list = response if isinstance(response, list) else response.get('news', [])
+    # 3. 解析结果
+    news_list = response if isinstance(response, list) else response.get('news', [])
     # 兼容处理
-    if not analyzed_list and isinstance(response, dict):
-        for v in response.values(): 
-            if isinstance(v, list): analyzed_list = v; break
+    if not news_list and isinstance(response, dict):
+        for v in response.values():
+            if isinstance(v, list): news_list = v; break
             
-    for item in analyzed_list:
+    if not news_list: return []
+
+    # 4. 生成节点
+    for item in news_list:
         try:
             title = item.get('title', 'Unknown')
-            tension = item.get('tension', 'Unknown')
+            tension = item.get('tension', 'Tension')
             dim = item.get('dimension', 'Structure')
             origin = item.get('origin', 'Global')
+            impact = item.get('impact', origin)
             
+            # 颜色映射
             color = config.SPECTRUM.get(dim, "#E0E0E0")
-            origin_loc = get_coords(origin)
             
+            # 坐标映射
+            origin_loc = get_coords(origin)
+            target_loc = get_coords(impact)
+            
+            # 构造节点数据
             content = f"[{dim}] {title}"
             node_data = {
-                "c_score": 0.9,
+                "c_score": 0.9 * weight, # 权重影响分数
                 "care_point": tension,
-                "insight": f"{title} ({origin})",
-                "meaning_layer": "RSS_Real",
-                "keywords": [dim, color, "RealNews"],
+                "insight": f"{title} ({origin} -> {impact})",
+                "meaning_layer": layer_tag,
+                "keywords": [dim, color, "OracleNews", layer_tag],
                 "location": origin_loc,
-                "intensity": item.get('intensity', 0.5)
+                "target_location": target_loc if impact != origin else None,
+                "intensity": item.get('intensity', 0.5) * weight, # 权重影响大小
+                "ttl_category": dim # 用于后续计算 TTL
             }
             
-            # 向量化
+            # 向量化 (Google Vertex)
             vec = msc.get_embedding(content)
+            
+            # 存库
             msc.save_node("World_Observer", content, node_data, "News_Stream", vec)
             
-            all_logs.append(f"📡 {origin}: {tension} ({dim})")
+            logs.append(f"📡 {origin}: {title[:20]}... ({dim})")
             
-        except: continue
-        
-    return all_logs
+        except Exception as e:
+            continue
+            
+    return logs
 
-# 保留旧接口兼容性
-def scan_grid_tier(a,b): return []
+def fetch_real_news_auto():
+    """
+    全自动扫描入口 (遍历整个 GRID)
+    """
+    total_logs = []
+    
+    # 遍历配置表中的所有 Tier
+    for tier_key, tier_cfg in config.GLOBAL_GRID.items():
+        logs = scan_grid_tier(tier_key, tier_cfg)
+        total_logs.extend(logs)
+        time.sleep(1) # Tier 间冷却
+        
+    return total_logs
