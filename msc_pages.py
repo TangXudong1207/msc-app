@@ -116,6 +116,17 @@ def render_admin_dashboard():
             st.dataframe(df_debug[valid_cols].head(10), use_container_width=True)
         else:
             st.warning("⚠️ Database Query returned 0 news nodes. (Check save_node logic)")
+             st.markdown("### 🛠️ Genesis Engine")
+        with st.container(border=True):
+            if st.button("👥 Summon Archetypes", use_container_width=True, key="btn_summon"):
+                n = sim.create_virtual_citizens()
+                if n > 0: st.success(f"Born: {n}")
+                else: st.warning("Full.")
+                
+            if st.button("💉 Inject Thoughts", use_container_width=True, key="btn_inject"):
+                with st.spinner("Simulating..."):
+                    _ = sim.inject_thoughts(3) # 忽略 logs
+                    st.success("Done.")
     with c2:
         st.markdown("### 🌌 Real-time Galaxy")
         viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
