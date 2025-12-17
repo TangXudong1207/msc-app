@@ -139,28 +139,28 @@ def call_ai_api(prompt, use_google=False):
             content = response.text
             # 清洗 Markdown
             content = re.sub(r"```json\n|\n```", "", content)
-                try: return json.loads(content)
-                except: return {"content": content}
+            try: return json.loads(content)
+            except: return {"content": content}
         except Exception as e:
             # 关键：捕获所有 Google 错误，打印日志，然后让程序继续往下走 (Fallthrough)
             print(f"⚠️ Gemini Failed (Switching to DeepSeek): {e}")
             pass 
 
     # 2. 回退/默认 DeepSeek (OpenAI 协议)
-if not client_ai: return {"error": "AI未连接"}
-    try:
-        response = client_ai.chat.completions.create(
-            model=TARGET_MODEL,
-            messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
-            temperature=0.7, stream=False, response_format={"type": "json_object"} 
-        )
-        content = response.choices[0].message.content
+    if not client_ai: return {"error": "AI未连接"}
         try:
-            match = re.search(r'\{.*\}', content, re.DOTALL)
-            if match: return json.loads(match.group(0))
-            else: return json.loads(content)
-        except: return {"error": True}
-    except Exception as e: return {"error": True, "msg": str(e)}
+            response = client_ai.chat.completions.create(
+                model=TARGET_MODEL,
+                messages=[{"role": "system", "content": "Output valid JSON only."}, {"role": "user", "content": prompt}],
+                temperature=0.7, stream=False, response_format={"type": "json_object"} 
+            )
+            content = response.choices[0].message.content
+            try:
+                match = re.search(r'\{.*\}', content, re.DOTALL)
+                if match: return json.loads(match.group(0))
+                else: return json.loads(content)
+            except: return {"error": True}
+        except Exception as e: return {"error": True, "msg": str(e)}
 def get_normal_response(history_messages):
     if not client_ai: return "⚠️ AI Client Init Failed."
     try:
