@@ -4,46 +4,139 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
-import msc_forest as forest # 引用森林 (形态合成版)
+import msc_forest as forest 
 
 # ==========================================
-# 🎨 CSS：极简科技风
+# 🎨 CSS：Cyber-Zen 极简主义设计系统
 # ==========================================
 def inject_custom_css():
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        /* 1. 字体系统：引入 Inter 和 JetBrains Mono */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
         
-        .stApp { background-color: #FFFFFF; font-family: 'Roboto', sans-serif; color: #222; }
-        [data-testid="stSidebar"] { background-color: #FAFAFA; border-right: 1px solid #E0E0E0; }
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+            color: #2D3436;
+        }
+        code, .stCode, .monospaced {
+            font-family: 'JetBrains Mono', monospace !important;
+        }
+
+        /* 2. 全局背景与容器 */
+        .stApp { background-color: #FAFAFA; }
         
-        /* 聊天气泡 */
+        /* 侧边栏优化 */
+        [data-testid="stSidebar"] {
+            background-color: #FFFFFF;
+            border-right: 1px solid #F0F0F0;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.02);
+        }
+        
+        /* 按钮微整形：去圆角，科技感 */
+        .stButton > button {
+            border-radius: 4px;
+            font-weight: 500;
+            border: 1px solid #E0E0E0;
+            background: #fff;
+            color: #333;
+            transition: all 0.2s;
+        }
+        .stButton > button:hover {
+            border-color: #000;
+            color: #000;
+            background: #F8F9FA;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        /* 3. 聊天气泡：数据块风格 */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
         .chat-bubble-me {
-            background-color: #555555; color: #fff; padding: 12px 16px; border-radius: 18px; 
-            border-bottom-right-radius: 4px; margin-bottom: 8px; display: inline-block; 
-            float: right; clear: both; max-width: 85%; font-size: 15px; 
+            background-color: #2D2D2D; 
+            color: #FFFFFF; 
+            padding: 14px 18px; 
+            border-radius: 2px; /* 锐利边缘 */
+            border-bottom-right-radius: 12px;
+            align-self: flex-end;
+            max-width: 80%;
+            font-size: 15px;
+            font-weight: 300;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+            float: right; clear: both;
         }
+        
         .chat-bubble-other {
-            background-color: #F7F7F7; color: #333; padding: 12px 16px; border-radius: 18px; 
-            border-bottom-left-radius: 4px; margin-bottom: 8px; display: inline-block; 
-            float: left; clear: both; max-width: 85%; font-size: 15px; border: 1px solid #EAEAEA;
+            background-color: #FFFFFF; 
+            color: #333; 
+            padding: 14px 18px; 
+            border-radius: 2px;
+            border-bottom-left-radius: 12px;
+            border: 1px solid #EAEAEA;
+            align-self: flex-start;
+            max-width: 80%;
+            font-size: 15px;
+            line-height: 1.6;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+            float: left; clear: both;
         }
+        
         .chat-bubble-ai {
-            background: transparent; color: #888; border: 1px dashed #ddd; 
-            padding: 8px 12px; border-radius: 12px; margin: 15px auto; 
-            text-align: center; font-size: 0.85em; width: fit-content; clear: both;
+            background: #F8F9FA;
+            color: #666;
+            border-left: 3px solid #00CCFF; /* AI 标识色 */
+            padding: 12px 20px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+            margin: 10px 0;
+            width: 100%;
+            clear: both;
+            border-radius: 0 4px 4px 0;
         }
         
-        .meaning-dot-btn { display: flex; align-items: center; justify-content: center; height: 100%; padding-top: 10px; }
-        .meaning-dot-btn button { border: none !important; background: transparent !important; color: #CCC !important; font-size: 18px !important; }
-        .meaning-dot-btn button:hover { color: #1A73E8 !important; transform: scale(1.2); }
+        /* 4. 意义卡片与微交互 */
+        .meaning-dot-btn { 
+            display: flex; align-items: center; justify-content: center; height: 100%; 
+            opacity: 0.6; transition: opacity 0.3s;
+        }
+        .meaning-dot-btn:hover { opacity: 1.0; }
         
-        .daily-card { border: 1px solid #eee; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px; background: #fff; }
-        .daily-title { font-size: 10px; color: #999; letter-spacing: 1px; margin-bottom: 5px; }
+        .daily-card {
+            border: 1px solid #E0E0E0;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: #444;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        .daily-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #AAA; margin-bottom: 8px;
+        }
+        
+        /* 去除 Streamlit 默认头部红线 */
+        header {visibility: hidden;}
+        
+        /* 调整 Toasts */
+        .stToast {
+            background-color: #333 !important;
+            color: #fff !important;
+            border-radius: 4px !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="MSC v75.0 Beacon", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v75.0", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -63,32 +156,56 @@ else:
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
     
-    rank_name, rank_icon = msc.calculate_rank(radar_dict)
+    # 获取用户的真实节点
+    my_nodes = msc.get_active_nodes_map(st.session_state.username).values()
+    
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
 
     with st.sidebar:
-        st.markdown(f"### {rank_icon} {st.session_state.nickname}")
-        
-        # 每日一问
+        # 用户信息区
+        c_av, c_info = st.columns([0.25, 0.75])
+        with c_av:
+            rank_name, rank_icon = msc.calculate_rank(radar_dict)
+            st.markdown(f"<div style='font-size:24px; text-align:center;'>{rank_icon}</div>", unsafe_allow_html=True)
+        with c_info:
+            st.markdown(f"**{st.session_state.nickname}**")
+            st.caption(f"ID: {st.session_state.username} | {rank_name}")
+
+        st.divider()
+
+        # 每日一问 (卡片式设计)
         if "daily_q" not in st.session_state: st.session_state.daily_q = None
         if st.session_state.daily_q is None:
-            if st.button("📅 Insight", use_container_width=True):
-                with st.spinner("."):
+            if st.button("📅 Insight Generator", use_container_width=True):
+                with st.spinner("Extracting meaning..."):
                     st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
                     st.rerun()
         else:
-            st.markdown(f"<div class='daily-card'><div class='daily-title'>DAILY</div>{st.session_state.daily_q}</div>", unsafe_allow_html=True)
-            if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
+            st.markdown(
+                f"""
+                <div class='daily-card'>
+                    <div class='daily-label'>DAILY REFLECTION</div>
+                    {st.session_state.daily_q}
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+            if st.button("↻ Refresh", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
 
-        # === 森林替代了雷达图 (Morph Edition) ===
-        # 获取用户的真实节点，用于生成颜色和判定进化阶段
-        my_nodes = msc.get_active_nodes_map(st.session_state.username).values()
-        
-        # 渲染 3D 灵魂形态 (传入 Radar 和 Node List)
+        # === 森林 (3D 灵魂形态) ===
+        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, list(my_nodes))
         
-        if st.button("🧬 Deep Profile", use_container_width=True):
-            viz.view_radar_details(radar_dict, st.session_state.username)
+        c_b1, c_b2 = st.columns(2)
+        with c_b1:
+            if st.button("🧬 DNA", use_container_width=True, help="View Radar Analysis"):
+                viz.view_radar_details(radar_dict, st.session_state.username)
+        with c_b2:
+            all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
+            if st.button("🔭 Map", use_container_width=True, help="View Fullscreen Map"): 
+                viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+        
+        st.divider()
         
         # 菜单
         menu_items = [
@@ -97,18 +214,12 @@ else:
             sac.MenuItem('World', icon='globe'),
         ]
         
-        # 管理员入口
         if st.session_state.is_admin:
             menu_items.append(sac.MenuItem('God Mode', icon='eye-fill'))
         
         menu_items.append(sac.MenuItem('System', type='group', children=[sac.MenuItem('Logout', icon='box-arrow-right')]))
 
         menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
-
-        st.divider()
-        all_nodes = msc.get_all_nodes_for_map(st.session_state.username)
-        if st.button("🔭 Full View", use_container_width=True): 
-            viz.view_fullscreen_map(all_nodes, st.session_state.nickname)
 
     if menu == 'Logout': 
         st.session_state.logged_in = False
