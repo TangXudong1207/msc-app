@@ -176,7 +176,7 @@ def render_forest_scene(radar_dict, user_nodes=None):
             "viewControl": {
                 "projection": 'orthographic', 
                 "autoRotate": True,
-                "autoRotateSpeed": 10,
+                "autoRotateSpeed": 20,
                 "distance": 200, 
                 "alpha": 20, # 稍微俯视
                 "beta": 40   # 侧视角度
