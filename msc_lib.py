@@ -198,17 +198,35 @@ def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     others = db.get_global_nodes()
     if not others: return None
+    
     best_match, highest_score = None, 0
+    
+    # 获取当前内容的颜色 (作为一种情感滤镜)
+    my_color = current_data.get('keywords', [''])[0] if current_data.get('keywords') else ''
+    
     for row in others:
         if row['username'] == current_user: continue
+        
+        # 1. 向量相似度 (基础分)
         if row['vector']:
             try:
                 o_vec = json.loads(row['vector'])
-                score = cosine_similarity(current_vector, o_vec)
-                if score > config.LINK_THRESHOLD["Strong"] and score > highest_score:
-                    highest_score = score
-                    best_match = {"user": row['username'], "content": row['content'], "score": round(score * 100, 1)}
+                sim_score = cosine_similarity(current_vector, o_vec)
+                
+                # 2. 颜色共鸣加成 (Bonus)
+                # 如果对方的节点颜色和我的相近（比如都是红色系），加分
+                # 这里简单处理：如果 keyword 包含相同颜色词，加 0.1
+                bonus = 0
+                if my_color and my_color in str(row.get('keywords','')):
+                    bonus = 0.1
+                
+                final_score = sim_score + bonus
+                
+                if final_score > config.LINK_THRESHOLD["Strong"] and final_score > highest_score:
+                    highest_score = final_score
+                    best_match = {"user": row['username'], "content": row['content'], "score": round(final_score * 100, 1)}
             except: continue
+            
     return best_match
     
 def analyze_persona_report(radar_data):
