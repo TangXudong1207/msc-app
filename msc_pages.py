@@ -142,10 +142,11 @@ def render_ai_page(username):
     # 顶部留白
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
     
+    # 1. 加载历史 (此时是极速的，因为读数据库有缓存了！)
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
-    # 历史消息渲染
+    # 2. 渲染历史消息
     for msg in chat_history:
         c_msg, c_dot = st.columns([0.92, 0.08])
         with c_msg:
@@ -154,12 +155,13 @@ def render_ai_page(username):
             else:
                 st.markdown(f"<div class='chat-bubble-ai'>{msg['content']}</div>", unsafe_allow_html=True)
         
+        # 小圆点 (保持不变)
         with c_dot:
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map.get(msg['content'])
                 if node:
                     st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
-                    with st.popover("●", help="Meaning Extracted"):
+                    with st.popover("●"):
                         try: score_val = float(node.get('m_score') or 0.5)
                         except: score_val = 0.5
                         st.caption(f"Score: {score_val:.2f}")
@@ -167,30 +169,30 @@ def render_ai_page(username):
                         st.info(node.get('insight', 'No insight'))
                     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 底部输入框
+    # 3. 底部输入框
     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+    
     if prompt := st.chat_input("Reflect on your thoughts..."):
-        msc.save_chat(username, "user", prompt)
-        # 立即显示用户输入
+        # A. 立即显示用户输入 (本地乐观更新)
         st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
+        # B. 构造完整历史
         full_history = chat_history + [{'role':'user', 'content':prompt}]
         
-        # AI 思考中
+        # C. 流式输出 AI 回复
         with st.chat_message("assistant"):
-            try:
-                stream = msc.get_normal_response(full_history)
-                if isinstance(stream, str) and stream.startswith(("⚠️", "❌")):
-                    st.error(stream)
-                    resp = stream
-                else:
-                    st.markdown(f"<div class='chat-bubble-ai'>{stream}</div>", unsafe_allow_html=True)
-                    resp = stream
-                msc.save_chat(username, "assistant", resp)
-            except Exception as e:
-                st.error(f"AI Error: {e}")
+            # 使用 write_stream 渲染生成器
+            response_stream = msc.get_stream_response(full_history)
+            full_response = st.write_stream(response_stream)
         
-        # 意义分析
+        # D. 存入数据库
+        # 注意：这里我们只在最后存一次
+        msc.save_chat(username, "user", prompt)
+        msc.save_chat(username, "assistant", full_response)
+
+        # E. 后台进行意义分析 (这步还是得等，但因为 AI 已经聊完了，用户心理等待感降低)
+        # 或者：我们可以把这一步放到线程里，但在 Streamlit 里不好做。
+        # 现状：用户看到 AI 回复完，然后才会弹出 Toast。
         analysis = msc.analyze_meaning_background(prompt)
         if analysis.get("valid", False):
             vec = msc.get_embedding(prompt)
@@ -200,7 +202,6 @@ def render_ai_page(username):
         
         time.sleep(0.5)
         st.rerun()
-
 # ==========================================
 # 💬 好友页面 (布局优化)
 # ==========================================
