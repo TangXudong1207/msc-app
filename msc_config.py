@@ -29,8 +29,7 @@ WORLD_UNLOCK_THRESHOLD = 20
 TTL_ACTIVE = 24    
 TTL_SEDIMENT = 720 
 
-# ==========================================
-# 🧠 3. AI 指令集 (Xenobiologist Edition)
+# 🧠 3. AI 指令集 (Grounded Philosopher Edition)
 # ==========================================
 # 聊天机器人：苏格拉底式的助产士，冷静、理智、结构化
 PROMPT_CHATBOT = """
