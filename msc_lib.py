@@ -139,8 +139,8 @@ def call_ai_api(prompt, use_google=False):
             content = response.text
             # 清洗 Markdown
             content = re.sub(r"```json\n|\n```", "", content)
-            try: return json.loads(content)
-            except: return {"content": content}
+                try: return json.loads(content)
+                except: return {"content": content}
         except Exception as e:
             # 关键：捕获所有 Google 错误，打印日志，然后让程序继续往下走 (Fallthrough)
             print(f"⚠️ Gemini Failed (Switching to DeepSeek): {e}")
