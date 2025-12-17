@@ -83,7 +83,9 @@ else:
             if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
 
         # === 森林替代了雷达图 ===
-        forest.render_forest_scene(radar_dict)
+        # 获取用户的真实节点，用于生成颜色和判定进化阶段
+my_nodes = msc.get_active_nodes_map(st.session_state.username).values()
+forest.render_forest_scene(radar_dict, list(my_nodes)
         if st.button("🧬 Deep Profile", use_container_width=True):
             viz.view_radar_details(radar_dict, st.session_state.username)
         
