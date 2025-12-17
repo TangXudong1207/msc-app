@@ -3,17 +3,16 @@ from streamlit_echarts import st_echarts
 import random
 import numpy as np
 import math
-import msc_viz as viz  # 用于取色
+import msc_viz as viz  # 必须引用，用于获取光谱颜色
 
 # ==========================================
-# 📐 1. 数学骨架：基础几何组件
+# 📐 1. 数学骨架：基础几何组件 (保持不变)
 # ==========================================
 def gen_sphere(n, r=10, center=(0,0,0), distortion=0):
     pts = []
     for _ in range(n):
         theta = random.uniform(0, 2*math.pi)
         phi = random.uniform(0, math.pi)
-        # 优化：让粒子更倾向于表面分布，增加轮廓感
         rad = r * (random.uniform(0.3, 1) ** (1/3)) 
         if distortion > 0: rad += random.gauss(0, distortion)
         x = center[0] + rad * math.sin(phi) * math.cos(theta)
@@ -29,7 +28,7 @@ def gen_pillar(n, h=20, r=5, center=(0,0,0), taper=0.5):
         h_ratio = z_local / h
         current_r = r * (1 - (1-taper)*h_ratio)
         theta = random.uniform(0, 2*math.pi)
-        rad = current_r * math.sqrt(random.uniform(0.2, 1)) # 略微中空
+        rad = current_r * math.sqrt(random.uniform(0.2, 1))
         x = center[0] + rad * math.cos(theta)
         y = center[1] + rad * math.sin(theta)
         z = center[2] + z_local - h/2
@@ -73,163 +72,197 @@ def gen_halo(n, r=15, center=(0,0,0)):
     return pts
 
 # ==========================================
-# 🧬 2. 混合算法：形态合成器
+# 🧬 2. 混合算法：形态与数据映射
 # ==========================================
-def synthesize_creature(radar, node_count):
+def synthesize_creature_data(radar, user_nodes):
+    """
+    核心升级：将真实节点数据注入几何形态
+    """
     if not radar: radar = {"Care": 3.0, "Agency": 3.0}
     
     sorted_attr = sorted(radar.items(), key=lambda x: x[1], reverse=True)
     primary_attr, p_score = sorted_attr[0]
     secondary_attr, s_score = sorted_attr[1]
     
-    # 💡 优化：大幅增加基础粒子数，解决“迷雾期难看”的问题
-    # 即使只有1个节点，也会生成 500 个全息粒子
-    base_count = max(500, node_count * 5) 
+    # 基础粒子数：保证形态完整
+    base_count = max(600, len(user_nodes) * 4) 
     
-    particles = []
-    colors = []
+    # --- 1. 生成纯几何坐标 ---
+    raw_points = []
     
-    # --- A. 躯干 ---
+    # A. 躯干 (占 60%)
     body_pts = []
     if primary_attr in ["Reflection", "Coherence"]:
-        body_pts = gen_sphere(int(base_count*0.5), r=8)
+        body_pts = gen_sphere(int(base_count*0.6), r=8)
     elif primary_attr in ["Agency", "Curiosity"]:
-        body_pts = gen_pillar(int(base_count*0.5), h=25, r=4, taper=0.3)
+        body_pts = gen_pillar(int(base_count*0.6), h=25, r=4, taper=0.3)
     elif primary_attr in ["Care", "Empathy"]:
-        body_pts = gen_sphere(int(base_count*0.5), r=8, distortion=1.5)
+        body_pts = gen_sphere(int(base_count*0.6), r=8, distortion=1.5)
     else:
-        p1 = gen_sphere(int(base_count*0.25), r=5, center=(0,0,-5))
-        p2 = gen_sphere(int(base_count*0.25), r=5, center=(0,0,5))
+        p1 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,-5))
+        p2 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,5))
         body_pts = p1 + p2
-        
-    particles.extend(body_pts)
+    raw_points.extend(body_pts)
+
+    # B. 组件 (占 40%)
+    mod_pts = []
+    if secondary_attr in ["Agency", "Aesthetic"]:
+        mod_pts = gen_wings(int(base_count*0.4), span=25, center=(0,0,5))
+    elif secondary_attr in ["Care", "Reflection"]:
+        mod_pts = gen_antlers(int(base_count*0.4), spread=12, center=(0,0,8))
+    elif secondary_attr == "Curiosity":
+        mod_pts = gen_halo(int(base_count*0.4), r=12)
+    else:
+        mod_pts = gen_sphere(int(base_count*0.4), r=10, distortion=1)
+    raw_points.extend(mod_pts)
     
-    # 躯干颜色映射 (保持高饱和度，配合黑色背景)
+    # 随机打乱坐标，避免真实节点全部集中在躯干头部
+    random.shuffle(raw_points)
+
+    # --- 2. 注入数据 (Data Injection) ---
+    echarts_series_data = []
+    
+    # 颜色映射表 (用于灵能粒子)
     c_map = {
         "Care": "#00FF88", "Agency": "#FFD700", "Reflection": "#9D00FF",
         "Conflict": "#FF2B2B", "Empathy": "#FF69B4", "Structure": "#E0E0E0",
-        "Curiosity": "#00CCFF", "Aesthetic": "#FF00FF"
+        "Curiosity": "#00CCFF", "Aesthetic": "#FF00FF", "Mystery": "#9D00FF"
     }
-    base_color = c_map.get(primary_attr, "#FFFFFF")
-    colors.extend([base_color] * len(body_pts))
-
-    # --- B. 组件 ---
-    mod_pts = []
-    mod_color = "#CCCCCC"
+    spirit_color = c_map.get(primary_attr, "#FFFFFF")
     
-    if secondary_attr in ["Agency", "Aesthetic"]:
-        mod_pts = gen_wings(int(base_count*0.4), span=25, center=(0,0,5))
-        mod_color = "#FF7F00" if secondary_attr == "Agency" else "#FF00FF"
-    elif secondary_attr in ["Care", "Reflection"]:
-        mod_pts = gen_antlers(int(base_count*0.3), spread=12, center=(0,0,8))
-        mod_color = "#00FF88" if secondary_attr == "Care" else "#00CCFF"
-    elif secondary_attr == "Curiosity":
-        mod_pts = gen_halo(int(base_count*0.3), r=12)
-        mod_color = "#00CCFF"
-    else:
-        mod_pts = gen_sphere(int(base_count*0.2), r=10, distortion=1)
-        mod_color = base_color
-        
-    particles.extend(mod_pts)
-    colors.extend([mod_color] * len(mod_pts))
-    
-    # --- C. 飞升光效 ---
-    total_score = sum(radar.values())
-    if total_score > 40:
-        ascension_pts = gen_pillar(int(base_count*0.1), h=40, r=0.5, center=(0,0,0))
-        particles.extend(ascension_pts)
-        colors.extend(["#FFFFFF"] * len(ascension_pts))
-
-    return particles, colors, primary_attr, secondary_attr
+    for i, pt in enumerate(raw_points):
+        # 如果还有真实节点，就把这个坐标分配给真实节点
+        if i < len(user_nodes):
+            node = user_nodes[i]
+            # 获取真实光谱颜色
+            try:
+                kw_str = str(node.get('keywords', ''))
+                real_color = viz.get_spectrum_color(kw_str)
+            except: 
+                real_color = spirit_color
+            
+            # 构造带交互的数据项
+            # Tooltip 会显示 name 和 value
+            # 我们把 content 放进 name 里，或者用 formatter
+            content_preview = node.get('care_point', 'Thought')
+            full_content = node.get('content', '')
+            
+            echarts_series_data.append({
+                "name": content_preview, # 鼠标悬停显示的标题
+                "value": pt,
+                "itemStyle": {
+                    "color": real_color,
+                    "opacity": 1.0 # 真实节点不透明，很亮
+                },
+                "symbolSize": 5, # 真实节点大一点
+                # 自定义数据，供 tooltip 使用
+                "raw_content": full_content
+            })
+        else:
+            # 灵能粒子 (Spirit Dust) - 维持形状
+            echarts_series_data.append({
+                "name": "Soul Essence",
+                "value": pt,
+                "itemStyle": {
+                    "color": spirit_color,
+                    "opacity": 0.3 # 灵能粒子半透明，作为背景
+                },
+                "symbolSize": 2, # 灵能粒子小一点
+                "raw_content": "Structural Energy"
+            })
+            
+    return echarts_series_data, primary_attr, secondary_attr
 
 # ==========================================
-# 🌲 3. 渲染主程序 (Cyber-Grid Edition)
+# 🌲 3. 渲染主程序 (Data-Hologram Edition)
 # ==========================================
 def render_forest_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 1. 计算形态
-    particles, colors, p_attr, s_attr = synthesize_creature(radar_dict, len(user_nodes))
+    # 1. 计算形态与数据
+    echarts_data, p_attr, s_attr = synthesize_creature_data(radar_dict, user_nodes)
     
     creature_name = f"{p_attr}-{s_attr} Hybrid"
     if len(user_nodes) < 5: creature_name = "Proto-Consciousness"
     
     st.markdown(f"### 🧬 Soul Form: **{creature_name}**")
     
-    echarts_data = []
-    for i, pt in enumerate(particles):
-        echarts_data.append({
-            "value": pt,
-            "itemStyle": {"color": colors[i]}
-        })
-        
-    # 2. 核心升级：科技网格风格 (Cyber-Grid)
+    # 2. 视觉升级：重工业全息网格
     # 颜色定义
-    axis_color = "#444444" # 深灰网格
-    text_color = "#666666" # 浅灰文字
+    grid_color = "#333333" # 轴线
+    split_color = "#222222" # 网格线
     
     option = {
-        "backgroundColor": "transparent", # 保持透明，融入Sidebar
-        "tooltip": {},
-        # 💡 恢复三维坐标轴，但做成科技风格
+        "backgroundColor": "transparent",
+        # 💡 Tooltip 配置：显示真实内容
+        "tooltip": {
+            "show": True,
+            "trigger": 'item',
+            "formatter": "{b}", # 这里简单显示 name，如果需要更复杂内容，Streamlit中传函数较麻烦
+            "backgroundColor": "rgba(50,50,50,0.9)",
+            "textStyle": {"color": "#fff"},
+            "borderColor": "#777"
+        },
+        # 💡 三维坐标轴：加粗，加重
         "xAxis3D": {
-            "show": True, "name": "X", 
-            "axisLine": {"lineStyle": {"color": axis_color, "opacity": 0.8}},
-            "axisLabel": {"show": False}, # 隐藏数字，只保留结构
-            "splitLine": {"show": True, "lineStyle": {"color": axis_color, "type": "dashed", "opacity": 0.5}}
+            "show": True, "name": "", 
+            "axisLine": {"lineStyle": {"color": grid_color, "width": 3}}, # 粗轴
+            "axisLabel": {"show": False},
+            "splitLine": {"show": True, "lineStyle": {"color": split_color, "width": 1}}
         },
         "yAxis3D": {
-            "show": True, "name": "Y",
-            "axisLine": {"lineStyle": {"color": axis_color, "opacity": 0.8}},
+            "show": True, "name": "",
+            "axisLine": {"lineStyle": {"color": grid_color, "width": 3}},
             "axisLabel": {"show": False},
-            "splitLine": {"show": True, "lineStyle": {"color": axis_color, "type": "dashed", "opacity": 0.5}}
+            "splitLine": {"show": True, "lineStyle": {"color": split_color, "width": 1}}
         },
         "zAxis3D": {
-            "show": True, "name": "Z",
-            "axisLine": {"lineStyle": {"color": axis_color, "opacity": 0.8}},
+            "show": True, "name": "",
+            "axisLine": {"lineStyle": {"color": grid_color, "width": 3}},
             "axisLabel": {"show": False},
-            "splitLine": {"show": True, "lineStyle": {"color": axis_color, "type": "dashed", "opacity": 0.5}}
+            "splitLine": {"show": True, "lineStyle": {"color": split_color, "width": 1}}
         },
         "grid3D": {
-            "boxWidth": 100, "boxDepth": 100, "boxHeight": 100,
-            # 💡 恢复自由视角 + 自动旋转
+            "boxWidth": 110, "boxDepth": 110, "boxHeight": 110,
             "viewControl": {
-                "projection": 'orthographic', # 保持高级的正交投影
+                "projection": 'orthographic',
                 "autoRotate": True,
-                "autoRotateSpeed": 10,
+                "autoRotateSpeed": 8, # 稍微慢一点，显出厚重感
                 "distance": 220,
-                "alpha": 20, 
-                "beta": 40,
-                "rotateSensitivity": 1, # 恢复鼠标拖拽灵敏度
-                "zoomSensitivity": 1    # 恢复缩放
+                "alpha": 25, 
+                "beta": 45,
+                "rotateSensitivity": 1,
+                "zoomSensitivity": 1
             },
-            # 光照
             "light": {
                 "main": {
-                    "intensity": 1.2,
-                    "shadow": False, # 关闭阴影以提升网格清晰度
-                    "alpha": 30,
-                    "beta": 30
+                    "intensity": 1.5, # 增强亮度
+                    "shadow": False,
+                    "alpha": 40,
+                    "beta": 40
                 },
                 "ambient": {
-                    "intensity": 0.4
+                    "intensity": 0.5
                 }
             },
+            # 让环境变暗一点点，突出全息感
             "environment": "transparent",
-            "axisLine": {"lineStyle": {"color": axis_color}},
         },
         "series": [{
             "type": 'scatter3D',
             "data": echarts_data,
-            "symbolSize": 4, 
-            # 开启高亮，让粒子在网格中更突出
-            "itemStyle": {
-                "opacity": 0.9
-            },
+            "shading": 'lambert', # 开启光影，让粒子有体积感
+            # 开启高亮交互
             "emphasis": {
+                "label": {
+                    "show": True,
+                    "formatter": "{b}", # 鼠标移上去显示文字
+                    "position": "top",
+                    "textStyle": {"color": "#fff", "fontSize": 12, "backgroundColor": "#000", "padding": [2,5]}
+                },
                 "itemStyle": {
-                    "color": "#fff",
-                    "scale": 1.5
+                    "color": "#fff", # 高亮变白
+                    "opacity": 1
                 }
             }
         }]
