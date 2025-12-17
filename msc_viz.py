@@ -1,4 +1,4 @@
-### msc_viz.py (v74.0 Spectrum Edition) ###
+### msc_viz.py (v75.0 User-Centric Edition) ###
 
 import streamlit as st
 import plotly.express as px
@@ -6,11 +6,8 @@ import plotly.graph_objects as go
 import pandas as pd
 import json
 import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
 from streamlit_echarts import st_echarts
 import msc_config as config
-import msc_lib as msc 
 
 # ==========================================
 # 🎨 12维光谱颜色匹配器
@@ -99,176 +96,159 @@ def compute_clusters(nodes, n_clusters=5):
     except Exception as e:
         print(f"Cluster Error: {e}")
         return pd.DataFrame()
-
+def get_spectrum_color(keywords_str):
+    for dim, color in config.SPECTRUM.items():
+        if dim in keywords_str or color in keywords_str: return color
+    return "#00CCFF" # Default
 # ==========================================
-# 🌍 3D 粒子地球 (双层宇宙 + 飞行连线)
+# 🌍 3D 粒子地球 (v75.0 核心)
 # ==========================================
-def render_3d_particle_map(nodes):
+def render_3d_particle_map(nodes, current_user):
     if not nodes: 
         st.info("The universe is empty.")
         return
 
-    # 数据容器
-    news_nodes = []
-    user_nodes = []
-    arcs = [] # 连线数据
-    
+    # 分层容器
+    my_lats, my_lons, my_texts, my_colors = [], [], [], [] # Layer 3: My Thoughts (High)
+    others_lats, others_lons, others_colors = [], [], [] # Layer 2: Others (Low)
+    sediment_lats, sediment_lons, sediment_colors = [], [], [] # Layer 1: History (Ground)
+
     for node in nodes:
-        # 解析数据
+        # 解析坐标 (如果用户没同意隐私，可能没有 location，或者只有 city)
         loc = None
-        target_loc = None
         try:
             if isinstance(node.get('location'), str): loc = json.loads(node['location'])
             elif isinstance(node.get('location'), dict): loc = node['location']
-            
-            # 解析连线目标 (新闻特有)
-            if 'target_location' in node: 
-                 t = node['target_location']
-                 if isinstance(t, str): target_loc = json.loads(t)
-                 elif isinstance(t, dict): target_loc = t
         except: pass
         
-        # 补全向量
-        vec = None
-        if node['vector']:
-            try: vec = json.loads(node['vector'])
-            except: pass
-        node['_vec'] = vec
-        
-        # 兜底坐标
-        if not loc and node['username'] == 'World_Observer':
-             loc = {'lat': np.random.uniform(-40, 60), 'lon': np.random.uniform(-150, 150)}
-        node['_loc'] = loc
-        node['_target'] = target_loc
+        if not loc: continue # 没有坐标的不显示 (隐私保护)
 
-        # 分类
-        if node['username'] == 'World_Observer':
-            news_nodes.append(node)
-            # 如果有目标地，且不同于原点，添加到连线列表
-            if loc and target_loc:
-                if abs(loc['lat'] - target_loc['lat']) > 1 or abs(loc['lon'] - target_loc['lon']) > 1:
-                    k = str(node.get('keywords', ''))
-                    color = get_spectrum_color(k)
-                    arcs.append({
-                        'start_lat': loc['lat'], 'start_lon': loc['lon'],
-                        'end_lat': target_loc['lat'], 'end_lon': target_loc['lon'],
-                        'color': color
-                    })
-        else:
-            user_nodes.append(node)
+        lat, lon = loc.get('lat'), loc.get('lon')
+        color = get_spectrum_color(str(node.get('keywords', '')))
+        mode = node.get('mode', 'Active')
 
-    # 计算引力吸附 (User -> News)
-    for u_node in user_nodes:
-        if not u_node['_vec']: continue
-        best_news = None
-        best_sim = 0
-        for n_node in news_nodes:
-            if not n_node['_vec']: continue
-            try:
-                v1 = np.array(u_node['_vec']); v2 = np.array(n_node['_vec'])
-                sim = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-                if sim > best_sim: best_sim = sim; best_news = n_node
-            except: pass
+        # === 逻辑分支 ===
         
-        if best_news and best_sim > 0.75:
-            target = best_news['_loc']
-            # 吸附在新闻上方
-            u_node['_loc']['lat'] = target['lat'] + np.random.normal(0, 2)
-            u_node['_loc']['lon'] = target['lon'] + np.random.normal(0, 2)
-            u_node['_attracted'] = True
+        # 1. 历史沉淀 (不论是谁的，都变成地质层)
+        if mode == 'Sediment':
+            sediment_lats.append(lat); sediment_lons.append(lon)
+            sediment_colors.append(color) # 这里可以做变暗处理
+            
+        # 2. 我的活跃思想 (高亮，可交互)
+        elif node['username'] == current_user:
+            my_lats.append(lat); my_lons.append(lon)
+            my_texts.append(f"<b>My Thought:</b> {node['care_point']}")
+            my_colors.append(color) # 原色
+            
+        # 3. 别人的活跃思想 (匿名，仅光点)
         else:
-            u_node['_attracted'] = False
+            others_lats.append(lat); others_lons.append(lon)
+            others_colors.append(color)
 
     fig = go.Figure()
 
     # 1. 地球基底
     fig.add_trace(go.Scattergeo(
-        lon=[], lat=[], mode='lines', line=dict(width=1, color='#222'),
+        lon=[], lat=[], mode='lines', line=dict(width=1, color='#111'),
     ))
 
-    # 2. 绘制连线 (Arcs)
-    for arc in arcs:
+    # Layer 1: 历史沉淀 (暗淡方块)
+    if sediment_lats:
         fig.add_trace(go.Scattergeo(
-            lon=[arc['start_lon'], arc['end_lon']],
-            lat=[arc['start_lat'], arc['end_lat']],
-            mode='lines',
-            line=dict(width=1, color=arc['color']),
-            opacity=0.6,
-            hoverinfo='skip',
-            name='Impact Arc'
+            lon=sediment_lons, lat=sediment_lats, mode='markers',
+            marker=dict(size=3, color=sediment_colors, opacity=0.4, symbol='square'),
+            hoverinfo='skip', name='Human History'
         ))
 
-    # 3. 绘制新闻 (Active & Sediment)
-    act_lats, act_lons, act_txts, act_cols, act_sizes = [], [], [], [], []
-    sed_lats, sed_lons, sed_cols = [], [], []
-    
-    for n in news_nodes:
-        if not n['_loc']: continue
-        lat, lon = n['_loc']['lat'], n['_loc']['lon']
-        color_hex = get_spectrum_color(str(n.get('keywords', '')))
-        
-        if n.get('mode') == 'Sediment':
-            sed_lats.append(lat); sed_lons.append(lon)
-            # 简单变暗处理：此处保持原色但高透明度
-            sed_cols.append(color_hex)
-        else:
-            act_lats.append(lat); act_lons.append(lon)
-            act_txts.append(f"<b>{n['care_point']}</b><br>{n.get('insight','')}")
-            act_cols.append(color_hex)
-            # 大小基于 intensity，默认 15
-            size = float(n.get('intensity', 0.5)) * 20 + 5
-            act_sizes.append(size)
-
-    if sed_lats:
+    # Layer 2: 他人思想 (柔和光晕)
+    if others_lats:
         fig.add_trace(go.Scattergeo(
-            lon=sed_lons, lat=sed_lats, mode='markers',
-            marker=dict(size=4, color=sed_cols, opacity=0.4, symbol='square'),
-            hoverinfo='skip', name='History Layer'
-        ))
-    
-    if act_lats:
-        fig.add_trace(go.Scattergeo(
-            lon=act_lons, lat=act_lats, mode='markers',
-            text=act_txts, hoverinfo='text',
-            marker=dict(size=act_sizes, color=act_cols, opacity=1.0, line=dict(width=2, color='white')),
-            name='Active Pulse'
-        ))
-        # 光晕
-        fig.add_trace(go.Scattergeo(
-            lon=act_lons, lat=act_lats, mode='markers',
-            marker=dict(size=[s*2.5 for s in act_sizes], color=act_cols, opacity=0.3, line=dict(width=0)),
-            hoverinfo='skip', name='Glow'
+            lon=others_lons, lat=others_lats, mode='markers',
+            # 不显示文字，只显示 "Anonymous Resonance"
+            text=["Anonymous Resonance"] * len(others_lats),
+            hoverinfo='text',
+            marker=dict(size=8, color=others_colors, opacity=0.6, line=dict(width=0)),
+            name='Collective Mind'
         ))
 
-    # 4. 用户思想 (金色星辰)
-    usr_lats, usr_lons, usr_txts, usr_syms = [], [], [], []
-    for u in user_nodes:
-        if not u['_loc']: continue
-        usr_lats.append(u['_loc']['lat'])
-        usr_lons.append(u['_loc']['lon'])
-        usr_txts.append(f"@{u['username']}: {u['care_point']}")
-        usr_syms.append('star' if u.get('_attracted') else 'circle')
-
-    if usr_lats:
+    # Layer 3: 我的思想 (明亮星辰)
+    if my_lats:
         fig.add_trace(go.Scattergeo(
-            lon=usr_lons, lat=usr_lats, mode='markers',
-            text=usr_txts, hoverinfo='text',
-            marker=dict(size=5, color='#FFD700', symbol=usr_syms, opacity=0.9, line=dict(width=0.5, color='white')),
-            name='Human Thought'
+            lon=my_lons, lat=my_lats, mode='markers',
+            text=my_texts, hoverinfo='text',
+            marker=dict(
+                size=12, color=my_colors, opacity=1.0, 
+                symbol='star', line=dict(width=1, color='white')
+            ),
+            name='My Orbit'
         ))
 
     fig.update_layout(
         geo=dict(
             scope='world', projection_type='orthographic',
-            showland=True, landcolor='rgb(10, 10, 10)',
-            showocean=True, oceancolor='rgb(5, 5, 5)',
-            bgcolor='black', showlakes=False, showcountries=True, countrycolor='#333'
+            showland=True, landcolor='rgb(20, 20, 20)',
+            showocean=True, oceancolor='rgb(10, 10, 10)',
+            bgcolor='black', showlakes=False, showcountries=False
         ),
         paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=True,
-        legend=dict(font=dict(color="white"), bgcolor="rgba(0,0,0,0)")
+        legend=dict(font=dict(color="#888"), bgcolor="rgba(0,0,0,0)")
     )
     
     st.plotly_chart(fig, use_container_width=True)
+4. msc_pages.py (权限控制)
+### msc_pages.py (v75.0 Gatekeeper Edition) ###
+
+import streamlit as st
+import msc_lib as msc
+import msc_viz as viz
+import msc_sim as sim
+# import msc_news_real as news # 删除了！
+
+# ... (Login, Admin Dashboard, AI Partner, Friends 保持逻辑不变) ...
+# 注意：在 render_admin_dashboard 里，把 News 相关的按钮删掉，只保留 Sim 和 Time Decay
+
+# ==========================================
+# 🌍 世界页面 (门槛与协议)
+# ==========================================
+def render_world_page():
+    st.caption("MSC GLOBAL VIEW")
+    
+    username = st.session_state.username
+    has_access, count = msc.check_world_access(username)
+    
+    # === 门槛检查 ===
+    if not has_access and not st.session_state.is_admin:
+        st.warning(f"🔒 Access Locked. (Your Thoughts: {count} / 20)")
+        st.markdown("""
+        To enter the **Global Mind Layer**, you must contribute at least **20 Meaning Nodes**.
+        The world is built by those who think.
+        """)
+        st.progress(count / 20)
+        return
+
+    # === 隐私协议 (简单版) ===
+    if "privacy_accepted" not in st.session_state:
+        st.session_state.privacy_accepted = False
+        
+    if not st.session_state.privacy_accepted:
+        with st.container(border=True):
+            st.markdown("### 📜 The Pact")
+            st.markdown("""
+            You are about to enter the **Shared Consciousness Map**.
+            
+            1. You will see others as **Anonymous Lights**.
+            2. You will be seen as an **Anonymous Light**.
+            3. Only **Colors (Emotions)** are shared, not content.
+            4. Your location will be fuzzy (City Level).
+            """)
+            if st.button("I Accept the Pact"):
+                st.session_state.privacy_accepted = True
+                st.rerun()
+        return
+# === 进入世界 ===
+    nodes = msc.get_global_nodes()
+    # 渲染 v75.0 地图 (传入当前用户名以区分层级)
+    viz.render_3d_particle_map(nodes, username)
 
 # ==========================================
 # 🕸️ 雷达图 (Echarts)
