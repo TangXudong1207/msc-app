@@ -1,5 +1,3 @@
-### msc_db.py (含时间衰变逻辑) ###
-
 import streamlit as st
 from supabase import create_client, Client
 import hashlib
@@ -26,13 +24,24 @@ def add_user(username, password, nickname, country="Other"):
     try:
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False 
-        coords = [116.4, 39.9]
-        if country == "USA": coords = [-95.7, 37.0]
+        
+        # 默认坐标 (如果 country 是坐标字符串)
+        # 这里的 country 参数现在可能传入城市名，暂存为 country 字段
         radar = {"Care":3.0,"Curiosity":3.0,"Reflection":3.0,"Coherence":3.0,"Empathy":3.0,"Agency":3.0,"Aesthetic":3.0}
-        data = {"username":username,"password":make_hashes(password),"nickname":nickname,"radar_profile":json.dumps(radar),"country":country,"location":json.dumps(coords),"last_seen":datetime.now(timezone.utc).isoformat()}
+        
+        data = {
+            "username": username,
+            "password": make_hashes(password),
+            "nickname": nickname,
+            "radar_profile": json.dumps(radar),
+            "country": country,
+            "last_seen": datetime.now(timezone.utc).isoformat()
+        }
         supabase.table('users').insert(data).execute()
         return True
-    except: return False
+    except Exception as e:
+        print(f"❌ User Add Error: {e}")
+        return False
 
 def get_nickname(username):
     try:
@@ -49,8 +58,11 @@ def get_user_profile(username):
     return {"nickname": username, "radar_profile": None}
 
 def update_radar_score(username, input_scores):
-    # (保留原有逻辑，此处略)
-    pass
+    try:
+        # 只更新 radar_profile，保留其他字段
+        supabase.table('users').update({"radar_profile": input_scores}).eq("username", username).execute()
+    except Exception as e:
+        print(f"⚠️ Update Radar Error: {e}")
 
 def update_heartbeat(username):
     try: supabase.table('users').update({"last_seen": datetime.now(timezone.utc).isoformat()}).eq("username", username).execute()
@@ -72,19 +84,34 @@ def save_node(username, content, data, mode, vector):
         logic = data.get('m_score', 0.5)
         kw = json.dumps(data.get('keywords', []))
         vec = json.dumps(vector)
-        # 注意：这里我们默认 mode='News' 或 'AI对话'
-        # 沉淀后，mode 会变成 'Sediment'
-        data = {
-            "username":username, "content":content, 
-            "care_point":data.get('care_point','?'), 
-            "meaning_layer":data.get('meaning_layer',''), 
-            "insight":data['insight'], "mode":mode, "vector":vec, 
-            "logic_score":logic, "keywords":kw, "is_deleted":False,
-            "location": json.dumps(data.get('location', {})) # 存位置
+        
+        # 确保 location 是合法的 JSON 字符串
+        loc_data = data.get('location', {})
+        loc_json = json.dumps(loc_data)
+
+        payload = {
+            "username": username, 
+            "content": content, 
+            "care_point": data.get('care_point','?'), 
+            "meaning_layer": data.get('meaning_layer',''), 
+            "insight": data.get('insight', ''), 
+            "mode": mode, 
+            "vector": vec, 
+            "logic_score": logic, 
+            "keywords": kw, 
+            "is_deleted": False,
+            "location": loc_json  # 关键修复：确保此字段存在于数据库中
         }
-        supabase.table('nodes').insert(data).execute()
+        
+        supabase.table('nodes').insert(payload).execute()
         return True
-    except: return False
+    except Exception as e:
+        # 🛑 关键：打印错误到后台终端，方便调试
+        print(f"❌ SAVE NODE ERROR: {str(e)}")
+        # 常见错误提示
+        if "column" in str(e) and "location" in str(e):
+            print("👉 提示: 请在 Supabase 执行 SQL: ALTER TABLE nodes ADD COLUMN location JSONB;")
+        return False
 
 def get_active_nodes_map(username):
     try:
@@ -99,7 +126,9 @@ def get_all_nodes_for_map(username):
     except: return []
 
 def get_global_nodes():
-    try: return supabase.table('nodes').select("*").eq('is_deleted', False).limit(200).execute().data
+    try: 
+        # 获取最新的 200 个节点用于展示
+        return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute().data
     except: return []
 
 # --- 社交 ---
@@ -133,42 +162,28 @@ def mark_read(s, r):
     except: pass
 
 # ==========================================
-# ⏳ 核心：时间流逝与沉淀 (New!)
+# ⏳ 时间衰变
 # ==========================================
 def process_time_decay():
-    """
-    检查所有 'News_Stream' 模式的节点。
-    如果太旧 (比如 > 0.05 小时)，则将 mode 改为 'Sediment'。
-    """
     try:
-        # 1. 找出活跃新闻
-        res = supabase.table('nodes').select("*").eq('mode', 'News_Stream').execute()
+        res = supabase.table('nodes').select("*").neq('mode', 'Sediment').neq('mode', 'Genesis_Sim').execute()
         active_nodes = res.data
-        
         sediment_count = 0
         now = datetime.now(timezone.utc)
-        TTL_HOURS = 24 #24小时(测试用)
+        TTL_HOURS = 24 
         
         for node in active_nodes:
             try:
                 created_at_str = node['created_at']
-                if created_at_str.endswith('Z'):
-                    created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                else:
-                    created_at = datetime.fromisoformat(created_at_str)
-                
-                # 补全时区信息以免报错
-                if created_at.tzinfo is None:
-                    created_at = created_at.replace(tzinfo=timezone.utc)
-
+                if created_at_str.endswith('Z'): created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                else: created_at = datetime.fromisoformat(created_at_str)
+                if created_at.tzinfo is None: created_at = created_at.replace(tzinfo=timezone.utc)
                 age = (now - created_at).total_seconds() / 3600
                 
                 if age > TTL_HOURS:
-                    # 沉淀：修改 mode
                     supabase.table('nodes').update({"mode": "Sediment"}).eq("id", node['id']).execute()
                     sediment_count += 1
             except: continue
-            
         return sediment_count
     except Exception as e:
         print(f"Decay Error: {e}")
