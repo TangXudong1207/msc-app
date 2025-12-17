@@ -12,10 +12,10 @@ import msc_config as config
 import msc_db as db
 
 # ==========================================
-# 🛑 1. 初始化系统 (双引擎)
+# 🛑 1. 初始化系统
 # ==========================================
 def init_system():
-    # A. OpenAI/DeepSeek 客户端 (备用/中文分析)
+    # A. OpenAI/DeepSeek 客户端
     try:
         client_openai = OpenAI(
             api_key=st.secrets["API_KEY"],
@@ -25,7 +25,7 @@ def init_system():
     except:
         client_openai = None; model_openai = "gpt-3.5-turbo"
 
-    # B. Google Vertex AI (主要/全球新闻)
+    # B. Google Vertex AI (Embedding)
     vertex_embed = None
     try:
         if "gcp_service_account" in st.secrets:
@@ -35,23 +35,20 @@ def init_system():
             vertex_embed = TextEmbeddingModel.from_pretrained("text-embedding-004")
     except: pass
     
-    # 暂时没有初始化 Gemini Chat Model，避免报错，后续如果需要可在此添加
     return client_openai, model_openai, vertex_embed
 
-# 初始化全局变量
 client_ai, TARGET_MODEL, vertex_embed_model = init_system()
-# 定义一个空的 gemini_model 防止报错 (后续如果接入 Google 生成式 AI 可在此修改)
 gemini_model = None 
 
 # ==========================================
-# 🌉 2. 数据库桥梁
+# 🌉 2. 数据库桥梁 (透传 DB 函数)
 # ==========================================
-def login_user(username, password): return db.login_user(username, password)
-def add_user(username, password, nickname, country="Other"): return db.add_user(username, password, nickname, country)
-def get_nickname(username): return db.get_nickname(username)
-def get_user_profile(username): return db.get_user_profile(username)
-def get_all_users(current_user): return db.get_all_users(current_user)
-def update_heartbeat(username): db.update_heartbeat(username)
+def login_user(u, p): return db.login_user(u, p)
+def add_user(u, p, n, c): return db.add_user(u, p, n, c)
+def get_nickname(u): return db.get_nickname(u)
+def get_user_profile(u): return db.get_user_profile(u)
+def get_all_users(curr): return db.get_all_users(curr)
+def update_heartbeat(u): db.update_heartbeat(u)
 def check_is_online(last_seen_str):
     if not last_seen_str: return False
     try:
@@ -62,27 +59,26 @@ def check_is_online(last_seen_str):
     except: return False
 
 def calculate_rank(radar_data):
-    if not radar_data: return "MSC 公民", "🥉"
+    if not radar_data: return "Citizen", "🥉"
     if isinstance(radar_data, str): 
         try: radar_data = json.loads(radar_data)
-        except: return "MSC 公民", "🥉"
+        except: return "Citizen", "🥉"
     try: total = sum(float(v) for v in radar_data.values())
     except: total = 0
-    if total < 25: return "观察者", "🥉"
-    elif total < 38: return "探索者", "🥈"
-    elif total < 54: return "构建者", "💎"
-    else: return "领航员", "👑"
+    if total < 25: return "Observer", "🥉"
+    elif total < 38: return "Seeker", "🥈"
+    elif total < 54: return "Architect", "💎"
+    else: return "Navigator", "👑"
 
-def save_chat(username, role, content): db.save_chat(username, role, content)
-def get_active_chats(username): return db.get_active_chats(username)
+def save_chat(u, r, c): db.save_chat(u, r, c)
+def get_active_chats(u): return db.get_active_chats(u)
 def get_direct_messages(u1, u2): return db.get_direct_messages(u1, u2)
-def send_direct_message(sender, receiver, content): return db.send_direct_message(sender, receiver, content)
-def get_unread_counts(curr): return db.get_unread_counts(curr)
-def mark_messages_read(sender, receiver): db.mark_read(sender, receiver)
-def save_node(username, content, data, mode, vector): 
-    return db.save_node(username, content, data, mode, vector)
-def get_active_nodes_map(username): return db.get_active_nodes_map(username)
-def get_all_nodes_for_map(username): return db.get_all_nodes_for_map(username)
+def send_direct_message(s, r, c): return db.send_direct_message(s, r, c)
+def get_unread_counts(c): return db.get_unread_counts(c)
+def mark_messages_read(s, r): db.mark_read(s, r)
+def save_node(u, c, d, m, v): return db.save_node(u, c, d, m, v)
+def get_active_nodes_map(u): return db.get_active_nodes_map(u)
+def get_all_nodes_for_map(u): return db.get_all_nodes_for_map(u)
 def get_global_nodes(): return db.get_global_nodes()
 
 def check_world_access(username):
@@ -90,7 +86,7 @@ def check_world_access(username):
     return len(nodes) >= config.WORLD_UNLOCK_THRESHOLD, len(nodes)
 
 # ==========================================
-# 🧮 3. 向量算法 (Vertex 优先)
+# 🧮 3. 向量算法
 # ==========================================
 def get_embedding(text):
     if vertex_embed_model:
@@ -98,7 +94,6 @@ def get_embedding(text):
             embeddings = vertex_embed_model.get_embeddings([text])
             return embeddings[0].values
         except: pass
-    # 如果 Vertex 失败或未配置，返回随机向量以防崩溃（生产环境可换成本地模型）
     return np.random.rand(768).tolist()
 
 def cosine_similarity(v1, v2):
@@ -111,31 +106,11 @@ def cosine_similarity(v1, v2):
     except: return 0
 
 # ==========================================
-# 🧠 4. AI 智能核心 (双引擎智能切换版)
+# 🧠 4. AI 智能核心 (流式升级版)
 # ==========================================
 def call_ai_api(prompt, use_google=False):
-    """
-    通用 AI 调用接口。
-    逻辑：优先尝试 Google Gemini (如果指定且可用)，如果失败 (404/Auth)，自动降级回 DeepSeek。
-    """
-    # 1. 尝试 Google Gemini (前提是已初始化 gemini_model)
-    if use_google and gemini_model:
-        try:
-            # Gemini 需要纯文本 prompt
-            response = gemini_model.generate_content(prompt)
-            content = response.text
-            # 清洗 Markdown
-            content = re.sub(r"```json\n|\n```", "", content)
-            try: return json.loads(content)
-            except: return {"content": content}
-        except Exception as e:
-            # 关键：捕获所有 Google 错误，打印日志，然后让程序继续往下走 (Fallthrough)
-            print(f"⚠️ Gemini Failed (Switching to DeepSeek): {e}")
-            pass 
-
-    # 2. 回退/默认 DeepSeek (OpenAI 协议)
+    # 非流式调用（用于后台分析）
     if not client_ai: return {"error": "AI未连接"}
-    
     try:
         response = client_ai.chat.completions.create(
             model=TARGET_MODEL,
@@ -150,36 +125,42 @@ def call_ai_api(prompt, use_google=False):
         except: return {"error": True}
     except Exception as e: return {"error": True, "msg": str(e)}
 
-def get_normal_response(history_messages):
-    if not client_ai: return "⚠️ AI Client Init Failed."
+def get_stream_response(history_messages):
+    """
+    核心升级：返回一个生成器，支持流式输出
+    """
+    if not client_ai: 
+        yield "⚠️ AI Client Init Failed."
+        return
+
     try:
         api_messages = [{"role": "system", "content": config.PROMPT_CHATBOT}]
         for msg in history_messages: 
             if msg['role'] in ['user', 'assistant']:
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
         
-        # 简化调用，不强制 JSON 模式，因为这是对话
-        response = client_ai.chat.completions.create(
+        # 开启 stream=True
+        stream = client_ai.chat.completions.create(
             model=TARGET_MODEL, 
             messages=api_messages, 
             temperature=0.8, 
-            stream=False
+            stream=True 
         )
-        return response.choices[0].message.content
-    except Exception as e: return f"❌ API Error: {str(e)}"
+        
+        # 逐块 yield
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+
+    except Exception as e:
+        yield f"❌ API Error: {str(e)}"
 
 def analyze_meaning_background(text):
-    # 构建 Prompt
     prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
-    
-    # 调用 AI
     res = call_ai_api(prompt)
-    
-    # 简单的后处理（防止 JSON 解析失败导致空数据）
     if not isinstance(res, dict):
         return {"valid": False, "m_score": 0, "insight": "Analysis Failed"}
 
-    # 简化的评分逻辑
     if res.get("valid", False) or res.get("c_score", 0) > 0:
         c = res.get('c_score', 0)
         n = res.get('n_score', 0)
@@ -191,14 +172,13 @@ def analyze_meaning_background(text):
     else:
         res["valid"] = False
         res["m_score"] = 0
-        
     return res
 
 def generate_daily_question(username, radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
     prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。输出 JSON: {{ 'question': '...' }}"
     res = call_ai_api(prompt, use_google=False)
-    return res.get("question", "今天感觉如何？")
+    return res.get("question", "What is the shape of your silence today?")
 
 def update_radar_score(username, input_scores):
     try:
@@ -233,12 +213,8 @@ def find_resonance(current_vector, current_user, current_data):
     
 def analyze_persona_report(radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"分析雷达图 {radar_str}，输出JSON: {{'status_quo': '...', 'growth_path': '...'}}"
+    prompt = f"{config.PROMPT_PROFILE}\nDATA: {radar_str}"
     return call_ai_api(prompt, use_google=False)
 
 def process_time_decay():
-    """
-    现在只处理用户节点。
-    Active (0-24h) -> Sediment (24h-30d) -> Deleted (>30d)
-    """
     return db.process_time_decay()
