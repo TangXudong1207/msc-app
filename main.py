@@ -146,7 +146,20 @@ if "current_chat_partner" not in st.session_state: st.session_state.current_chat
 # --- 1. 登录注册 ---
 if not st.session_state.logged_in:
     pages.render_login_page()
-
+else:
+    msc.update_heartbeat(st.session_state.username)
+    
+    # === 🚀 新手引导入口判断 ===
+    # 获取用户节点数
+    my_nodes_list = msc.get_active_nodes_map(st.session_state.username).values()
+    node_count = len(my_nodes_list)
+    
+    # 如果节点数为 0 (全新用户)，且不是管理员，且还没完成本次引导
+    if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
+        pages.render_onboarding(st.session_state.username)
+        st.stop() # 🛑 停止渲染主界面，只显示引导页
+        
+    # === 以下是正常主界面 ===
 # --- 2. 主界面 ---
 else:
     msc.update_heartbeat(st.session_state.username)
