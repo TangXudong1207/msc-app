@@ -1,5 +1,3 @@
-### msc_pages.py (Ultimate Global Edition) ###
-
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -7,6 +5,7 @@ import msc_viz as viz
 import msc_sim as sim
 import time
 import pandas as pd
+import json
 
 # ==========================================
 # 🔐 登录页
@@ -53,65 +52,131 @@ def render_login_page():
                 else: sac.alert("Failed", color='error')
 
 # ==========================================
-# 👁️ 上帝视角控制台 (Admin Only)
+# 👁️ 上帝视角：MSC 守望者终端 (The Overseer Terminal)
 # ==========================================
 def render_admin_dashboard():
-    st.markdown("## 👁️ God Mode: The Architect's View")
+    st.markdown("## 👁️ Overseer Terminal")
+    st.caption("v75.0 Genesis / System Status: ONLINE")
     
-    # 1. 关键指标
+    # 获取全局数据
     all_users = msc.get_all_users("admin")
     global_nodes = msc.get_global_nodes()
     
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Citizens", len(all_users))
-    k2.metric("Nodes", len(global_nodes))
-    k3.metric("Status", "Online", delta="Vertex AI")
+    # 顶部 KPI
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Citizens", len(all_users), delta="Live")
+    k2.metric("Thought Nodes", len(global_nodes), delta="Global")
+    
+    # 计算平均 Care 值
+    avg_care = 0
+    if global_nodes:
+        total_care = sum([float(n.get('logic_score', 0)) for n in global_nodes])
+        avg_care = total_care / len(global_nodes)
+    k3.metric("Avg. Meaning", f"{avg_care:.2f}", delta="Quality")
+    
+    k4.metric("Engine", "Vertex/DeepSeek", delta="Active")
     
     st.divider()
     
-    c1, c2 = st.columns([0.4, 0.6])
+    # === 四大控制台 ===
+    tabs = st.tabs(["🌍 Global Pulse", "🛠️ Genesis Engine", "👥 Citizen Registry", "🧬 Node Inspector"])
     
-    with c1:
-        st.markdown("### 🌍 World Pulse (Global Grid)")
-        st.caption("Scanning G20 + Key Regional Tensions via Oracle Engine.")
-        
-
-
-        st.divider()
-        st.markdown("### 🛠️ Genesis Engine")
-        with st.container(border=True):
-            if st.button("👥 Summon Archetypes (Batch)", use_container_width=True, key="btn_summon"):
-                n = sim.create_virtual_citizens()
-                if n == 0: st.warning("All archetypes already exist.")
-                else: st.success(f"Born: {n}")
+    # --- Tab 1: 全球态势 ---
+    with tabs[0]:
+        c1, c2 = st.columns([0.7, 0.3])
+        with c1:
+            st.markdown("### 🌌 Real-time Connection Map")
+            viz.render_cyberpunk_map(global_nodes, height="500px", is_fullscreen=False)
+        with c2:
+            st.markdown("### 🎨 Spectrum Distribution")
+            if global_nodes:
+                # 简单统计颜色分布
+                colors = []
+                for n in global_nodes:
+                    try:
+                        kw = str(n.get('keywords',''))
+                        # 简单的启发式提取颜色名 (仅用于演示统计)
+                        colors.append("Unknown") 
+                    except: pass
                 
-            if st.button("💉 Inject Thoughts (Auto)", use_container_width=True, key="btn_inject"):
-                with st.status("Simulating consciousness...", expanded=True) as status:
-                    logs = sim.inject_thoughts(3)
-                    for log in logs: st.write(log)
-                    status.update(label="Injection Complete!", state="complete", expanded=False)
-                    time.sleep(1)
-                    st.rerun()
+                st.info("Spectrum Analysis Module loading...")
+                st.progress(0.7)
+                st.caption("Dominant Vibe: **Searching...**")
+            else:
+                st.caption("No data.")
 
-        # === 🔍 调试：数据透视眼 ===
-        st.divider()
-        st.markdown("### 🕵️ Data Inspector")
-        # 筛选 News_Stream 类型的节点
-        news_nodes = [n for n in global_nodes if n.get('mode') == 'News_Stream']
-        if news_nodes:
-            st.success(f"Found {len(news_nodes)} news nodes in DB.")
-            df_debug = pd.DataFrame(news_nodes)
-            # 尝试展示关键列
-            cols = ['content', 'care_point', 'location', 'created_at']
-            valid_cols = [c for c in cols if c in df_debug.columns]
-            st.dataframe(df_debug[valid_cols].head(5), use_container_width=True)
+    # --- Tab 2: 创世纪引擎 (测试核心) ---
+    with tabs[1]:
+        st.markdown("### ⚡ Genesis Protocol")
+        st.caption("Inject virtual consciousness into the IHIL layer.")
+        
+        c_gen1, c_gen2 = st.columns(2)
+        
+        with c_gen1:
+            with st.container(border=True):
+                st.markdown("#### 1. Summon Archetypes")
+                count_sim = st.slider("Quantity", 1, 5, 2)
+                if st.button("👥 Summon Virtual Citizens", use_container_width=True):
+                    with st.spinner("Fabricating souls..."):
+                        n = sim.create_virtual_citizens(count_sim)
+                        if n > 0: st.success(f"Successfully birthed {n} new citizens.")
+                        else: st.warning("Archetypes limit reached or DB error.")
+                        time.sleep(1)
+                        st.rerun()
+                        
+        with c_gen2:
+            with st.container(border=True):
+                st.markdown("#### 2. Inject Thoughts")
+                count_thought = st.slider("Thought Batch Size", 1, 3, 1)
+                if st.button("💉 Inject Semantic Flow", use_container_width=True, type="primary"):
+                    with st.status("Simulating neural activity...", expanded=True) as status:
+                        logs = sim.inject_thoughts(count_thought)
+                        for log in logs:
+                            st.text(log)
+                        status.update(label="Injection Complete!", state="complete", expanded=False)
+    
+    # --- Tab 3: 公民名录 ---
+    with tabs[2]:
+        st.markdown("### 👥 Registry")
+        if all_users:
+            df_users = pd.DataFrame(all_users)
+            # 尝试解析 location
+            # 这里仅做简单展示
+            st.dataframe(
+                df_users[['username', 'nickname', 'last_seen']], 
+                use_container_width=True,
+                hide_index=True
+            )
         else:
-            st.caption("No 'News_Stream' nodes found in active cache.")
+            st.info("No citizens found.")
 
-    with c2:
-        st.markdown("### 🌌 Galaxy Monitor")
-        # 这里复用了 viz 里的赛博地图渲染
-        viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
+    # --- Tab 4: 节点显微镜 ---
+    with tabs[3]:
+        st.markdown("### 🧬 Neural Data Inspector")
+        if global_nodes:
+            # 构造更详细的 View
+            debug_data = []
+            for n in global_nodes:
+                # 解析 Location
+                loc_str = "-"
+                try:
+                    l = json.loads(n.get('location'))
+                    if l: loc_str = f"{l.get('city','Unknown')} ({l.get('lat'):.1f}, {l.get('lon'):.1f})"
+                except: pass
+                
+                debug_data.append({
+                    "ID": n['id'],
+                    "User": n['username'],
+                    "Content": n['content'],
+                    "Score": n.get('logic_score'),
+                    "Mode": n.get('mode'),
+                    "Location": loc_str
+                })
+            
+            df_debug = pd.DataFrame(debug_data)
+            st.dataframe(df_debug, use_container_width=True, height=500)
+        else:
+            st.info("The void is empty.")
 
 # ==========================================
 # 🤖 AI Partner 页面 (防弹修复版)
@@ -325,5 +390,4 @@ def render_world_page():
 
     # === 进入世界 ===
     nodes = msc.get_global_nodes()
-    # 渲染 v75.0 地图 (传入当前用户名以区分层级)
     viz.render_3d_particle_map(nodes, username)
