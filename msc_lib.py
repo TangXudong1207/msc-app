@@ -1,4 +1,4 @@
-### msc_lib.py (双引擎增强版：Google First) ###
+### msc_lib.py (v75.0 Clean) ###
 
 import streamlit as st
 import numpy as np
@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from openai import OpenAI
 from google.oauth2 import service_account
 import vertexai
-from vertexai.generative_models import GenerativeModel, Part
 from vertexai.language_models import TextEmbeddingModel
 import msc_config as config
 import msc_db as db
