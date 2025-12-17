@@ -1,12 +1,10 @@
-### msc_main.py ###
-
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
-import msc_forest as forest # 引用森林
+import msc_forest as forest # 引用森林 (形态合成版)
 
 # ==========================================
 # 🎨 CSS：极简科技风
@@ -45,7 +43,7 @@ def inject_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="MSC v73.0 Beacon", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MSC v75.0 Beacon", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
@@ -82,10 +80,13 @@ else:
             st.markdown(f"<div class='daily-card'><div class='daily-title'>DAILY</div>{st.session_state.daily_q}</div>", unsafe_allow_html=True)
             if st.button("🔄"): st.session_state.daily_q = None; st.rerun()
 
-        # === 森林替代了雷达图 ===
+        # === 森林替代了雷达图 (Morph Edition) ===
         # 获取用户的真实节点，用于生成颜色和判定进化阶段
         my_nodes = msc.get_active_nodes_map(st.session_state.username).values()
-        forest.render_forest_scene(radar_dict, list(my_nodes)
+        
+        # 渲染 3D 灵魂形态 (传入 Radar 和 Node List)
+        forest.render_forest_scene(radar_dict, list(my_nodes))
+        
         if st.button("🧬 Deep Profile", use_container_width=True):
             viz.view_radar_details(radar_dict, st.session_state.username)
         
