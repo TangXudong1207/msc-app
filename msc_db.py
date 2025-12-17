@@ -147,7 +147,7 @@ def process_time_decay():
         
         sediment_count = 0
         now = datetime.now(timezone.utc)
-        TTL_HOURS = 0.05 # 3分钟寿命 (测试用)
+        TTL_HOURS = 24 #24小时(测试用)
         
         for node in active_nodes:
             try:
