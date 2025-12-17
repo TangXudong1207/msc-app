@@ -205,6 +205,32 @@ def render_ai_page(username):
 # ==========================================
 # 💬 好友页面 (布局优化)
 # ==========================================
+# ... 在 render_friends_page 函数开头 ...
+def render_friends_page(username, unread_counts):
+    # 1. 门槛检查
+    # 获取用户总节点数
+    all_nodes = msc.get_all_nodes_for_map(username)
+    node_count = len(all_nodes)
+    
+    # 如果节点少于 50 且不是管理员，显示锁定界面
+    if node_count < 50 and not st.session_state.is_admin:
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
+            st.warning("🔒 SIGNAL TRANSMITTER LOCKED")
+            st.markdown(
+                f"""
+                <div style='text-align:center; color:#666;'>
+                <h3>Deep Connection requires Deep Self.</h3>
+                <p>To connect with other souls, you must first cultivate your own forest.</p>
+                <h1 style='font-size:3em; margin:20px 0;'>{node_count} / 50</h1>
+                <p>Meaning Nodes Generated</p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+            st.progress(node_count / 50)
+        return
 def render_friends_page(username, unread_counts):
     try:
         from streamlit_autorefresh import st_autorefresh
