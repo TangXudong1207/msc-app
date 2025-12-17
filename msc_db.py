@@ -25,8 +25,6 @@ def add_user(username, password, nickname, country="Other"):
         res = supabase.table('users').select("*").eq('username', username).execute()
         if len(res.data) > 0: return False 
         
-        # 默认坐标 (如果 country 是坐标字符串)
-        # 这里的 country 参数现在可能传入城市名，暂存为 country 字段
         radar = {"Care":3.0,"Curiosity":3.0,"Reflection":3.0,"Coherence":3.0,"Empathy":3.0,"Agency":3.0,"Aesthetic":3.0}
         
         data = {
@@ -40,7 +38,6 @@ def add_user(username, password, nickname, country="Other"):
         supabase.table('users').insert(data).execute()
         return True
     except Exception as e:
-        print(f"❌ User Add Error: {e}")
         return False
 
 def get_nickname(username):
@@ -59,10 +56,8 @@ def get_user_profile(username):
 
 def update_radar_score(username, input_scores):
     try:
-        # 只更新 radar_profile，保留其他字段
         supabase.table('users').update({"radar_profile": input_scores}).eq("username", username).execute()
-    except Exception as e:
-        print(f"⚠️ Update Radar Error: {e}")
+    except: pass
 
 def update_heartbeat(username):
     try: supabase.table('users').update({"last_seen": datetime.now(timezone.utc).isoformat()}).eq("username", username).execute()
@@ -82,12 +77,16 @@ def get_active_chats(username):
 def save_node(username, content, data, mode, vector):
     try:
         logic = data.get('m_score', 0.5)
+        # 修正：keywords 可能是列表，supabase 最好存为 jsonb 或 text[]
+        # 这里统一转为字符串存储，避免数组类型不匹配
         kw = json.dumps(data.get('keywords', []))
-        vec = json.dumps(vector)
         
-        # 确保 location 是合法的 JSON 字符串
+        # 修正：vector 通常以字符串形式传递给 postgres [0.1, 0.2, ...]
+        vec = str(vector) 
+        
+        # 修正：location 应该直接传字典，supabase-py 会自动处理 jsonb
         loc_data = data.get('location', {})
-        loc_json = json.dumps(loc_data)
+        if not loc_data: loc_data = {}
 
         payload = {
             "username": username, 
@@ -100,18 +99,14 @@ def save_node(username, content, data, mode, vector):
             "logic_score": logic, 
             "keywords": kw, 
             "is_deleted": False,
-            "location": loc_json  # 关键修复：确保此字段存在于数据库中
+            "location": loc_data  # 直接传字典，不要 json.dumps
         }
         
         supabase.table('nodes').insert(payload).execute()
-        return True
+        return True, "Success" # 返回元组
     except Exception as e:
-        # 🛑 关键：打印错误到后台终端，方便调试
-        print(f"❌ SAVE NODE ERROR: {str(e)}")
-        # 常见错误提示
-        if "column" in str(e) and "location" in str(e):
-            print("👉 提示: 请在 Supabase 执行 SQL: ALTER TABLE nodes ADD COLUMN location JSONB;")
-        return False
+        err_msg = str(e)
+        return False, err_msg
 
 def get_active_nodes_map(username):
     try:
@@ -127,7 +122,6 @@ def get_all_nodes_for_map(username):
 
 def get_global_nodes():
     try: 
-        # 获取最新的 200 个节点用于展示
         return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute().data
     except: return []
 
@@ -161,9 +155,6 @@ def mark_read(s, r):
     try: supabase.table('direct_messages').update({"is_read":True}).eq('sender',s).eq('receiver',r).execute()
     except: pass
 
-# ==========================================
-# ⏳ 时间衰变
-# ==========================================
 def process_time_decay():
     try:
         res = supabase.table('nodes').select("*").neq('mode', 'Sediment').neq('mode', 'Genesis_Sim').execute()
@@ -171,7 +162,6 @@ def process_time_decay():
         sediment_count = 0
         now = datetime.now(timezone.utc)
         TTL_HOURS = 24 
-        
         for node in active_nodes:
             try:
                 created_at_str = node['created_at']
@@ -179,12 +169,9 @@ def process_time_decay():
                 else: created_at = datetime.fromisoformat(created_at_str)
                 if created_at.tzinfo is None: created_at = created_at.replace(tzinfo=timezone.utc)
                 age = (now - created_at).total_seconds() / 3600
-                
                 if age > TTL_HOURS:
                     supabase.table('nodes').update({"mode": "Sediment"}).eq("id", node['id']).execute()
                     sediment_count += 1
             except: continue
         return sediment_count
-    except Exception as e:
-        print(f"Decay Error: {e}")
-        return 0
+    except: return 0
