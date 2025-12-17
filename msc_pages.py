@@ -8,245 +8,201 @@ import pandas as pd
 import json
 
 # ==========================================
-# 🔐 登录页
+# 🔐 登录页：极简大门
 # ==========================================
 def render_login_page():
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        st.markdown("<br><br><br><h1 style='text-align:center;font-weight:300;letter-spacing:4px'>MSC</h1>", unsafe_allow_html=True)
-        st.markdown("<div style='text-align:center;color:#999;font-size:0.8em;letter-spacing:1px;margin-bottom:30px'>MEANING · STRUCTURE · CARE</div>", unsafe_allow_html=True)
+    # 使用 3列布局将内容居中
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    with c2:
+        st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+        # 标题设计
+        st.markdown("""
+        <div style='text-align: center;'>
+            <h1 style='font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 3em; margin-bottom: 0;'>MSC</h1>
+            <p style='color: #888; letter-spacing: 3px; font-size: 0.9em; margin-top: 10px;'>MEANING · STRUCTURE · CARE</p>
+        </div>
+        <div style='height: 40px;'></div>
+        """, unsafe_allow_html=True)
         
-        tab = sac.tabs(['LOGIN', 'SIGN UP'], align='center', size='sm', variant='outline')
-        st.write("") 
+        # 登录卡片
+        with st.container(border=True):
+            tab = sac.tabs(['LOGIN', 'SIGN UP'], align='center', size='md', variant='outline')
+            st.write("") 
 
-        if tab == 'LOGIN':
-            u = st.text_input("ID", placeholder="Username", label_visibility="collapsed")
-            p = st.text_input("PASSWORD", type='password', placeholder="Password", label_visibility="collapsed")
-            st.write("")
-            if st.button("CONNECT", use_container_width=True, type="primary"):
-                # === 👑 管理员后门 ===
-                if u == "admin" and p == "msc": 
-                    st.session_state.logged_in = True
-                    st.session_state.username = "admin"
-                    st.session_state.nickname = "The Architect"
-                    st.session_state.is_admin = True 
-                    st.toast("👑 Architect Mode Activated")
-                    time.sleep(0.5)
-                    st.rerun()
-
-                elif msc.login_user(u, p):
-                    st.session_state.logged_in = True
-                    st.session_state.username = u
-                    st.session_state.nickname = msc.get_nickname(u)
-                    st.session_state.is_admin = False 
-                    st.rerun()
-                else: sac.alert("Access Denied", color='red')
-        else:
-            nu = st.text_input("NEW ID", label_visibility="collapsed")
-            np = st.text_input("NEW PW", type='password', label_visibility="collapsed")
-            nn = st.text_input("NICK", label_visibility="collapsed")
-            nc = st.selectbox("REGION", ["China", "USA", "UK"], label_visibility="collapsed")
-            st.write("")
-            if st.button("INITIALIZE", use_container_width=True):
-                if msc.add_user(nu, np, nn, nc): sac.alert("Created", color='success')
-                else: sac.alert("Failed", color='error')
+            if tab == 'LOGIN':
+                u = st.text_input("IDENTITY", placeholder="Username", label_visibility="collapsed")
+                p = st.text_input("KEY", type='password', placeholder="Password", label_visibility="collapsed")
+                st.write("")
+                if st.button("CONNECT UPLINK", use_container_width=True, type="primary"):
+                    if u == "admin" and p == "msc": 
+                        st.session_state.logged_in = True
+                        st.session_state.username = "admin"
+                        st.session_state.nickname = "The Architect"
+                        st.session_state.is_admin = True 
+                        st.toast("👑 Architect Mode Activated")
+                        time.sleep(0.5)
+                        st.rerun()
+                    elif msc.login_user(u, p):
+                        st.session_state.logged_in = True
+                        st.session_state.username = u
+                        st.session_state.nickname = msc.get_nickname(u)
+                        st.session_state.is_admin = False 
+                        st.rerun()
+                    else: st.error("Access Denied")
+            else:
+                nu = st.text_input("NEW ID", label_visibility="collapsed", placeholder="Username")
+                np = st.text_input("NEW PW", type='password', label_visibility="collapsed", placeholder="Password")
+                nn = st.text_input("NICK", label_visibility="collapsed", placeholder="Display Name")
+                nc = st.selectbox("REGION", ["China", "USA", "UK"], label_visibility="collapsed")
+                st.write("")
+                if st.button("INITIALIZE PROTOCOL", use_container_width=True):
+                    if msc.add_user(nu, np, nn, nc): st.success("Identity Created. Please Login.")
+                    else: st.error("Initialization Failed")
 
 # ==========================================
-# 👁️ 上帝视角：MSC 守望者终端 (The Overseer Terminal)
+# 👁️ 上帝视角 (Admin)
 # ==========================================
 def render_admin_dashboard():
     st.markdown("## 👁️ Overseer Terminal")
-    st.caption("v75.0 Genesis / System Status: ONLINE")
+    st.caption("v75.3 Data-Hologram / System Status: ONLINE")
     
-    # 获取全局数据
     all_users = msc.get_all_users("admin")
     global_nodes = msc.get_global_nodes()
     
-    # 顶部 KPI
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Citizens", len(all_users), delta="Live")
-    k2.metric("Thought Nodes", len(global_nodes), delta="Global")
+    k2.metric("Nodes", len(global_nodes), delta="Global")
     
-    # 计算平均 Care 值
     avg_care = 0
     if global_nodes:
         total_care = sum([float(n.get('logic_score', 0)) for n in global_nodes])
         avg_care = total_care / len(global_nodes)
     k3.metric("Avg. Meaning", f"{avg_care:.2f}", delta="Quality")
-    
     k4.metric("Engine", "Vertex/DeepSeek", delta="Active")
     
     st.divider()
     
-    # === 四大控制台 ===
     tabs = st.tabs(["🌍 Global Pulse", "🛠️ Genesis Engine", "👥 Citizen Registry", "🧬 Node Inspector"])
     
-    # --- Tab 1: 全球态势 ---
     with tabs[0]:
         c1, c2 = st.columns([0.7, 0.3])
         with c1:
             st.markdown("### 🌌 Real-time Connection Map")
             viz.render_cyberpunk_map(global_nodes, height="500px", is_fullscreen=False)
         with c2:
-            st.markdown("### 🎨 Spectrum Distribution")
-            if global_nodes:
-                # 简单统计颜色分布
-                colors = []
-                for n in global_nodes:
-                    try:
-                        kw = str(n.get('keywords',''))
-                        # 简单的启发式提取颜色名 (仅用于演示统计)
-                        colors.append("Unknown") 
-                    except: pass
-                
-                st.info("Spectrum Analysis Module loading...")
-                st.progress(0.7)
-                st.caption("Dominant Vibe: **Searching...**")
-            else:
-                st.caption("No data.")
+            st.markdown("### 🎨 Spectrum")
+            st.info("Spectrum Analysis Module loading...")
+            st.caption("Dominant Vibe: **Searching...**")
 
-    # --- Tab 2: 创世纪引擎 (测试核心) ---
     with tabs[1]:
         st.markdown("### ⚡ Genesis Protocol")
-        st.caption("Inject virtual consciousness into the IHIL layer.")
-        
         c_gen1, c_gen2 = st.columns(2)
-        
         with c_gen1:
             with st.container(border=True):
                 st.markdown("#### 1. Summon Archetypes")
                 count_sim = st.slider("Quantity", 1, 5, 2)
                 if st.button("👥 Summon Virtual Citizens", use_container_width=True):
-                    with st.spinner("Fabricating souls..."):
-                        n = sim.create_virtual_citizens(count_sim)
-                        if n > 0: st.success(f"Successfully birthed {n} new citizens.")
-                        else: st.warning("Archetypes limit reached or DB error.")
-                        time.sleep(1)
-                        st.rerun()
-                        
+                    n = sim.create_virtual_citizens(count_sim)
+                    st.success(f"Summoned {n} entities.")
+                    time.sleep(1)
+                    st.rerun()
         with c_gen2:
             with st.container(border=True):
                 st.markdown("#### 2. Inject Thoughts")
                 count_thought = st.slider("Thought Batch Size", 1, 3, 1)
                 if st.button("💉 Inject Semantic Flow", use_container_width=True, type="primary"):
-                    with st.status("Simulating neural activity...", expanded=True) as status:
+                    with st.status("Simulating neural activity...", expanded=True):
                         logs = sim.inject_thoughts(count_thought)
-                        for log in logs:
-                            st.text(log)
-                        status.update(label="Injection Complete!", state="complete", expanded=False)
+                        for log in logs: st.text(log)
     
-    # --- Tab 3: 公民名录 ---
     with tabs[2]:
         st.markdown("### 👥 Registry")
         if all_users:
             df_users = pd.DataFrame(all_users)
-            # 尝试解析 location
-            # 这里仅做简单展示
-            st.dataframe(
-                df_users[['username', 'nickname', 'last_seen']], 
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("No citizens found.")
+            st.dataframe(df_users[['username', 'nickname', 'last_seen']], use_container_width=True, hide_index=True)
 
-    # --- Tab 4: 节点显微镜 ---
     with tabs[3]:
-        st.markdown("### 🧬 Neural Data Inspector")
+        st.markdown("### 🧬 Data Inspector")
         if global_nodes:
-            # 构造更详细的 View
             debug_data = []
             for n in global_nodes:
-                # 解析 Location
                 loc_str = "-"
                 try:
-                    l = json.loads(n.get('location'))
-                    if l: loc_str = f"{l.get('city','Unknown')} ({l.get('lat'):.1f}, {l.get('lon'):.1f})"
+                    l = json.loads(n.get('location')) if isinstance(n.get('location'), str) else n.get('location')
+                    if l: loc_str = f"{l.get('city','Unknown')}"
                 except: pass
-                
-                debug_data.append({
-                    "ID": n['id'],
-                    "User": n['username'],
-                    "Content": n['content'],
-                    "Score": n.get('logic_score'),
-                    "Mode": n.get('mode'),
-                    "Location": loc_str
-                })
-            
-            df_debug = pd.DataFrame(debug_data)
-            st.dataframe(df_debug, use_container_width=True, height=500)
-        else:
-            st.info("The void is empty.")
+                debug_data.append({"User": n['username'], "Content": n['content'], "Score": n.get('logic_score'), "Loc": loc_str})
+            st.dataframe(pd.DataFrame(debug_data), use_container_width=True, height=500)
 
 # ==========================================
-# 🤖 AI Partner 页面 (防弹修复版)
+# 🤖 AI Partner (沉浸式优化)
 # ==========================================
 def render_ai_page(username):
+    # 顶部留白
     st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
     
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
+    # 历史消息渲染
     for msg in chat_history:
         c_msg, c_dot = st.columns([0.92, 0.08])
-        
         with c_msg:
             if msg['role'] == 'user':
                 st.markdown(f"<div class='chat-bubble-me'>{msg['content']}</div>", unsafe_allow_html=True)
             else:
-                st.markdown(f"<div class='chat-bubble-other'>{msg['content']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='chat-bubble-ai'>{msg['content']}</div>", unsafe_allow_html=True)
         
         with c_dot:
-            # === 修复核心：绝对安全的数值处理 ===
             if msg['role'] == 'user' and msg['content'] in nodes_map:
                 node = nodes_map.get(msg['content'])
                 if node:
                     st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
-                    with st.popover("●", help="Deep Meaning"):
-                        # 安全获取分数
-                        try:
-                            score_val = float(node.get('m_score') or 0.5)
-                        except:
-                            score_val = 0.5
-                        
-                        st.caption(f"MSC Score: {score_val:.2f}")
+                    with st.popover("●", help="Meaning Extracted"):
+                        try: score_val = float(node.get('m_score') or 0.5)
+                        except: score_val = 0.5
+                        st.caption(f"Score: {score_val:.2f}")
                         st.markdown(f"**{node.get('care_point', 'Unknown')}**")
                         st.info(node.get('insight', 'No insight'))
-                        st.caption(f"Structure: {node.get('meaning_layer', '-')}")
                     st.markdown('</div>', unsafe_allow_html=True)
 
-    if prompt := st.chat_input("Input..."):
+    # 底部输入框
+    st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+    if prompt := st.chat_input("Reflect on your thoughts..."):
         msc.save_chat(username, "user", prompt)
-        with st.container(): st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
+        # 立即显示用户输入
+        st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
         full_history = chat_history + [{'role':'user', 'content':prompt}]
+        
+        # AI 思考中
         with st.chat_message("assistant"):
             try:
-                # 非流式调用，强制捕获错误
                 stream = msc.get_normal_response(full_history)
                 if isinstance(stream, str) and stream.startswith(("⚠️", "❌")):
                     st.error(stream)
                     resp = stream
                 else:
-                    st.write(stream)
+                    st.markdown(f"<div class='chat-bubble-ai'>{stream}</div>", unsafe_allow_html=True)
                     resp = stream
                 msc.save_chat(username, "assistant", resp)
             except Exception as e:
                 st.error(f"AI Error: {e}")
         
-        with st.spinner("Analyzing..."):
-            analysis = msc.analyze_meaning_background(prompt)
-            if analysis.get("valid", False):
-                vec = msc.get_embedding(prompt)
-                msc.save_node(username, prompt, analysis, "AI对话", vec)
-                if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
-                st.toast("Meaning Captured", icon="🌱")
+        # 意义分析
+        analysis = msc.analyze_meaning_background(prompt)
+        if analysis.get("valid", False):
+            vec = msc.get_embedding(prompt)
+            msc.save_node(username, prompt, analysis, "AI对话", vec)
+            if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
+            st.toast("Meaning Captured & Vectorized", icon="🧬")
         
         time.sleep(0.5)
         st.rerun()
 
 # ==========================================
-# 💬 好友页面 (防弹修复版)
+# 💬 好友页面 (布局优化)
 # ==========================================
 def render_friends_page(username, unread_counts):
     try:
@@ -260,7 +216,7 @@ def render_friends_page(username, unread_counts):
     user_map = {}
 
     with col_list:
-        st.markdown("### 💬")
+        st.markdown("### 📡 Signals")
         users = msc.get_all_users(username)
         
         if users:
@@ -269,50 +225,39 @@ def render_friends_page(username, unread_counts):
                 user_map[u['nickname']] = u['username']
                 is_online = msc.check_is_online(u.get('last_seen'))
                 icon_name = "circle-fill" if is_online else "circle"
-                icon_color = "#4CAF50" if is_online else "#CCCCCC"
+                icon_color = "#4CAF50" if is_online else "#DDD"
                 
                 unread = unread_counts.get(u['username'], 0)
                 tag_val = sac.Tag(str(unread), color='red', bordered=False) if unread > 0 else None
-                desc = "Online" if is_online else "Offline"
+                
+                # 截断过长昵称
+                display_name = u['nickname'][:12] + ".." if len(u['nickname']) > 12 else u['nickname']
 
                 menu_items.append(sac.MenuItem(
-                    label=u['nickname'], 
+                    label=display_name, 
                     icon=sac.BsIcon(name=icon_name, color=icon_color),
-                    tag=tag_val,
-                    description=desc
+                    tag=tag_val
                 ))
             
-            selected_nickname = sac.menu(
-                menu_items, 
-                index=0, 
-                format_func='title', 
-                size='md', 
-                variant='light',
-                indent=10,
-                open_all=True
-            )
-            
+            selected_nickname = sac.menu(menu_items, index=0, size='md', variant='light', open_all=True)
             if selected_nickname and selected_nickname in user_map:
                 st.session_state.current_chat_partner = user_map[selected_nickname]
         else:
-            st.caption("No citizens found.")
+            st.caption("No resonance detected.")
 
     with col_chat:
         partner = st.session_state.current_chat_partner
         if partner:
             msc.mark_messages_read(partner, username)
+            st.markdown(f"#### ⚡ {msc.get_nickname(partner)}")
             
-            header_col1, header_col2 = st.columns([0.9, 0.1])
-            with header_col1: 
-                st.markdown(f"#### {msc.get_nickname(partner)}")
-            with header_col2: 
-                if st.button("👁️", help="AI Insight"): 
-                    st.toast("DeepSeek is observing...", icon="🧠")
-
             history = msc.get_direct_messages(username, partner)
             my_nodes = msc.get_active_nodes_map(username)
 
             with st.container(height=600, border=True):
+                if not history:
+                    st.markdown("<div style='text-align:center; color:#ccc; margin-top:50px;'>No data exchange yet.</div>", unsafe_allow_html=True)
+                
                 for msg in history:
                     c_msg, c_dot = st.columns([0.94, 0.06])
                     with c_msg:
@@ -328,14 +273,11 @@ def render_friends_page(username, unread_counts):
                         if node:
                             st.markdown('<div class="meaning-dot-btn">', unsafe_allow_html=True)
                             with st.popover("●"):
-                                try: score = float(node.get('m_score') or 0.5)
-                                except: score = 0.5
-                                st.caption(f"Score: {score:.2f}")
-                                st.markdown(f"**{node.get('care_point','')}**")
+                                st.caption("Insight Node")
                                 st.info(node.get('insight', ''))
                             st.markdown('</div>', unsafe_allow_html=True)
 
-            if prompt := st.chat_input(f"Message {msc.get_nickname(partner)}..."):
+            if prompt := st.chat_input(f"Transmit to {msc.get_nickname(partner)}..."):
                 msc.send_direct_message(username, partner, prompt)
                 
                 with st.spinner("Analyzing meaning..."):
@@ -344,50 +286,39 @@ def render_friends_page(username, unread_counts):
                         vec = msc.get_embedding(prompt)
                         msc.save_node(username, prompt, analysis, "私聊", vec)
                         match = msc.find_resonance(vec, username, analysis)
-                        if match: st.toast(f"Resonance with {match['user']}!", icon="⚡")
+                        if match: st.toast(f"Resonance detected with {match['user']}!", icon="⚡")
                 st.rerun()
         else:
-            st.info("👈 Select a friend from the left to connect.")
+            st.info("Select a frequency channel to begin.")
 
 # ==========================================
-# 🌍 世界页面 (门槛与协议)
+# 🌍 世界页面
 # ==========================================
 def render_world_page():
-    st.caption("MSC GLOBAL VIEW")
+    # 顶部添加一点空间
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
     
     username = st.session_state.username
     has_access, count = msc.check_world_access(username)
     
-    # === 门槛检查 ===
     if not has_access and not st.session_state.is_admin:
-        st.warning(f"🔒 Access Locked. (Your Thoughts: {count} / 20)")
-        st.markdown("""
-        To enter the **Global Mind Layer**, you must contribute at least **20 Meaning Nodes**.
-        The world is built by those who think.
-        """)
-        st.progress(count / 20)
+        c1, c2, c3 = st.columns([1,2,1])
+        with c2:
+            st.warning(f"🔒 GLOBAL LAYER LOCKED")
+            st.markdown(f"**Current Contribution:** {count} / 20 Nodes")
+            st.progress(count / 20)
+            st.caption("Only those who cultivate their own garden may view the forest.")
         return
 
-    # === 隐私协议 (简单版) ===
-    if "privacy_accepted" not in st.session_state:
-        st.session_state.privacy_accepted = False
-        
+    if "privacy_accepted" not in st.session_state: st.session_state.privacy_accepted = False
     if not st.session_state.privacy_accepted:
         with st.container(border=True):
-            st.markdown("### 📜 The Pact")
-            st.markdown("""
-            You are about to enter the **Shared Consciousness Map**.
-            
-            1. You will see others as **Anonymous Lights**.
-            2. You will be seen as an **Anonymous Light**.
-            3. Only **Colors (Emotions)** are shared, not content.
-            4. Your location will be fuzzy (City Level).
-            """)
-            if st.button("I Accept the Pact"):
+            st.markdown("### 📜 The Protocol")
+            st.markdown("You are entering the **Collective Mind Layer**. Identities are masked. Only meaning is visible.")
+            if st.button("Accept Protocol"):
                 st.session_state.privacy_accepted = True
                 st.rerun()
         return
 
-    # === 进入世界 ===
     nodes = msc.get_global_nodes()
     viz.render_3d_particle_map(nodes, username)
