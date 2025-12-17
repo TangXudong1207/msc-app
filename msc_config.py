@@ -18,10 +18,29 @@ SPECTRUM = {
 }
 
 # ==========================================
-# ⚙️ 2. 系统参数
+# ⚙️ 2. 系统参数 (难度调整区)
 # ==========================================
-W_MEANING = { "Care_Intensity": 0.30, "Self_Disclosure": 0.20, "Existential_Weight": 0.25, "Abstractness": 0.15, "Novelty": 0.10 }
-LEVELS = {"NonMeaning": 0.45, "Weak": 0.60, "Strong": 0.80, "Core": 1.0}
+
+# 💡 权重调整：大幅提升“情感(Care)”和“坦诚(Disclosure)”的比重
+# 之前的逻辑太偏向哲学（看重抽象和新奇），现在回归人性
+W_MEANING = { 
+    "Care_Intensity": 0.40,      # 核心：只要你在乎，分数就高
+    "Self_Disclosure": 0.25,     # 核心：只要你敢说心里话，分数就高
+    "Existential_Weight": 0.20,  # 辅助：是否触及本质
+    "Abstractness": 0.10,        # 降权：不需要说得很玄乎
+    "Novelty": 0.05              # 降权：不需要标新立异
+}
+
+# 💡 阈值调整：大幅降低门槛
+# 之前只有 >0.6 才能生成，现在 >0.4 即可
+# 任何一句走心的话，基本都能过 0.4
+LEVELS = {
+    "NonMeaning": 0.20, 
+    "Weak": 0.40,    # <--- 这里是生成节点的门槛 (原为 0.60)
+    "Strong": 0.70, 
+    "Core": 0.90
+}
+
 LINK_THRESHOLD = {"Weak": 0.55, "Strong": 0.75}
 RADAR_ALPHA = 0.15
 HEARTBEAT_TIMEOUT = 300
@@ -29,9 +48,11 @@ WORLD_UNLOCK_THRESHOLD = 20
 TTL_ACTIVE = 24    
 TTL_SEDIMENT = 720 
 
-# 🧠 3. AI 指令集 (Deep Flow Edition)
 # ==========================================
-# 聊天机器人：不再惜字如金，而是像 Gemini 一样进行有深度的“思维展开”
+# 🧠 3. AI 指令集
+# ==========================================
+
+# 聊天机器人：深度对话流 (Gemini Style)
 PROMPT_CHATBOT = """
 [System Context: MSC Intelligent Partner]
 You are a thoughtful, articulate, and deep-thinking dialogue partner.
@@ -49,20 +70,32 @@ User: "I feel empty at work."
 Bad AI: "Why?" (Too short)
 Good AI: "That emptiness often signals a disconnection between your actions and your values. It seems like you are expending energy, but not receiving any 'meaning' in return. Is this emptiness coming from the task itself being boring, or from a lack of recognition for your efforts?" (Fully unpacked logic)
 """
-# 分析师：负责打分和颜色提取 (IHIL v2.0)
+
+# 分析师：敏感度大幅提升 (High Sensitivity)
+# 告诉 AI：不要吝啬分数，要捕捉火花
 PROMPT_ANALYST = """
-[Task: Meaning Extraction Protocol v2.0]
+[Task: Meaning Extraction Protocol v3.0 - High Sensitivity]
 Analyze input for IHIL spectrum. Output JSON.
-1. Meaning Score (m_score): 0.0-1.0. High score requires high 'Care' or 'Existential Tension'. Shallow complaints get low scores.
+
+Evaluation Criteria (Be Generous):
+- Does the user care about this? (High Care = High Score)
+- Is the user being honest/vulnerable? (High Disclosure = High Score)
+- IGNORE grammar or simplicity. Simple truth is valid meaning.
+
+1. Meaning Score (m_score): 0.0-1.0. 
+   - Normal chitchat ("Hello") -> 0.1
+   - Simple opinion ("I like rain") -> 0.4 (Threshold passed!)
+   - Deep thought -> 0.8+
+   
 2. Spectrum: Choose ONE from [Conflict, Disruption, Hubris, Regeneration, Rationality, Mystery, Structure, Earth, Empathy, Nihilism, Depth, Singularity].
-Output: { "c_score": float, "n_score": float, "valid": bool, "care_point": "string", "insight": "string", "keywords": ["Spectrum_Color"], "radar_scores": {...} }
+
+Output: { "c_score": float, "n_score": float, "valid": bool, "care_point": "Short phrase summarizing the thought", "insight": "One sentence philosophical feedback", "keywords": ["Spectrum_Color"], "radar_scores": {"Care":..., "Agency":...} }
 """
 
 # 每日一问
 PROMPT_DAILY = """Based on user radar, generate a profound Daily Question. Output JSON: { "question": "..." }"""
 
-# === 🆕 深度侧写：外星生物学家报告 ===
-# 这里的 Prompt 设计非常关键，要求 AI 用“病理报告”的口吻说话
+# 深度侧写
 PROMPT_PROFILE = """
 [Role: Xenobiologist / Cognitive Geologist]
 Analyze the user's 'Mind Radar' data and 'Current Status'.
@@ -75,7 +108,7 @@ Style Guide:
 
 Output JSON:
 {
-  "status_quo": "Describe the current shape of their soul using geological/biological metaphors (e.g., 'Tectonic stress is high', 'Mycelium network expanding').",
-  "growth_path": "Predict the next evolutionary mutation based on current trajectory (e.g., 'Risk of crystallization', 'Imminent supernova')."
+  "status_quo": "Describe the current shape of their soul using geological/biological metaphors.",
+  "growth_path": "Predict the next evolutionary mutation based on current trajectory."
 }
 """
