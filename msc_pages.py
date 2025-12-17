@@ -5,7 +5,6 @@ import streamlit_antd_components as sac
 import msc_lib as msc
 import msc_viz as viz
 import msc_sim as sim
-import msc_news_real as news
 import time
 import pandas as pd
 
@@ -76,72 +75,7 @@ def render_admin_dashboard():
         st.markdown("### 🌍 World Pulse (Global Grid)")
         st.caption("Scanning G20 + Key Regional Tensions via Oracle Engine.")
         
-        # === 1. 全球扫描按钮 ===
-        if "news_logs" not in st.session_state:
-            st.session_state.news_logs = []
 
-        if st.button("📡 Scan Global Grid (Full)", use_container_width=True, type="primary", key="btn_scan_news"):
-            with st.status("Initializing Orbital Scan...", expanded=True) as status:
-                try:
-                    st.write("Targeting G20 & Regions... This may take a minute.")
-                    
-                    # 调用新版全自动扫描
-                    new_logs = news.fetch_real_news_auto() 
-                    
-                    st.session_state.news_logs = new_logs + st.session_state.news_logs
-                    status.update(label=f"Global Scan Complete! {len(new_logs)} events detected.", state="complete", expanded=False)
-                    time.sleep(1)
-                    st.rerun() 
-                except Exception as e:
-                    st.error(f"Oracle Error: {e}")
-        
-        # === 2. 时间流逝按钮 ===
-        if st.button("⏳ Advance Time (Sedimentation)", use_container_width=True, key="btn_advance_time"):
-            with st.spinner("Time is passing... History is being written..."):
-                count = msc.process_time_decay()
-                if count > 0:
-                    st.success(f"{count} tensions have cooled down and become history.")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.info("No tensions are old enough to sediment yet.")
-
-        # 显示日志
-        if st.session_state.news_logs:
-            with st.container(height=250, border=True):
-                for log in st.session_state.news_logs:
-                    st.caption(log)
-
-        st.divider()
-        st.markdown("### 🔍 System Diagnostics")
-        
-        # === 新增：单点测试按钮 ===
-        if st.button("🛠️ Test Oracle Connection (Ping G20)", use_container_width=True):
-            st.write("Pinging Oracle Engine...")
-            try:
-                # 只扫描 G20，且只取 Top 1，这是最小负载测试
-                # 我们直接调用 msc_news_real 里的底层函数 scan_grid_tier
-                tier_config = {
-                    "frequency": "Test",
-                    "limit": 1,
-                    "weight_multiplier": 1.0,
-                    "countries": ["USA", "China"] # 只测两个国家
-                }
-                
-                # 临时调用底层扫描
-                logs = news.scan_grid_tier("Tier_1_G20", tier_config)
-                
-                if logs:
-                    st.success(f"Connection Successful! Generated {len(logs)} logs.")
-                    st.json(logs) # 直接展示原始内容，不藏着掖着
-                else:
-                    st.error("Oracle connected but returned EMPTY list.")
-                    
-            except Exception as e:
-                st.error(f"CRITICAL ERROR: {str(e)}")
-                # 打印详细堆栈
-                import traceback
-                st.code(traceback.format_exc())
 
         st.divider()
         st.markdown("### 🛠️ Genesis Engine")
@@ -351,13 +285,45 @@ def render_friends_page(username, unread_counts):
             st.info("👈 Select a friend from the left to connect.")
 
 # ==========================================
-# 🌍 世界页面 (粒子地球版)
+# 🌍 世界页面 (门槛与协议)
 # ==========================================
 def render_world_page():
-    st.caption("MSC GLOBAL VIEW: Tension & Resonance")
+    st.caption("MSC GLOBAL VIEW")
     
-    # 获取所有节点
+    username = st.session_state.username
+    has_access, count = msc.check_world_access(username)
+    
+    # === 门槛检查 ===
+    if not has_access and not st.session_state.is_admin:
+        st.warning(f"🔒 Access Locked. (Your Thoughts: {count} / 20)")
+        st.markdown("""
+        To enter the **Global Mind Layer**, you must contribute at least **20 Meaning Nodes**.
+        The world is built by those who think.
+        """)
+        st.progress(count / 20)
+        return
+
+    # === 隐私协议 (简单版) ===
+    if "privacy_accepted" not in st.session_state:
+        st.session_state.privacy_accepted = False
+        
+    if not st.session_state.privacy_accepted:
+        with st.container(border=True):
+            st.markdown("### 📜 The Pact")
+            st.markdown("""
+            You are about to enter the **Shared Consciousness Map**.
+            
+            1. You will see others as **Anonymous Lights**.
+            2. You will be seen as an **Anonymous Light**.
+            3. Only **Colors (Emotions)** are shared, not content.
+            4. Your location will be fuzzy (City Level).
+            """)
+            if st.button("I Accept the Pact"):
+                st.session_state.privacy_accepted = True
+                st.rerun()
+        return
+
+    # === 进入世界 ===
     nodes = msc.get_global_nodes()
-    
-    # 渲染粒子地图
-    viz.render_3d_particle_map(nodes)
+    # 渲染 v75.0 地图 (传入当前用户名以区分层级)
+    viz.render_3d_particle_map(nodes, username)
