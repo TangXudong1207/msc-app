@@ -1,5 +1,3 @@
-### msc_viz.py (v75.0 User-Centric Edition) ###
-
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
@@ -7,7 +5,10 @@ import pandas as pd
 import json
 import numpy as np
 from streamlit_echarts import st_echarts
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 import msc_config as config
+import msc_lib as msc
 
 # ==========================================
 # 🎨 12维光谱颜色匹配器
@@ -96,12 +97,9 @@ def compute_clusters(nodes, n_clusters=5):
     except Exception as e:
         print(f"Cluster Error: {e}")
         return pd.DataFrame()
-def get_spectrum_color(keywords_str):
-    for dim, color in config.SPECTRUM.items():
-        if dim in keywords_str or color in keywords_str: return color
-    return "#00CCFF" # Default
+
 # ==========================================
-# 🌍 3D 粒子地球 (v75.0 核心)
+# 🌍 3D 粒子地球 (核心可视化)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
     if not nodes: 
@@ -114,31 +112,30 @@ def render_3d_particle_map(nodes, current_user):
     sediment_lats, sediment_lons, sediment_colors = [], [], [] # Layer 1: History (Ground)
 
     for node in nodes:
-        # 解析坐标 (如果用户没同意隐私，可能没有 location，或者只有 city)
+        # 解析坐标
         loc = None
         try:
             if isinstance(node.get('location'), str): loc = json.loads(node['location'])
             elif isinstance(node.get('location'), dict): loc = node['location']
         except: pass
         
-        if not loc: continue # 没有坐标的不显示 (隐私保护)
+        if not loc: continue 
 
         lat, lon = loc.get('lat'), loc.get('lon')
         color = get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
 
         # === 逻辑分支 ===
-        
         # 1. 历史沉淀 (不论是谁的，都变成地质层)
         if mode == 'Sediment':
             sediment_lats.append(lat); sediment_lons.append(lon)
-            sediment_colors.append(color) # 这里可以做变暗处理
+            sediment_colors.append(color) 
             
         # 2. 我的活跃思想 (高亮，可交互)
         elif node['username'] == current_user:
             my_lats.append(lat); my_lons.append(lon)
             my_texts.append(f"<b>My Thought:</b> {node['care_point']}")
-            my_colors.append(color) # 原色
+            my_colors.append(color) 
             
         # 3. 别人的活跃思想 (匿名，仅光点)
         else:
@@ -195,60 +192,6 @@ def render_3d_particle_map(nodes, current_user):
     )
     
     st.plotly_chart(fig, use_container_width=True)
-4. msc_pages.py (权限控制)
-### msc_pages.py (v75.0 Gatekeeper Edition) ###
-
-import streamlit as st
-import msc_lib as msc
-import msc_viz as viz
-import msc_sim as sim
-# import msc_news_real as news # 删除了！
-
-# ... (Login, Admin Dashboard, AI Partner, Friends 保持逻辑不变) ...
-# 注意：在 render_admin_dashboard 里，把 News 相关的按钮删掉，只保留 Sim 和 Time Decay
-
-# ==========================================
-# 🌍 世界页面 (门槛与协议)
-# ==========================================
-def render_world_page():
-    st.caption("MSC GLOBAL VIEW")
-    
-    username = st.session_state.username
-    has_access, count = msc.check_world_access(username)
-    
-    # === 门槛检查 ===
-    if not has_access and not st.session_state.is_admin:
-        st.warning(f"🔒 Access Locked. (Your Thoughts: {count} / 20)")
-        st.markdown("""
-        To enter the **Global Mind Layer**, you must contribute at least **20 Meaning Nodes**.
-        The world is built by those who think.
-        """)
-        st.progress(count / 20)
-        return
-
-    # === 隐私协议 (简单版) ===
-    if "privacy_accepted" not in st.session_state:
-        st.session_state.privacy_accepted = False
-        
-    if not st.session_state.privacy_accepted:
-        with st.container(border=True):
-            st.markdown("### 📜 The Pact")
-            st.markdown("""
-            You are about to enter the **Shared Consciousness Map**.
-            
-            1. You will see others as **Anonymous Lights**.
-            2. You will be seen as an **Anonymous Light**.
-            3. Only **Colors (Emotions)** are shared, not content.
-            4. Your location will be fuzzy (City Level).
-            """)
-            if st.button("I Accept the Pact"):
-                st.session_state.privacy_accepted = True
-                st.rerun()
-        return
-# === 进入世界 ===
-    nodes = msc.get_global_nodes()
-    # 渲染 v75.0 地图 (传入当前用户名以区分层级)
-    viz.render_3d_particle_map(nodes, username)
 
 # ==========================================
 # 🕸️ 雷达图 (Echarts)
@@ -273,7 +216,7 @@ def render_3d_galaxy(nodes):
     fig = px.scatter_3d(
         df, x='x', y='y', z='z', 
         color='cluster', 
-        color_continuous_scale=list(config.SPECTRUM.values()), # 使用12维色盘
+        color_continuous_scale=list(config.SPECTRUM.values()), 
         hover_name='care_point', 
         template="plotly_dark", 
         opacity=0.9
