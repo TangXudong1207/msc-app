@@ -6,14 +6,15 @@ import math
 import msc_viz as viz  # 用于取色
 
 # ==========================================
-# 📐 1. 数学骨架：基础几何组件 (保持不变)
+# 📐 1. 数学骨架：基础几何组件
 # ==========================================
 def gen_sphere(n, r=10, center=(0,0,0), distortion=0):
     pts = []
     for _ in range(n):
         theta = random.uniform(0, 2*math.pi)
         phi = random.uniform(0, math.pi)
-        rad = r * (random.uniform(0.1, 1) ** (1/3))
+        # 优化：让粒子更倾向于表面分布，增加轮廓感
+        rad = r * (random.uniform(0.3, 1) ** (1/3)) 
         if distortion > 0: rad += random.gauss(0, distortion)
         x = center[0] + rad * math.sin(phi) * math.cos(theta)
         y = center[1] + rad * math.sin(phi) * math.sin(theta)
@@ -28,7 +29,7 @@ def gen_pillar(n, h=20, r=5, center=(0,0,0), taper=0.5):
         h_ratio = z_local / h
         current_r = r * (1 - (1-taper)*h_ratio)
         theta = random.uniform(0, 2*math.pi)
-        rad = current_r * math.sqrt(random.uniform(0, 1))
+        rad = current_r * math.sqrt(random.uniform(0.2, 1)) # 略微中空
         x = center[0] + rad * math.cos(theta)
         y = center[1] + rad * math.sin(theta)
         z = center[2] + z_local - h/2
@@ -75,15 +76,15 @@ def gen_halo(n, r=15, center=(0,0,0)):
 # 🧬 2. 混合算法：形态合成器
 # ==========================================
 def synthesize_creature(radar, node_count):
-    # 如果没有数据，给个默认值防止报错
     if not radar: radar = {"Care": 3.0, "Agency": 3.0}
     
     sorted_attr = sorted(radar.items(), key=lambda x: x[1], reverse=True)
     primary_attr, p_score = sorted_attr[0]
     secondary_attr, s_score = sorted_attr[1]
     
-    # 粒子基数：放大显示，让形态更扎实
-    base_count = max(300, node_count * 3) 
+    # 💡 优化：大幅增加基础粒子数，解决“迷雾期难看”的问题
+    # 即使只有1个节点，也会生成 500 个全息粒子
+    base_count = max(500, node_count * 5) 
     
     particles = []
     colors = []
@@ -103,7 +104,7 @@ def synthesize_creature(radar, node_count):
         
     particles.extend(body_pts)
     
-    # 躯干颜色映射
+    # 躯干颜色映射 (保持高饱和度，配合黑色背景)
     c_map = {
         "Care": "#00FF88", "Agency": "#FFD700", "Reflection": "#9D00FF",
         "Conflict": "#FF2B2B", "Empathy": "#FF69B4", "Structure": "#E0E0E0",
@@ -142,7 +143,7 @@ def synthesize_creature(radar, node_count):
     return particles, colors, primary_attr, secondary_attr
 
 # ==========================================
-# 🌲 3. 渲染主程序 (Holographic Edition)
+# 🌲 3. 渲染主程序 (Cyber-Grid Edition)
 # ==========================================
 def render_forest_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
@@ -162,57 +163,73 @@ def render_forest_scene(radar_dict, user_nodes=None):
             "itemStyle": {"color": colors[i]}
         })
         
-    # 2. 核心升级：Holographic View Settings
+    # 2. 核心升级：科技网格风格 (Cyber-Grid)
+    # 颜色定义
+    axis_color = "#444444" # 深灰网格
+    text_color = "#666666" # 浅灰文字
+    
     option = {
-        "backgroundColor": "transparent",
+        "backgroundColor": "transparent", # 保持透明，融入Sidebar
         "tooltip": {},
-        # 隐藏坐标轴刻度，但保留空间感
-        "xAxis3D": {"show": False, "min": -25, "max": 25},
-        "yAxis3D": {"show": False, "min": -25, "max": 25},
-        "zAxis3D": {"show": False, "min": -25, "max": 25},
+        # 💡 恢复三维坐标轴，但做成科技风格
+        "xAxis3D": {
+            "show": True, "name": "X", 
+            "axisLine": {"lineStyle": {"color": axis_color, "opacity": 0.8}},
+            "axisLabel": {"show": False}, # 隐藏数字，只保留结构
+            "splitLine": {"show": True, "lineStyle": {"color": axis_color, "type": "dashed", "opacity": 0.5}}
+        },
+        "yAxis3D": {
+            "show": True, "name": "Y",
+            "axisLine": {"lineStyle": {"color": axis_color, "opacity": 0.8}},
+            "axisLabel": {"show": False},
+            "splitLine": {"show": True, "lineStyle": {"color": axis_color, "type": "dashed", "opacity": 0.5}}
+        },
+        "zAxis3D": {
+            "show": True, "name": "Z",
+            "axisLine": {"lineStyle": {"color": axis_color, "opacity": 0.8}},
+            "axisLabel": {"show": False},
+            "splitLine": {"show": True, "lineStyle": {"color": axis_color, "type": "dashed", "opacity": 0.5}}
+        },
         "grid3D": {
-            "boxWidth": 120, "boxDepth": 120, "boxHeight": 120,
-            # 💡 关键修改：正交投影 + 特定角度 = 纪念碑谷风格的立体感
+            "boxWidth": 100, "boxDepth": 100, "boxHeight": 100,
+            # 💡 恢复自由视角 + 自动旋转
             "viewControl": {
-                "projection": 'orthographic', 
+                "projection": 'orthographic', # 保持高级的正交投影
                 "autoRotate": True,
-                "autoRotateSpeed": 20,
-                "distance": 200, 
-                "alpha": 20, # 稍微俯视
-                "beta": 40   # 侧视角度
+                "autoRotateSpeed": 10,
+                "distance": 220,
+                "alpha": 20, 
+                "beta": 40,
+                "rotateSensitivity": 1, # 恢复鼠标拖拽灵敏度
+                "zoomSensitivity": 1    # 恢复缩放
             },
-            # 💡 关键修改：光照系统
+            # 光照
             "light": {
                 "main": {
                     "intensity": 1.2,
-                    "shadow": True,  # 开启阴影
-                    "shadowQuality": 'high',
+                    "shadow": False, # 关闭阴影以提升网格清晰度
                     "alpha": 30,
                     "beta": 30
                 },
                 "ambient": {
-                    "intensity": 0.3
+                    "intensity": 0.4
                 }
             },
-            "environment": "#000",
-            # 隐藏网格线，让它悬浮
-            "axisLine": {"show": False},
-            "splitLine": {"show": False}
+            "environment": "transparent",
+            "axisLine": {"lineStyle": {"color": axis_color}},
         },
         "series": [{
             "type": 'scatter3D',
             "data": echarts_data,
-            # 💡 关键修改：增加粒子大小，开启 Lambert 光影材质
-            "symbolSize": 5, 
-            "shading": 'lambert', # 真实光照材质，让点变成球
+            "symbolSize": 4, 
+            # 开启高亮，让粒子在网格中更突出
             "itemStyle": {
-                "opacity": 1.0 # 不透明，质感更强
+                "opacity": 0.9
             },
-            # 强调色
             "emphasis": {
                 "itemStyle": {
                     "color": "#fff",
-                    "opacity": 1
+                    "scale": 1.5
                 }
             }
         }]
