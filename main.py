@@ -226,17 +226,26 @@ else:
 
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
-        # 语言切换器 (放在侧边栏底部)
+        # === 修复点：侧边栏语言切换 ===
         st.divider()
+        
+        # 1. 定义选项（纯字符串）
+        lang_opts = ['EN', '中文']
+        # 2. 获取当前索引
+        curr_idx = 0 if st.session_state.language == 'en' else 1
+        
+        # 3. 渲染
         lang_choice = sac.segmented(
-            items=[
-                sac.SegmentedItem(label='EN', value='en'),
-                sac.SegmentedItem(label='中文', value='zh'),
-            ], 
-            align='center', size='xs', index=0 if lang=='en' else 1
+            items=lang_opts, 
+            align='center', size='xs', index=curr_idx, key="sidebar_lang_selector"
         )
-        if lang_choice != st.session_state.language:
-            st.session_state.language = lang_choice
+        
+        # 4. 逻辑映射
+        mapped_lang = 'en' if lang_choice == 'EN' else 'zh'
+        
+        # 5. 刷新
+        if mapped_lang != st.session_state.language:
+            st.session_state.language = mapped_lang
             st.rerun()
 
     # 页面路由 - 根据当前语言匹配
