@@ -5,7 +5,7 @@ import time
 import msc_i18n as i18n # 引用语言包
 
 # ==========================================
-# 🔐 登录页
+# 🔐 登录页 (保持不变)
 # ==========================================
 def render_login_page():
     st.markdown("""
@@ -79,79 +79,271 @@ def render_login_page():
                     else: st.error("Initialization Failed")
 
 # ==========================================
-# 🚀 新手引导：降临
+# 🚀 新手引导：降临 (The Arrival - Philosophy Ver.)
 # ==========================================
 def render_onboarding(username):
+    # CSS: 极简主义，衬线体，呼吸感
     st.markdown("""
     <style>
         [data-testid="stSidebar"] {display: none;}
-        .stApp { background-color: #F7F9FB !important; color: #2D3436 !important; }
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lora:ital,wght@0,400;1,400&display=swap');
-        .arrival-card { background: #FFFFFF; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #EAEAEA; margin-top: 5vh; }
-        .arrival-title { font-family: 'Cinzel', serif; font-size: 2.2em; text-align: center; color: #333; margin-bottom: 10px; font-weight: 700; }
-        .arrival-subtitle { font-family: 'Lora', serif; font-size: 1.1em; text-align: center; color: #666; margin-bottom: 30px; font-style: italic; }
-        .arrival-text { font-family: 'Lora', serif; font-size: 1.05em; text-align: center; color: #444; line-height: 1.8; margin-bottom: 30px; }
-        .stTextInput > div > div > input { background-color: #FAFAFA !important; color: #333 !important; border: 1px solid #DDD !important; text-align: center; font-family: 'Lora', serif; font-size: 1.1em; padding: 10px; border-radius: 6px; }
-        .step-dots { text-align:center; margin-top:30px; color:#CCC; letter-spacing:8px;}
-        .active-dot { color: #333; font-weight:bold; }
-        .hint-text { font-size: 0.85em; color: #888; text-align: center; margin-top: 8px; }
+        
+        .stApp {
+            background-color: #FDFDFD !important; /* 雾白 */
+            color: #2D3436 !important;
+        }
+        
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Noto+Serif+SC:wght@300;400;600&family=Lora:ital,wght@0,400;1,400&display=swap');
+        
+        .fade-in {
+            animation: fadeIn 1.2s ease-in-out;
+        }
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translateY(10px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .main-text {
+            font-family: 'Noto Serif SC', 'Lora', serif;
+            font-size: 1.6em;
+            font-weight: 400;
+            line-height: 1.8;
+            text-align: center;
+            color: #333;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
+        }
+        
+        .sub-text {
+            font-family: 'Noto Serif SC', 'Lora', serif;
+            font-size: 0.95em;
+            font-weight: 300;
+            line-height: 1.6;
+            text-align: center;
+            color: #888;
+            margin-bottom: 60px;
+            font-style: italic;
+        }
+
+        /* 按钮样式微调：更轻盈 */
+        .stButton button {
+            background-color: transparent !important;
+            border: 1px solid #E0E0E0 !important;
+            color: #555 !important;
+            border-radius: 20px !important;
+            padding: 8px 24px !important;
+            transition: all 0.3s !important;
+        }
+        .stButton button:hover {
+            border-color: #333 !important;
+            color: #000 !important;
+            background-color: #FAFAFA !important;
+        }
     </style>
     """, unsafe_allow_html=True)
     
     if "onboarding_step" not in st.session_state: st.session_state.onboarding_step = 0
     step = st.session_state.onboarding_step
     
+    # 垂直居中容器
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("<div class='arrival-card'>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 15vh;'></div>", unsafe_allow_html=True)
         
-        if step == 0:
-            st.markdown(f"<div class='arrival-title'>{i18n.get_text('ob_0_title')}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='arrival-subtitle'>{i18n.get_text('ob_0_sub')}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='arrival-text'>{i18n.get_text('ob_0_text')}</div>", unsafe_allow_html=True)
-            anchor = st.text_input("SIGNAL INPUT", placeholder=i18n.get_text('ob_0_ph'), label_visibility="collapsed")
-            st.markdown(f"<div class='hint-text'>{i18n.get_text('ob_0_hint')}</div>", unsafe_allow_html=True)
-            st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-            if anchor:
-                if st.button(i18n.get_text('ob_btn'), use_container_width=True, type="primary"):
-                    with st.spinner("Parsing Soul Data..."):
-                        analysis = msc.analyze_meaning_background(anchor)
-                        vec = msc.get_embedding(anchor)
-                        analysis['valid'] = True
-                        if "care_point" not in analysis: analysis['care_point'] = "First Spark"
-                        msc.save_node(username, anchor, analysis, "Genesis", vec)
-                        if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
-                        time.sleep(1.0) 
-                    st.session_state.onboarding_step = 1
-                    st.rerun()
-            st.markdown("<div class='step-dots'><span class='active-dot'>●</span> ○ ○</div>", unsafe_allow_html=True)
+        # 容器类
+        st.markdown('<div class="fade-in">', unsafe_allow_html=True)
 
+        # 🟢 Screen 0: 欢迎
+        if step == 0:
+            st.markdown(
+                """
+                <div class='main-text'>
+                欢迎。<br><br>
+                这里不是催促你得出结论的地方。<br><br>
+                更多时候，<br>
+                我们只是把事情<br>
+                放慢一点。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            if st.button("继续", use_container_width=True):
+                st.session_state.onboarding_step = 1
+                st.rerun()
+
+        # 🟢 Screen 1: MSC 的方式
         elif step == 1:
-            st.markdown(f"<div class='arrival-title'>{i18n.get_text('ob_1_title')}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='arrival-subtitle'>{i18n.get_text('ob_1_sub')}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='arrival-text'>{i18n.get_text('ob_1_text')}</div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class='main-text'>
+                你说话。<br><br>
+                我们不急着回答。<br><br>
+                我们先看看，<br>
+                你在乎的是什么。
+                </div>
+                <div class='sub-text'>
+                放心，<br>
+                不会给你打分。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            if st.button("下一步", use_container_width=True):
+                st.session_state.onboarding_step = 2
+                st.rerun()
+
+        # 🟢 Screen 2: 关于意义
+        elif step == 2:
+            st.markdown(
+                """
+                <div class='main-text'>
+                有些话<br>
+                会慢慢变得重要。<br><br>
+                有些不会。<br><br>
+                这不是筛选。<br>
+                只是时间<br>
+                在做它该做的事。
+                </div>
+                <div class='sub-text'>
+                你不用担心说错。<br>
+                大多数时候，<br>
+                意义只是<br>
+                还没来。
+                </div>
+                """, unsafe_allow_html=True
+            )
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button(i18n.get_text('ob_1_a'), use_container_width=True):
-                    msc.update_radar_score(username, {"Reflection": 7.0, "Rationality": 6.0, "Curiosity": 5.0})
-                    st.session_state.onboarding_step = 2
+                if st.button("我明白了", use_container_width=True):
+                    st.session_state.onboarding_step = 3
                     st.rerun()
-                st.markdown(f"<div class='hint-text'>{i18n.get_text('ob_1_a_hint')}</div>", unsafe_allow_html=True)
             with col_b:
-                if st.button(i18n.get_text('ob_1_b'), use_container_width=True):
-                    msc.update_radar_score(username, {"Agency": 7.0, "Conflict": 5.0, "Empathy": 4.0})
-                    st.session_state.onboarding_step = 2
+                if st.button("我再看看", use_container_width=True):
+                    st.session_state.onboarding_step = 3
                     st.rerun()
-                st.markdown(f"<div class='hint-text'>{i18n.get_text('ob_1_b_hint')}</div>", unsafe_allow_html=True)
-            st.markdown("<div class='step-dots'>○ <span class='active-dot'>●</span> ○</div>", unsafe_allow_html=True)
 
-        elif step == 2:
-            st.markdown(f"<div class='arrival-title'>{i18n.get_text('ob_2_title')}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='arrival-subtitle'>{i18n.get_text('ob_2_sub')}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='arrival-text'>{i18n.get_text('ob_2_text')}</div>", unsafe_allow_html=True)
-            st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-            if st.button(i18n.get_text('ob_enter'), type="primary", use_container_width=True):
+        # 🟢 Screen 3: 关于 AI
+        elif step == 3:
+            st.markdown(
+                """
+                <div class='main-text'>
+                我不会替你思考。<br><br>
+                我只是<br>
+                在你思考的时候，<br>
+                把轮廓<br>
+                放在一旁。
+                </div>
+                <div class='sub-text'>
+                如果你觉得这些轮廓<br>
+                并不准确，<br>
+                忽略它们就好。<br><br>
+                它们本来也不是结论。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            if st.button("继续", use_container_width=True):
+                st.session_state.onboarding_step = 4
+                st.rerun()
+
+        # 🟢 Screen 4: 关于意义卡
+        elif step == 4:
+            st.markdown(
+                """
+                <div class='main-text'>
+                有些话<br>
+                会变成一张卡片。<br><br>
+                它们不会评判你。<br><br>
+                只是记录：<br>
+                你曾经在这里想过。
+                </div>
+                <div class='sub-text'>
+                当然，<br>
+                大多数话<br>
+                什么也不会发生。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("很好", use_container_width=True):
+                    st.session_state.onboarding_step = 5
+                    st.rerun()
+            with col_b:
+                if st.button("有点残忍", use_container_width=True):
+                    st.session_state.onboarding_step = 5
+                    st.rerun()
+
+        # 🟢 Screen 5: 关于他人
+        elif step == 5:
+            st.markdown(
+                """
+                <div class='main-text'>
+                你不会被推着社交。<br><br>
+                也不会被突然配对。<br><br>
+                如果有人靠近你，<br>
+                通常是因为<br>
+                你们在乎过<br>
+                相似的东西。
+                </div>
+                <div class='sub-text'>
+                是的，<br>
+                这比“兴趣相同”<br>
+                麻烦一点。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            if st.button("继续", use_container_width=True):
+                st.session_state.onboarding_step = 6
+                st.rerun()
+
+        # 🟢 Screen 6: 关于世界
+        elif step == 6:
+            st.markdown(
+                """
+                <div class='main-text'>
+                当你积累了一些意义卡，<br><br>
+                你会看到一个世界。<br><br>
+                那不是新闻，<br>
+                也不是发生了什么。<br><br>
+                更像是——<br>
+                你在乎的东西<br>
+                在这里亮了起来。
+                </div>
+                <div class='sub-text'>
+                有些地方<br>
+                会一直模糊。<br><br>
+                那也很正常。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            if st.button("继续", use_container_width=True):
+                st.session_state.onboarding_step = 7
+                st.rerun()
+
+        # 🟢 Screen 7: 结束
+        elif step == 7:
+            st.markdown(
+                """
+                <div class='main-text'>
+                你可以现在就说点什么。<br><br>
+                也可以什么都不说。<br><br>
+                MSC 都不会介意。
+                </div>
+                <div class='sub-text'>
+                毕竟，<br>
+                意义这件事，<br>
+                从来不是强求来的。
+                </div>
+                """, unsafe_allow_html=True
+            )
+            
+            # 这里是真正的进入点
+            if st.button("开始对话", use_container_width=True, type="primary"):
+                # 初始化用户数据（如果还没初始化）
+                # 这里简单给一个默认雷达，因为新引导流程不再做性格测试
+                msc.update_radar_score(username, {
+                    "Reflection": 5.0, "Rationality": 5.0, "Curiosity": 5.0,
+                    "Agency": 5.0, "Empathy": 5.0, "Care": 5.0
+                })
+                
                 st.session_state.onboarding_complete = True
                 st.rerun()
-            st.markdown("<div class='step-dots'>○ ○ <span class='active-dot'>●</span></div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True) # End fade-in
