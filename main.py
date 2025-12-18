@@ -160,9 +160,10 @@ else:
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
+    # 强制引导逻辑
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
-        st.stop()
+        st.stop() # 停止渲染，确保只显示引导页
     
     # 首次接触
     if node_count == 0 and not st.session_state.is_admin:
@@ -259,9 +260,9 @@ else:
             st.rerun()
 
     # === 页面路由 ===
+    # 🔴 关键修复：登出时清除 session，防止跳过引导
     if selected_menu == T['Logout']: 
-        st.session_state.logged_in = False
-        st.session_state.is_admin = False
+        st.session_state.clear()
         st.rerun()
     elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
     elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
