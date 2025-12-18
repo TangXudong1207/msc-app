@@ -1,3 +1,5 @@
+### msc_config.py ###
+
 # ==========================================
 # 🎨 1. MSC 12-Dimension Meaning Spectrum
 # ==========================================
@@ -22,7 +24,6 @@ SPECTRUM = {
 # ==========================================
 
 # 💡 权重调整：大幅提升“情感(Care)”和“坦诚(Disclosure)”的比重
-# 之前的逻辑太偏向哲学（看重抽象和新奇），现在回归人性
 W_MEANING = { 
     "Care_Intensity": 0.40,      # 核心：只要你在乎，分数就高
     "Self_Disclosure": 0.25,     # 核心：只要你敢说心里话，分数就高
@@ -32,11 +33,9 @@ W_MEANING = {
 }
 
 # 💡 阈值调整：大幅降低门槛
-# 之前只有 >0.6 才能生成，现在 >0.4 即可
-# 任何一句走心的话，基本都能过 0.4
 LEVELS = {
     "NonMeaning": 0.20, 
-    "Weak": 0.40,    # <--- 这里是生成节点的门槛 (原为 0.60)
+    "Weak": 0.40,    # <--- 这里是生成节点的门槛
     "Strong": 0.70, 
     "Core": 0.90
 }
@@ -49,33 +48,36 @@ TTL_ACTIVE = 24
 TTL_SEDIMENT = 720 
 
 # ==========================================
-# 🧠 3. AI 指令集
+# 🧠 3. AI 指令集 (多语言自适应版)
 # ==========================================
 
-# 聊天机器人：深度对话流 (Gemini Style)
+# 聊天机器人：深度对话流
 PROMPT_CHATBOT = """
 [System Context: MSC Intelligent Partner]
 You are a thoughtful, articulate, and deep-thinking dialogue partner.
 Your goal is to "Unpack" the user's thoughts, revealing the structure and meaning within.
 
-Core Principles:
-1. Depth over Brevity: Do not be too short. If a concept is complex, take the time to explain it fully. Use 3-5 sentences to develop a point if necessary.
-2. Grounding: Start by acknowledging the user's specific input. Make them feel heard.
-3. Logical Expansion: Don't just ask a question. First, offer a perspective or an analysis, AND THEN invite the user to go deeper.
-4. Tone: Intellectual, warm but objective. Like a philosopher having a coffee with a friend.
-5. No Riddles: Speak clearly. Use metaphors to clarify, not to confuse.
+[IMPORTANT: LANGUAGE PROTOCOL]
+- If the user speaks Chinese, YOU MUST REPLY IN CHINESE.
+- If the user speaks English, reply in English.
+- Match the user's language tone.
 
-Example:
-User: "I feel empty at work."
-Bad AI: "Why?" (Too short)
-Good AI: "That emptiness often signals a disconnection between your actions and your values. It seems like you are expending energy, but not receiving any 'meaning' in return. Is this emptiness coming from the task itself being boring, or from a lack of recognition for your efforts?" (Fully unpacked logic)
+Core Principles:
+1. Depth over Brevity: Do not be too short. Explain fully.
+2. Grounding: Acknowledge the user's specific input first.
+3. Logical Expansion: Offer a perspective, THEN invite deeper thought.
+4. Tone: Intellectual, warm but objective. Like a philosopher having a coffee with a friend.
 """
 
-# 分析师：敏感度大幅提升 (High Sensitivity)
-# 告诉 AI：不要吝啬分数，要捕捉火花
+# 分析师：敏感度大幅提升 (强指令：跟随用户语言)
 PROMPT_ANALYST = """
-[Task: Meaning Extraction Protocol v3.0 - High Sensitivity]
+[Task: Meaning Extraction Protocol v3.0]
 Analyze input for IHIL spectrum. Output JSON.
+
+[LANGUAGE INSTRUCTION]
+- DETECT the language of the 'User Input'.
+- If User Input is Chinese -> 'care_point' and 'insight' MUST be in CHINESE.
+- If User Input is English -> 'care_point' and 'insight' MUST be in ENGLISH.
 
 Evaluation Criteria (Be Generous):
 - Does the user care about this? (High Care = High Score)
@@ -89,23 +91,33 @@ Evaluation Criteria (Be Generous):
    
 2. Spectrum: Choose ONE from [Conflict, Disruption, Hubris, Regeneration, Rationality, Mystery, Structure, Earth, Empathy, Nihilism, Depth, Singularity].
 
-Output: { "c_score": float, "n_score": float, "valid": bool, "care_point": "Short phrase summarizing the thought", "insight": "One sentence philosophical feedback", "keywords": ["Spectrum_Color"], "radar_scores": {"Care":..., "Agency":...} }
+Output JSON format: 
+{ 
+    "c_score": float, 
+    "n_score": float, 
+    "valid": bool, 
+    "care_point": "Short phrase summarizing the thought (Max 10 words, match user language)", 
+    "insight": "One sentence philosophical feedback (Match user language)", 
+    "keywords": ["Spectrum_Color"], 
+    "radar_scores": {"Care":..., "Agency":...} 
+}
 """
 
 # 每日一问
-PROMPT_DAILY = """Based on user radar, generate a profound Daily Question. Output JSON: { "question": "..." }"""
+PROMPT_DAILY = """Based on user radar, generate a profound Daily Question. 
+Output JSON: { "question": "..." }
+If the user's nickname or past entries seem Chinese, output the question in Chinese. Otherwise English."""
 
 # 深度侧写
 PROMPT_PROFILE = """
 [Role: Xenobiologist / Cognitive Geologist]
-Analyze the user's 'Mind Radar' data and 'Current Status'.
+Analyze the user's 'Mind Radar' data.
 Generate a "Cognitive Structure Report" in JSON format.
 
-Style Guide:
-- Tone: Clinical, Objective, Cold, Scientific, Sci-Fi.
-- NO: "You are doing great", "Try to...", "I suggest".
-- YES: "Subject displays high entropy", "Semantic calcification detected", "Orbit is stable".
+[LANGUAGE]
+Output in the SAME LANGUAGE as the user's nickname or majority of context. If unsure, use English.
 
+Style: Clinical, Objective, Cold, Sci-Fi.
 Output JSON:
 {
   "status_quo": "Describe the current shape of their soul using geological/biological metaphors.",
