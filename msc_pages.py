@@ -8,6 +8,74 @@ import pandas as pd
 import json
 
 # ==========================================
+# 🌍 语言包定义 (Translation Dictionary)
+# ==========================================
+TRANSLATIONS = {
+    "en": {
+        "login_tab": "LOGIN", "signup_tab": "SIGN UP",
+        "identity": "IDENTITY", "key": "KEY", "connect": "CONNECT UPLINK",
+        "new_id": "NEW ID", "new_pw": "NEW PW", "nick": "NICK", "region": "REGION", "init": "INITIALIZE PROTOCOL",
+        "signal_lost": "Signal Lost: Invalid Credentials", "created": "Identity Created. Please Login.",
+        
+        "ob_0_title": "First Contact", "ob_0_sub": "Don't overthink it.",
+        "ob_0_text": "We need a sample of your mental frequency to calibrate the system.<br>What's occupying your RAM right now?",
+        "ob_0_ph": "e.g. 'Coffee', 'Silence', 'Entropy'...", "ob_0_hint": "No one is judging. Yet. ;)", "ob_btn": "TRANSMIT",
+        
+        "ob_1_title": "Calibration", "ob_1_sub": "How do you deal with chaos?",
+        "ob_1_text": "The system needs to know your bias.<br>When life gives you a difficult problem, you usually:",
+        "ob_1_a": "Overthink it", "ob_1_a_hint": "Analyzing every detail until it hurts.",
+        "ob_1_b": "Just wing it", "ob_1_b_hint": "Action first, apologies later.",
+        
+        "ob_2_title": "Online", "ob_2_sub": "Welcome to the Layer.",
+        "ob_2_text": "Your frequency has been registered.<br>You are now a node in the network.<br><br>Remember: <b>Quality creates gravity here.</b>",
+        "ob_enter": "ENTER MSC",
+        
+        "lock_title": "SIGNAL TRANSMITTER LOCKED",
+        "lock_msg": "Deep Connection requires Deep Self.<br>You need to cultivate a denser forest before you can invite others in.<br>This is to ensure every connection here is meaningful, not noise.",
+        "lock_stat": "Meaning Nodes Generated",
+        
+        "chat_signals": "Signals", "chat_no_res": "No resonance detected.", "chat_transmit": "Transmit to", "chat_no_data": "No data exchange yet.", "chat_sel": "Select a frequency channel to begin.",
+        
+        "world_lock": "GLOBAL LAYER LOCKED", "world_only": "Only those who cultivate their own garden may view the forest.",
+        "world_proto_title": "The Protocol", "world_proto_text": "You are entering the **Collective Mind Layer**. Identities are masked. Only meaning is visible.",
+        "world_accept": "Accept Protocol"
+    },
+    "zh": {
+        "login_tab": "登入", "signup_tab": "注册",
+        "identity": "身份ID", "key": "密钥", "connect": "接入链路",
+        "new_id": "新账户名", "new_pw": "新密码", "nick": "代号", "region": "区域", "init": "初始化协议",
+        "signal_lost": "信号丢失：无效的凭证", "created": "身份已创建，请登入。",
+        
+        "ob_0_title": "初次接触", "ob_0_sub": "别想太复杂。",
+        "ob_0_text": "我们需要采集你的精神频率样本以校准系统。<br>此时此刻，什么占据了你的思绪？",
+        "ob_0_ph": "例如：'咖啡'，'沉默'，'熵增'...", "ob_0_hint": "暂无评判。至少现在没有。;)", "ob_btn": "发送信号",
+        
+        "ob_1_title": "系统校准", "ob_1_sub": "你如何面对混乱？",
+        "ob_1_text": "系统需要了解你的偏好。<br>当生活给你出一道难题时，你的本能是：",
+        "ob_1_a": "过度思考", "ob_1_a_hint": "拆解每个细节，直到感到痛楚。",
+        "ob_1_b": "随性而动", "ob_1_b_hint": "先行动，再道歉。",
+        
+        "ob_2_title": "连接成功", "ob_2_sub": "欢迎来到这一层。",
+        "ob_2_text": "你的频率已注册。<br>你现在是网络中的一个节点。<br><br>切记：<b>在这里，质量即引力。</b>",
+        "ob_enter": "进入 MSC",
+        
+        "lock_title": "信号发射器已锁定",
+        "lock_msg": "深度的连接 · 始于深度的自我。<br>在邀请他人进入之前，请先耕耘你自己的灵魂森林。<br>这是为了确保每一次连接都是信号，而非噪音。",
+        "lock_stat": "意义节点已生成",
+        
+        "chat_signals": "信号源", "chat_no_res": "未侦测到共鸣。", "chat_transmit": "发送至", "chat_no_data": "暂无数据交换。", "chat_sel": "选择一个频率频道以开始。",
+        
+        "world_lock": "全球层级已锁定", "world_only": "唯有耕耘过自己花园的人，方可见森林。",
+        "world_proto_title": "协议声明", "world_proto_text": "你即将进入 **集体意识层**。身份已被遮蔽，唯有意义可见。",
+        "world_accept": "接受协议"
+    }
+}
+
+def get_text(key):
+    lang = st.session_state.get('language', 'en')
+    return TRANSLATIONS[lang].get(key, key)
+
+# ==========================================
 # 🔐 登录页：极简大门
 # ==========================================
 def render_login_page():
@@ -16,30 +84,45 @@ def render_login_page():
     <style>
         .login-title { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 3em; color: #333; }
         .login-subtitle { color: #888; letter-spacing: 4px; font-size: 0.8em; margin-top: -10px; font-weight: 300; }
+        .stButton button { font-family: 'Inter', sans-serif; }
     </style>
     """, unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
-        st.markdown("<div style='height: 120px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+        
+        # 语言切换 (登录页独有)
+        if "language" not in st.session_state: st.session_state.language = "en"
+        lang_idx = 0 if st.session_state.language == "en" else 1
+        
+        # 使用 segmented 组件做语言切换，更美观
+        lang_sel = sac.segmented(
+            items=[sac.SegmentedItem(label='English', value='en'), sac.SegmentedItem(label='中文', value='zh')], 
+            align='center', size='xs', index=lang_idx, key="login_lang"
+        )
+        if lang_sel != st.session_state.language:
+            st.session_state.language = lang_sel
+            st.rerun()
+
         st.markdown("""
         <div style='text-align: center;'>
             <div class='login-title'>MSC</div>
             <div class='login-subtitle'>MEANING · STRUCTURE · CARE</div>
         </div>
-        <div style='height: 50px;'></div>
+        <div style='height: 40px;'></div>
         """, unsafe_allow_html=True)
         
         with st.container(border=True):
-            tab = sac.tabs(['LOGIN', 'SIGN UP'], align='center', size='md', variant='outline')
+            tab = sac.tabs([get_text('login_tab'), get_text('signup_tab')], align='center', size='md', variant='outline')
             st.write("") 
 
-            if tab == 'LOGIN':
-                u = st.text_input("IDENTITY", placeholder="Username", label_visibility="collapsed")
-                p = st.text_input("KEY", type='password', placeholder="Password", label_visibility="collapsed")
+            if tab == get_text('login_tab'):
+                u = st.text_input(get_text('identity'), placeholder="Username", label_visibility="collapsed")
+                p = st.text_input(get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
                 st.write("")
-                if st.button("CONNECT UPLINK", use_container_width=True, type="primary"):
+                if st.button(get_text('connect'), use_container_width=True, type="primary"):
                     if u == "admin" and p == "msc": 
                         st.session_state.logged_in = True
                         st.session_state.username = "admin"
@@ -54,18 +137,18 @@ def render_login_page():
                         st.session_state.nickname = msc.get_nickname(u)
                         st.session_state.is_admin = False 
                         st.rerun()
-                    else: st.error("Signal Lost: Invalid Credentials")
+                    else: st.error(get_text('signal_lost'))
             else:
-                nu = st.text_input("NEW ID", label_visibility="collapsed", placeholder="Username")
-                np = st.text_input("NEW PW", type='password', label_visibility="collapsed", placeholder="Password")
-                nn = st.text_input("NICK", label_visibility="collapsed", placeholder="Display Name")
+                nu = st.text_input(get_text('new_id'), label_visibility="collapsed", placeholder="Username")
+                np = st.text_input(get_text('new_pw'), type='password', label_visibility="collapsed", placeholder="Password")
+                nn = st.text_input(get_text('nick'), label_visibility="collapsed", placeholder="Display Name")
                 # 增加邀请码逻辑 (预留)
                 # invite_code = st.text_input("INVITE CODE", label_visibility="collapsed", placeholder="Invitation Code")
-                nc = st.selectbox("REGION", ["China", "USA", "UK", "Other"], label_visibility="collapsed")
+                nc = st.selectbox(get_text('region'), ["China", "USA", "UK", "Other"], label_visibility="collapsed")
                 st.write("")
-                if st.button("INITIALIZE PROTOCOL", use_container_width=True):
+                if st.button(get_text('init'), use_container_width=True):
                     # if invite_code != "ARRIVAL": st.error("Invalid Invitation Code"); return
-                    if msc.add_user(nu, np, nn, nc): st.success("Identity Created. Please Login.")
+                    if msc.add_user(nu, np, nn, nc): st.success(get_text('created'))
                     else: st.error("Initialization Failed")
 
 # ==========================================
@@ -166,23 +249,20 @@ def render_onboarding(username):
         
         # --- Step 0: The Signal (破冰) ---
         if step == 0:
-            st.markdown("<div class='arrival-title'>First Contact</div>", unsafe_allow_html=True)
-            st.markdown("<div class='arrival-subtitle'>Don't overthink it.</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='arrival-title'>{get_text('ob_0_title')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='arrival-subtitle'>{get_text('ob_0_sub')}</div>", unsafe_allow_html=True)
             
             st.markdown(
-                "<div class='arrival-text'>"
-                "We need a sample of your mental frequency to calibrate the system.<br>"
-                "What's occupying your RAM right now?"
-                "</div>", 
+                f"<div class='arrival-text'>{get_text('ob_0_text')}</div>", 
                 unsafe_allow_html=True
             )
             
-            anchor = st.text_input("SIGNAL INPUT", placeholder="e.g. 'I need coffee', 'Aliens exist', or just 'Tired'.", label_visibility="collapsed")
-            st.markdown("<div class='hint-text'>No one is judging. Yet. ;)</div>", unsafe_allow_html=True)
+            anchor = st.text_input("SIGNAL INPUT", placeholder=get_text('ob_0_ph'), label_visibility="collapsed")
+            st.markdown(f"<div class='hint-text'>{get_text('ob_0_hint')}</div>", unsafe_allow_html=True)
             
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
             if anchor:
-                if st.button("TRANSMIT", use_container_width=True, type="primary"):
+                if st.button(get_text('ob_btn'), use_container_width=True, type="primary"):
                     with st.spinner("Parsing Soul Data..."):
                         # 分析并存下第一颗种子
                         analysis = msc.analyze_meaning_background(anchor)
@@ -202,53 +282,46 @@ def render_onboarding(username):
 
         # --- Step 1: Calibration (性格侧写) ---
         elif step == 1:
-            st.markdown("<div class='arrival-title'>Calibration</div>", unsafe_allow_html=True)
-            st.markdown("<div class='arrival-subtitle'>How do you deal with chaos?</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='arrival-title'>{get_text('ob_1_title')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='arrival-subtitle'>{get_text('ob_1_sub')}</div>", unsafe_allow_html=True)
             
             st.markdown(
-                "<div class='arrival-text'>"
-                "The system needs to know your bias.<br>"
-                "When life gives you a difficult problem, you usually:"
-                "</div>", 
+                f"<div class='arrival-text'>{get_text('ob_1_text')}</div>", 
                 unsafe_allow_html=True
             )
             
             # 更生活化、幽默的二选一
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("Overthink it", use_container_width=True):
+                if st.button(get_text('ob_1_a'), use_container_width=True):
                     # 思考者：高反思，高逻辑
                     msc.update_radar_score(username, {"Reflection": 7.0, "Rationality": 6.0, "Curiosity": 5.0})
                     st.session_state.onboarding_step = 2
                     st.rerun()
-                st.markdown("<div class='hint-text'>Analyzing every detail until it hurts.</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='hint-text'>{get_text('ob_1_a_hint')}</div>", unsafe_allow_html=True)
                 
             with col_b:
-                if st.button("Just wing it", use_container_width=True):
+                if st.button(get_text('ob_1_b'), use_container_width=True):
                     # 行动派：高自主，高冲突
                     msc.update_radar_score(username, {"Agency": 7.0, "Conflict": 5.0, "Empathy": 4.0})
                     st.session_state.onboarding_step = 2
                     st.rerun()
-                st.markdown("<div class='hint-text'>Action first, apologies later.</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='hint-text'>{get_text('ob_1_b_hint')}</div>", unsafe_allow_html=True)
 
             st.markdown("<div class='step-dots'>○ <span class='active-dot'>●</span> ○</div>", unsafe_allow_html=True)
 
         # --- Step 2: Contact (完成) ---
         elif step == 2:
-            st.markdown("<div class='arrival-title'>Online</div>", unsafe_allow_html=True)
-            st.markdown("<div class='arrival-subtitle'>Welcome to the Layer.</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='arrival-title'>{get_text('ob_2_title')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='arrival-subtitle'>{get_text('ob_2_sub')}</div>", unsafe_allow_html=True)
             
             st.markdown(
-                "<div class='arrival-text'>"
-                "Your frequency has been registered.<br>"
-                "You are now a node in the network.<br><br>"
-                "Remember: <b>Quality creates gravity here.</b>"
-                "</div>", 
+                f"<div class='arrival-text'>{get_text('ob_2_text')}</div>", 
                 unsafe_allow_html=True
             )
             
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-            if st.button("ENTER MSC", type="primary", use_container_width=True):
+            if st.button(get_text('ob_enter'), type="primary", use_container_width=True):
                 st.session_state.onboarding_complete = True
                 st.rerun()
                 
@@ -343,6 +416,9 @@ def render_ai_page(username):
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
     
+    # 语言检测
+    lang = st.session_state.get('language', 'en')
+    
     # 渲染历史
     for msg in chat_history:
         c_msg, c_dot = st.columns([0.92, 0.08])
@@ -366,7 +442,9 @@ def render_ai_page(username):
 
     # 输入框
     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-    if prompt := st.chat_input("Reflect on your thoughts..."):
+    placeholder = "Reflect on your thoughts..." if lang == 'en' else "映射此刻的思绪..."
+    
+    if prompt := st.chat_input(placeholder):
         # 1. 立即上屏
         st.markdown(f"<div class='chat-bubble-me'>{prompt}</div>", unsafe_allow_html=True)
         
@@ -390,7 +468,9 @@ def render_ai_page(username):
             vec = msc.get_embedding(prompt)
             msc.save_node(username, prompt, analysis, "AI对话", vec)
             if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
-            st.toast("Meaning Captured", icon="🧬")
+            
+            toast_msg = "Meaning Captured" if lang == 'en' else "意义已捕获"
+            st.toast(toast_msg, icon="🧬")
         
         time.sleep(0.5)
         st.rerun()
@@ -415,17 +495,13 @@ def render_friends_page(username, unread_counts):
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
-            st.warning("🔒 SIGNAL TRANSMITTER LOCKED")
+            st.warning(get_text('lock_title'))
             st.markdown(
                 f"""
                 <div style='text-align:center; color:#666;'>
-                <h3 style='font-family: "Inter", sans-serif;'>Deep Connection requires Deep Self.</h3>
-                <p style='font-size:0.9em; margin-top:10px;'>
-                    You need to cultivate a denser forest before you can invite others in.<br>
-                    This is to ensure every connection here is meaningful, not noise.
-                </p>
+                <h3 style='font-family: "Inter", sans-serif;'>{get_text('lock_msg')}</h3>
                 <h1 style='font-size:3em; margin:30px 0; font-family: "JetBrains Mono";'>{node_count} / 50</h1>
-                <p style='color:#999; text-transform:uppercase; letter-spacing:2px; font-size:0.8em;'>Meaning Nodes Generated</p>
+                <p style='color:#999; text-transform:uppercase; letter-spacing:2px; font-size:0.8em;'>{get_text('lock_stat')}</p>
                 </div>
                 """, 
                 unsafe_allow_html=True
@@ -438,7 +514,7 @@ def render_friends_page(username, unread_counts):
     user_map = {}
 
     with col_list:
-        st.markdown("### 📡 Signals")
+        st.markdown(f"### 📡 {get_text('chat_signals')}")
         users = msc.get_all_users(username)
         
         if users:
@@ -464,7 +540,7 @@ def render_friends_page(username, unread_counts):
             if selected_nickname and selected_nickname in user_map:
                 st.session_state.current_chat_partner = user_map[selected_nickname]
         else:
-            st.caption("No resonance detected.")
+            st.caption(get_text('chat_no_res'))
 
     with col_chat:
         partner = st.session_state.current_chat_partner
@@ -477,7 +553,7 @@ def render_friends_page(username, unread_counts):
 
             with st.container(height=600, border=True):
                 if not history:
-                    st.markdown("<div style='text-align:center; color:#ccc; margin-top:50px;'>No data exchange yet.</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center; color:#ccc; margin-top:50px;'>{get_text('chat_no_data')}</div>", unsafe_allow_html=True)
                 
                 for msg in history:
                     c_msg, c_dot = st.columns([0.94, 0.06])
@@ -498,7 +574,7 @@ def render_friends_page(username, unread_counts):
                                 st.info(node.get('insight', ''))
                             st.markdown('</div>', unsafe_allow_html=True)
 
-            if prompt := st.chat_input(f"Transmit to {msc.get_nickname(partner)}..."):
+            if prompt := st.chat_input(f"{get_text('chat_transmit')} {msc.get_nickname(partner)}..."):
                 msc.send_direct_message(username, partner, prompt)
                 
                 # 私聊也进行分析
@@ -511,7 +587,7 @@ def render_friends_page(username, unread_counts):
                         if match: st.toast(f"Resonance with {match['user']}!", icon="⚡")
                 st.rerun()
         else:
-            st.info("Select a frequency channel to begin.")
+            st.info(get_text('chat_sel'))
 
 # ==========================================
 # 🌍 世界页面 (复用)
@@ -526,18 +602,18 @@ def render_world_page():
     if not has_access and not st.session_state.is_admin:
         c1, c2, c3 = st.columns([1,2,1])
         with c2:
-            st.warning(f"🔒 GLOBAL LAYER LOCKED")
+            st.warning(f"🔒 {get_text('world_lock')}")
             st.markdown(f"**Current Contribution:** {count} / 20 Nodes")
             st.progress(count / 20)
-            st.caption("Only those who cultivate their own garden may view the forest.")
+            st.caption(get_text('world_only'))
         return
 
     if "privacy_accepted" not in st.session_state: st.session_state.privacy_accepted = False
     if not st.session_state.privacy_accepted:
         with st.container(border=True):
-            st.markdown("### 📜 The Protocol")
-            st.markdown("You are entering the **Collective Mind Layer**. Identities are masked. Only meaning is visible.")
-            if st.button("Accept Protocol"):
+            st.markdown(f"### 📜 {get_text('world_proto_title')}")
+            st.markdown(get_text('world_proto_text'))
+            if st.button(get_text('world_accept')):
                 st.session_state.privacy_accepted = True
                 st.rerun()
         return
