@@ -69,156 +69,192 @@ def render_login_page():
                     else: st.error("Initialization Failed")
 
 # ==========================================
-# 🚀 新手引导：降临 (The Arrival)
+# 🚀 新手引导：降临 (The Arrival) - 轻量化版
 # ==========================================
 def render_onboarding(username):
-    # 🎨 注入“降临”风格 CSS：迷雾灰背景，衬线字体，圆形构图
+    # 🎨 注入“降临”风格 CSS：
+    # 保持字体的史诗感，但背景改为 clean 的灰白，类似高级对话界面
     st.markdown("""
     <style>
-        /* 强制覆盖全局背景 */
+        /* 隐藏侧边栏，聚焦引导 */
         [data-testid="stSidebar"] {display: none;}
+        
+        /* 全局背景：柔和的灰白，不再是深渊黑 */
         .stApp {
-            background: radial-gradient(circle at center, #2b2e31 0%, #1a1a1d 100%) !important;
-            color: #dcdcdc !important;
+            background-color: #F7F9FB !important;
+            color: #2D3436 !important;
         }
         
-        /* 字体：使用衬线体营造神秘、史诗感 */
+        /* 字体：继续使用衬线体，维持一种“数字手稿”的感觉 */
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lora:ital,wght@0,400;1,400&display=swap');
         
+        .arrival-card {
+            background: #FFFFFF;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            border: 1px solid #EAEAEA;
+            margin-top: 5vh;
+        }
+
         .arrival-title {
             font-family: 'Cinzel', serif;
-            font-size: 2.5em;
+            font-size: 2.2em;
             text-align: center;
-            color: #f0f0f0;
-            text-shadow: 0 0 20px rgba(255,255,255,0.2);
-            margin-bottom: 20px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 700;
         }
         
+        .arrival-subtitle {
+            font-family: 'Lora', serif;
+            font-size: 1.1em;
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+
         .arrival-text {
             font-family: 'Lora', serif;
-            font-size: 1.2em;
+            font-size: 1.05em;
             text-align: center;
-            color: #aaa;
+            color: #444;
             line-height: 1.8;
-            max-width: 600px;
-            margin: 0 auto 40px auto;
+            margin-bottom: 30px;
         }
         
-        /* 输入框样式重写：玻璃质感 */
+        /* 输入框样式：极简现代 */
         .stTextInput > div > div > input {
-            background-color: rgba(255,255,255,0.05) !important;
-            color: #fff !important;
-            border: 1px solid rgba(255,255,255,0.1) !important;
+            background-color: #FAFAFA !important;
+            color: #333 !important;
+            border: 1px solid #DDD !important;
             text-align: center;
             font-family: 'Lora', serif;
-            font-size: 1.2em;
+            font-size: 1.1em;
+            padding: 10px;
+            border-radius: 6px;
         }
         .stTextInput > div > div > input:focus {
-            border-color: #555 !important;
-            box-shadow: 0 0 15px rgba(255,255,255,0.05);
+            border-color: #333 !important;
+            background-color: #FFF !important;
+            box-shadow: 0 0 0 2px rgba(0,0,0,0.05);
         }
         
-        /* 按钮重写 */
-        .stButton > button {
-            background: transparent !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-            color: #ccc !important;
-            font-family: 'Cinzel', serif !important;
-            letter-spacing: 2px;
-        }
-        .stButton > button:hover {
-            background: rgba(255,255,255,0.05) !important;
-            border-color: #fff !important;
-            color: #fff !important;
-        }
+        /* 进度点 */
+        .step-dots { text-align:center; margin-top:30px; color:#CCC; letter-spacing:8px;}
+        .active-dot { color: #333; font-weight:bold; }
         
-        /* 进度圆点 */
-        .step-dots { text-align:center; margin-top:50px; color:#444; letter-spacing:10px;}
-        .active-dot { color: #fff; text-shadow: 0 0 10px #fff; }
+        /* 幽默的提示文字 */
+        .hint-text {
+            font-size: 0.85em;
+            color: #888;
+            text-align: center;
+            margin-top: 8px;
+        }
     </style>
     """, unsafe_allow_html=True)
     
     if "onboarding_step" not in st.session_state: st.session_state.onboarding_step = 0
     step = st.session_state.onboarding_step
     
-    # 垂直居中容器
-    c1, c2, c3 = st.columns([1, 3, 1])
+    # 居中布局
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("<div style='height:20vh'></div>", unsafe_allow_html=True)
+        # 使用自定义的卡片容器
+        st.markdown("<div class='arrival-card'>", unsafe_allow_html=True)
         
-        # --- Step 0: The Signal (建立锚点) ---
+        # --- Step 0: The Signal (破冰) ---
         if step == 0:
-            st.markdown("<div class='arrival-title'>THE SIGNAL</div>", unsafe_allow_html=True)
+            st.markdown("<div class='arrival-title'>First Contact</div>", unsafe_allow_html=True)
+            st.markdown("<div class='arrival-subtitle'>Don't overthink it.</div>", unsafe_allow_html=True)
+            
             st.markdown(
-                "<div class='arrival-text'>In the vast silence of data, who are you?<br>"
-                "To exist here, you must transmit your first frequency.</div>", 
+                "<div class='arrival-text'>"
+                "We need a sample of your mental frequency to calibrate the system.<br>"
+                "What's occupying your RAM right now?"
+                "</div>", 
                 unsafe_allow_html=True
             )
             
-            anchor = st.text_input("ANCHOR POINT", placeholder="Type a thought that is truly yours...", label_visibility="collapsed")
+            anchor = st.text_input("SIGNAL INPUT", placeholder="e.g. 'I need coffee', 'Aliens exist', or just 'Tired'.", label_visibility="collapsed")
+            st.markdown("<div class='hint-text'>No one is judging. Yet. ;)</div>", unsafe_allow_html=True)
             
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
             if anchor:
-                if st.button("TRANSMIT", use_container_width=True):
-                    with st.spinner("Analyzing Waveform..."):
+                if st.button("TRANSMIT", use_container_width=True, type="primary"):
+                    with st.spinner("Parsing Soul Data..."):
                         # 分析并存下第一颗种子
                         analysis = msc.analyze_meaning_background(anchor)
                         vec = msc.get_embedding(anchor)
-                        # 强制有效，作为第一颗种子
+                        # 强制有效
                         analysis['valid'] = True
-                        if "care_point" not in analysis: analysis['care_point'] = "First Thought"
+                        if "care_point" not in analysis: analysis['care_point'] = "First Spark"
                         msc.save_node(username, anchor, analysis, "Genesis", vec)
                         # 初始化雷达
                         if "radar_scores" in analysis: msc.update_radar_score(username, analysis["radar_scores"])
-                        time.sleep(1.5) # 稍微停顿，营造仪式感
+                        time.sleep(1.0) 
                     
                     st.session_state.onboarding_step = 1
                     st.rerun()
             
-            st.markdown("<div class='step-dots'><span class='active-dot'>•</span> • •</div>", unsafe_allow_html=True)
+            st.markdown("<div class='step-dots'><span class='active-dot'>●</span> ○ ○</div>", unsafe_allow_html=True)
 
-        # --- Step 1: Calibration (哲学二选一) ---
+        # --- Step 1: Calibration (性格侧写) ---
         elif step == 1:
-            st.markdown("<div class='arrival-title'>CALIBRATION</div>", unsafe_allow_html=True)
+            st.markdown("<div class='arrival-title'>Calibration</div>", unsafe_allow_html=True)
+            st.markdown("<div class='arrival-subtitle'>How do you deal with chaos?</div>", unsafe_allow_html=True)
+            
             st.markdown(
-                "<div class='arrival-text'>The nature of your weapon is determined by how you face the void.<br>"
-                "Choose your orientation.</div>", 
+                "<div class='arrival-text'>"
+                "The system needs to know your bias.<br>"
+                "When life gives you a difficult problem, you usually:"
+                "</div>", 
                 unsafe_allow_html=True
             )
             
-            # 使用自定义样式的 Radio 或 Columns 按钮
+            # 更生活化、幽默的二选一
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("DISSECT (Internal)", use_container_width=True):
-                    msc.update_radar_score(username, {"Reflection": 7.0, "Rationality": 6.0})
+                if st.button("Overthink it", use_container_width=True):
+                    # 思考者：高反思，高逻辑
+                    msc.update_radar_score(username, {"Reflection": 7.0, "Rationality": 6.0, "Curiosity": 5.0})
                     st.session_state.onboarding_step = 2
                     st.rerun()
-                st.caption("When in pain, you analyze it.")
+                st.markdown("<div class='hint-text'>Analyzing every detail until it hurts.</div>", unsafe_allow_html=True)
                 
             with col_b:
-                if st.button("CONQUER (External)", use_container_width=True):
-                    msc.update_radar_score(username, {"Agency": 7.0, "Conflict": 6.0})
+                if st.button("Just wing it", use_container_width=True):
+                    # 行动派：高自主，高冲突
+                    msc.update_radar_score(username, {"Agency": 7.0, "Conflict": 5.0, "Empathy": 4.0})
                     st.session_state.onboarding_step = 2
                     st.rerun()
-                st.caption("When in pain, you fight it.")
+                st.markdown("<div class='hint-text'>Action first, apologies later.</div>", unsafe_allow_html=True)
 
-            st.markdown("<div class='step-dots'>• <span class='active-dot'>•</span> •</div>", unsafe_allow_html=True)
+            st.markdown("<div class='step-dots'>○ <span class='active-dot'>●</span> ○</div>", unsafe_allow_html=True)
 
         # --- Step 2: Contact (完成) ---
         elif step == 2:
-            st.markdown("<div class='arrival-title'>CONTACT ESTABLISHED</div>", unsafe_allow_html=True)
+            st.markdown("<div class='arrival-title'>Online</div>", unsafe_allow_html=True)
+            st.markdown("<div class='arrival-subtitle'>Welcome to the Layer.</div>", unsafe_allow_html=True)
+            
             st.markdown(
-                "<div class='arrival-text'>Your frequency has been registered in the collective mind.<br>"
-                "You are no longer silence.<br>Welcome to the forest.</div>", 
+                "<div class='arrival-text'>"
+                "Your frequency has been registered.<br>"
+                "You are now a node in the network.<br><br>"
+                "Remember: <b>Quality creates gravity here.</b>"
+                "</div>", 
                 unsafe_allow_html=True
             )
             
             st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-            if st.button("ENTER THE GRID", type="primary", use_container_width=True):
+            if st.button("ENTER MSC", type="primary", use_container_width=True):
                 st.session_state.onboarding_complete = True
                 st.rerun()
                 
-            st.markdown("<div class='step-dots'>• • <span class='active-dot'>•</span></div>", unsafe_allow_html=True)
+            st.markdown("<div class='step-dots'>○ ○ <span class='active-dot'>●</span></div>", unsafe_allow_html=True)
+            
+        st.markdown("</div>", unsafe_allow_html=True) # End card
 
 # ==========================================
 # 👁️ 上帝视角 (Admin)
