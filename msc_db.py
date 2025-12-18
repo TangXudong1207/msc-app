@@ -272,7 +272,7 @@ def nuke_user(target_username):
         # 1. 删除系统日志
         supabase.table('system_logs').delete().eq('user_id', target_username).execute()
         
-        # 2. 删除私信 (作为发送者或接收者)
+        # 2. 删除私信
         supabase.table('direct_messages').delete().eq('sender', target_username).execute()
         supabase.table('direct_messages').delete().eq('receiver', target_username).execute()
         
@@ -285,10 +285,11 @@ def nuke_user(target_username):
         # 5. 最后删除用户本体
         supabase.table('users').delete().eq('username', target_username).execute()
         
-        # 6. 记录这次核打击 (这是给 Admin 看的，所以记录在 log 里)
-        log_system_event("WARN", "NUKE", f"User {target_username} and all data have been wiped.")
+        # 6. 记录日志
+        try: log_system_event("WARN", "NUKE", f"User {target_username} wiped.")
+        except: pass
         
-        # 7. 清除所有相关缓存
+        # 7. 清除缓存
         get_active_nodes_map.clear()
         get_global_nodes.clear()
         get_all_users.clear()
@@ -296,5 +297,4 @@ def nuke_user(target_username):
         
         return True, "Target eliminated."
     except Exception as e:
-        log_system_event("ERROR", "NUKE_FAIL", str(e))
         return False, str(e)
