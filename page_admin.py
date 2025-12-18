@@ -1,3 +1,5 @@
+### page__admin.py ###
+
 import streamlit as st
 import msc_lib as msc
 import msc_viz as viz
@@ -25,7 +27,8 @@ def render_admin_dashboard():
     k4.metric("Engine", "Active")
     
     st.divider()
-    tabs = st.tabs(["🌍 Global Pulse", "🛠️ Genesis Engine", "👥 Citizen Registry", "🧬 Node Inspector"])
+    # 🆕 新增 "System Logs" 标签
+    tabs = st.tabs(["🌍 Global Pulse", "🛠️ Genesis Engine", "👥 Citizen Registry", "🧬 Node Inspector", "⚠️ System Logs"])
     
     with tabs[0]:
         c1, c2 = st.columns([0.7, 0.3])
@@ -73,3 +76,25 @@ def render_admin_dashboard():
                 except: pass
                 debug_data.append({"User": n['username'], "Content": n['content'], "Score": n.get('logic_score'), "Loc": loc_str})
             st.dataframe(pd.DataFrame(debug_data), use_container_width=True, height=500)
+    
+    # 🆕 渲染系统日志
+    with tabs[4]:
+        st.markdown("### ⚠️ System Telemetry")
+        if st.button("Refresh Logs"):
+            st.rerun()
+        
+        logs = msc.get_system_logs(limit=100)
+        if logs:
+            df_logs = pd.DataFrame(logs)
+            # 简单的颜色高亮
+            def highlight_err(val):
+                color = '#ff4b4b' if val == 'ERROR' else '#ffa421' if val == 'WARN' else 'transparent'
+                return f'background-color: {color}'
+            
+            st.dataframe(
+                df_logs[['created_at', 'level', 'component', 'message', 'user_id']], 
+                use_container_width=True, 
+                height=500
+            )
+        else:
+            st.info("System is quiet. No anomalies detected.")
