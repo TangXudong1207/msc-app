@@ -18,6 +18,7 @@ except Exception as e:
     st.stop()
 
 def make_hashes(password):
+    # 新版加盐哈希
     raw = f"{SALT}{password}{SALT}"
     return hashlib.sha256(str.encode(raw)).hexdigest()
 
@@ -32,20 +33,35 @@ def log_system_event(level, component, message, user="system"):
             "created_at": datetime.now(timezone.utc).isoformat(), "user_id": user
         }
         supabase.table('system_logs').insert(payload).execute()
-    except: pass # 如果表不存在，静默失败，不影响主程序
+    except: pass 
 
 # ==========================================
-# 👤 用户管理
+# 👤 用户管理 (核心修复：兼容老密码)
 # ==========================================
 def login_user(username, password):
     try:
-        hashed = make_hashes(password)
-        res = supabase.table('users').select("*").eq('username', username).eq('password', hashed).execute()
+        # 1. 先尝试【新版加盐】密码
+        hashed_new = make_hashes(password)
+        res = supabase.table('users').select("*").eq('username', username).eq('password', hashed_new).execute()
+        
         if res.data:
-            log_system_event("INFO", "Auth", f"User {username} logged in", username)
+            log_system_event("INFO", "Auth", f"User {username} logged in (Secure)", username)
             return res.data
-        else: return []
-    except: return []
+            
+        # 2. 如果失败，尝试【旧版无盐】密码 (兼容老用户)
+        hashed_old = hashlib.sha256(str.encode(password)).hexdigest()
+        res_old = supabase.table('users').select("*").eq('username', username).eq('password', hashed_old).execute()
+        
+        if res_old.data:
+            # 💡 关键：如果是老密码登录成功，立刻自动升级数据库为新密码！
+            supabase.table('users').update({"password": hashed_new}).eq("username", username).execute()
+            log_system_event("WARN", "Auth", f"User {username} migrated to secure password", username)
+            return res_old.data
+
+        return []
+    except Exception as e:
+        log_system_event("ERROR", "Login", str(e)) 
+        return []
 
 def add_user(username, password, nickname, country="Other"):
     try:
@@ -98,11 +114,11 @@ def update_heartbeat(username):
 def save_chat(username, role, content):
     try: 
         supabase.table('chats').insert({"username": username, "role": role, "content": content, "is_deleted": False}).execute()
-        get_active_chats.clear() # 清除该用户的聊天缓存
-        get_active_chats.clear() # 稍微多清一下防止边缘情况
+        get_active_chats.clear()
+        get_active_chats.clear()
     except: pass
 
-@st.cache_data(ttl=10) # 缩短缓存时间，方便调试
+@st.cache_data(ttl=10)
 def get_active_chats(username):
     try:
         res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(50).execute()
@@ -125,7 +141,6 @@ def save_node(username, content, data, mode, vector):
         
         supabase.table('nodes').insert(payload).execute()
         
-        # 清除所有相关缓存
         get_active_nodes_map.clear()
         get_global_nodes.clear()
         get_all_nodes_for_map.clear()
@@ -152,7 +167,6 @@ def get_all_nodes_for_map(username):
 @st.cache_data(ttl=120)
 def get_global_nodes():
     try: 
-        # 获取更多节点以便做统计
         return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(500).execute().data
     except: return []
 
@@ -214,34 +228,20 @@ def get_system_logs(limit=50):
 # 🧨 危险操作：核打击 (容错版)
 # ==========================================
 def nuke_user(target_username):
-    """
-    彻底抹除一个用户的所有痕迹。
-    增加了 try-except 忽略表不存在的错误。
-    """
     try:
-        # 1. 删除系统日志 (容错)
         try: supabase.table('system_logs').delete().eq('user_id', target_username).execute()
         except: pass 
-        
-        # 2. 删除私信
         supabase.table('direct_messages').delete().eq('sender', target_username).execute()
         supabase.table('direct_messages').delete().eq('receiver', target_username).execute()
-        
-        # 3. 删除思维节点
         supabase.table('nodes').delete().eq('username', target_username).execute()
-        
-        # 4. 删除 AI 聊天记录
         supabase.table('chats').delete().eq('username', target_username).execute()
-        
-        # 5. 最后删除用户本体
         supabase.table('users').delete().eq('username', target_username).execute()
         
-        # 6. 清除所有缓存
         get_active_nodes_map.clear()
         get_global_nodes.clear()
         get_all_users.clear()
         get_user_profile.clear()
-        get_active_chats.clear() # 关键：清除聊天缓存
+        get_active_chats.clear()
         
         return True, "Target eliminated."
     except Exception as e:
