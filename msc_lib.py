@@ -1,3 +1,5 @@
+### msc_lib.py ###
+
 import streamlit as st
 import numpy as np
 import json
@@ -12,18 +14,24 @@ import msc_config as config
 import msc_db as db
 
 # ==========================================
-# 🛑 1. 初始化系统
+# 🛑 1. 初始化系统 (带容错日志)
 # ==========================================
 def init_system():
     # A. OpenAI/DeepSeek 客户端
+    client_openai = None
+    model_openai = "gpt-3.5-turbo"
+    
     try:
-        client_openai = OpenAI(
-            api_key=st.secrets["API_KEY"],
-            base_url=st.secrets["BASE_URL"]
-        )
-        model_openai = st.secrets["MODEL_NAME"]
-    except:
-        client_openai = None; model_openai = "gpt-3.5-turbo"
+        if "API_KEY" in st.secrets and "BASE_URL" in st.secrets:
+            client_openai = OpenAI(
+                api_key=st.secrets["API_KEY"],
+                base_url=st.secrets["BASE_URL"]
+            )
+            model_openai = st.secrets["MODEL_NAME"]
+        else:
+            db.log_system_event("WARN", "Init", "OpenAI Credentials missing")
+    except Exception as e:
+        db.log_system_event("ERROR", "Init_OpenAI", str(e))
 
     # B. Google Vertex AI (Embedding)
     vertex_embed = None
@@ -33,12 +41,13 @@ def init_system():
             creds = service_account.Credentials.from_service_account_info(creds_dict)
             vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
             vertex_embed = TextEmbeddingModel.from_pretrained("text-embedding-004")
-    except: pass
+    except Exception as e:
+         # 这不是致命错误，降级处理即可，但需要记录
+         db.log_system_event("WARN", "Init_Vertex", f"Vertex AI failed: {str(e)}")
     
     return client_openai, model_openai, vertex_embed
 
 client_ai, TARGET_MODEL, vertex_embed_model = init_system()
-gemini_model = None 
 
 # ==========================================
 # 🌉 2. 数据库桥梁 (透传 DB 函数)
@@ -80,6 +89,7 @@ def save_node(u, c, d, m, v): return db.save_node(u, c, d, m, v)
 def get_active_nodes_map(u): return db.get_active_nodes_map(u)
 def get_all_nodes_for_map(u): return db.get_all_nodes_for_map(u)
 def get_global_nodes(): return db.get_global_nodes()
+def get_system_logs(): return db.get_system_logs() # 导出日志函数
 
 def check_world_access(username):
     nodes = db.get_all_nodes_for_map(username)
@@ -93,7 +103,9 @@ def get_embedding(text):
         try:
             embeddings = vertex_embed_model.get_embeddings([text])
             return embeddings[0].values
-        except: pass
+        except Exception as e:
+             db.log_system_event("ERROR", "Embedding", str(e))
+    # Fallback: Random Vector (避免系统完全崩溃)
     return np.random.rand(768).tolist()
 
 def cosine_similarity(v1, v2):
@@ -123,7 +135,9 @@ def call_ai_api(prompt, use_google=False):
             if match: return json.loads(match.group(0))
             else: return json.loads(content)
         except: return {"error": True}
-    except Exception as e: return {"error": True, "msg": str(e)}
+    except Exception as e: 
+        db.log_system_event("ERROR", "AI_Call", str(e))
+        return {"error": True, "msg": str(e)}
 
 def get_stream_response(history_messages):
     """
@@ -153,10 +167,11 @@ def get_stream_response(history_messages):
                 yield chunk.choices[0].delta.content
 
     except Exception as e:
+        db.log_system_event("ERROR", "AI_Stream", str(e))
         yield f"❌ API Error: {str(e)}"
 
 def analyze_meaning_background(text):
-    prompt = f"{config.PROMPT_ANALYST}\n用户输入: \"{text}\""
+    prompt = f"{config.PROMPT_ANALYST}\nUser Input: \"{text}\""
     res = call_ai_api(prompt)
     if not isinstance(res, dict):
         return {"valid": False, "m_score": 0, "insight": "Analysis Failed"}
@@ -165,9 +180,10 @@ def analyze_meaning_background(text):
         c = res.get('c_score', 0)
         n = res.get('n_score', 0)
         if n == 0: n = 0.5 
-        m = c * n * 2
+        m = c * n * 2 # 计算逻辑
         res['m_score'] = m
-        if m < config.LEVELS["Weak"]: res["valid"] = False
+        # 硬门槛过滤
+        if m < config.LEVELS["Signal"]: res["valid"] = False
         else: res["valid"] = True
     else:
         res["valid"] = False
@@ -176,9 +192,9 @@ def analyze_meaning_background(text):
 
 def generate_daily_question(username, radar_data):
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"{config.PROMPT_DAILY}\n用户数据：{radar_str}。输出 JSON: {{ 'question': '...' }}"
+    prompt = f"{config.PROMPT_DAILY}\nUser Data: {radar_str}"
     res = call_ai_api(prompt, use_google=False)
-    return res.get("question", "What is the shape of your silence today?")
+    return res.get("question", "What constitutes the boundary of your self?")
 
 def update_radar_score(username, input_scores):
     try:
@@ -214,8 +230,6 @@ def find_resonance(current_vector, current_user, current_data):
                 sim_score = cosine_similarity(current_vector, o_vec)
                 
                 # 2. 颜色共鸣加成 (Bonus)
-                # 如果对方的节点颜色和我的相近（比如都是红色系），加分
-                # 这里简单处理：如果 keyword 包含相同颜色词，加 0.1
                 bonus = 0
                 if my_color and my_color in str(row.get('keywords','')):
                     bonus = 0.1
