@@ -11,42 +11,28 @@ from datetime import datetime, timezone
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-    # 获取盐值，如果未配置则使用默认值（仅限开发环境，生产环境必须配置）
-    SALT = st.secrets.get("PASSWORD_SALT", "msc_default_salt_2025") 
+    SALT = st.secrets.get("PASSWORD_SALT", "msc_default_salt") 
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     st.error(f"Database Connection Failed: {e}")
     st.stop()
 
 def make_hashes(password):
-    # 🛡️ Security Upgrade: 加盐哈希
-    # 将盐值拼接到密码前后，防止彩虹表攻击
     raw = f"{SALT}{password}{SALT}"
     return hashlib.sha256(str.encode(raw)).hexdigest()
 
 # ==========================================
-# 📊 可观测性：系统日志
+# 📊 可观测性：系统日志 (带容错)
 # ==========================================
 def log_system_event(level, component, message, user="system"):
-    """
-    将系统事件写入数据库以便在 Admin 面板监控
-    Level: INFO, WARN, ERROR
-    """
     try:
-        # 这一步不应阻塞主线程，尽力而为
         payload = {
-            "level": level,
-            "component": component,
-            "message": str(message)[:500], # 截断防止过长
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "user_id": user
+            "level": level, "component": component,
+            "message": str(message)[:500],
+            "created_at": datetime.now(timezone.utc).isoformat(), "user_id": user
         }
-        # 假设你已经在 Supabase 建了一个 'system_logs' 表
-        # 如果没有建表，这行代码会静默失败（这是预期的，不应导致主程序崩溃）
         supabase.table('system_logs').insert(payload).execute()
-    except:
-        # 如果日志系统本身挂了，打印到控制台作为最后防线
-        print(f"[{level}] {component}: {message}")
+    except: pass # 如果表不存在，静默失败，不影响主程序
 
 # ==========================================
 # 👤 用户管理
@@ -58,12 +44,8 @@ def login_user(username, password):
         if res.data:
             log_system_event("INFO", "Auth", f"User {username} logged in", username)
             return res.data
-        else:
-            log_system_event("WARN", "Auth", f"Failed login attempt for {username}", username)
-            return []
-    except Exception as e: 
-        log_system_event("ERROR", "Auth", str(e))
-        return []
+        else: return []
+    except: return []
 
 def add_user(username, password, nickname, country="Other"):
     try:
@@ -71,24 +53,17 @@ def add_user(username, password, nickname, country="Other"):
         if len(res.data) > 0: return False 
         
         radar = {"Care":3.0,"Curiosity":3.0,"Reflection":3.0,"Coherence":3.0,"Empathy":3.0,"Agency":3.0,"Aesthetic":3.0}
-        
         data = {
-            "username": username,
-            "password": make_hashes(password),
-            "nickname": nickname,
-            "radar_profile": json.dumps(radar),
-            "country": country,
-            "last_seen": datetime.now(timezone.utc).isoformat()
+            "username": username, "password": make_hashes(password),
+            "nickname": nickname, "radar_profile": json.dumps(radar),
+            "country": country, "last_seen": datetime.now(timezone.utc).isoformat()
         }
         supabase.table('users').insert(data).execute()
-        log_system_event("INFO", "Auth", f"New user created: {username}", username)
         return True
-    except Exception as e:
-        log_system_event("ERROR", "Register", str(e))
-        return False
+    except: return False
 
 # ==========================================
-# 📖 读取操作 (缓存策略)
+# 📖 读取操作
 # ==========================================
 
 @st.cache_data(ttl=300)
@@ -111,8 +86,7 @@ def update_radar_score(username, input_scores):
     try:
         supabase.table('users').update({"radar_profile": input_scores}).eq("username", username).execute()
         get_user_profile.clear()
-    except Exception as e:
-        log_system_event("ERROR", "Radar", str(e), username)
+    except: pass
 
 def update_heartbeat(username):
     try: supabase.table('users').update({"last_seen": datetime.now(timezone.utc).isoformat()}).eq("username", username).execute()
@@ -124,11 +98,11 @@ def update_heartbeat(username):
 def save_chat(username, role, content):
     try: 
         supabase.table('chats').insert({"username": username, "role": role, "content": content, "is_deleted": False}).execute()
-        get_active_chats.clear()
-    except Exception as e:
-        log_system_event("ERROR", "ChatSave", str(e), username)
+        get_active_chats.clear() # 清除该用户的聊天缓存
+        get_active_chats.clear() # 稍微多清一下防止边缘情况
+    except: pass
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=10) # 缩短缓存时间，方便调试
 def get_active_chats(username):
     try:
         res = supabase.table('chats').select("*").eq('username', username).eq('is_deleted', False).order('id', desc=True).limit(50).execute()
@@ -140,34 +114,25 @@ def save_node(username, content, data, mode, vector):
         logic = data.get('m_score', 0.5)
         kw = json.dumps(data.get('keywords', []))
         vec = str(vector) 
-        loc_data = data.get('location', {})
-        if not loc_data: loc_data = {}
+        loc_data = data.get('location', {}) if data.get('location') else {}
 
         payload = {
-            "username": username, 
-            "content": content, 
-            "care_point": data.get('care_point','?'), 
-            "meaning_layer": data.get('meaning_layer',''), 
-            "insight": data.get('insight', ''), 
-            "mode": mode, 
-            "vector": vec, 
-            "logic_score": logic, 
-            "keywords": kw, 
-            "is_deleted": False,
-            "location": loc_data
+            "username": username, "content": content, "care_point": data.get('care_point','?'), 
+            "meaning_layer": data.get('meaning_layer',''), "insight": data.get('insight', ''), 
+            "mode": mode, "vector": vec, "logic_score": logic, 
+            "keywords": kw, "is_deleted": False, "location": loc_data
         }
         
         supabase.table('nodes').insert(payload).execute()
         
-        # 缓存失效
+        # 清除所有相关缓存
         get_active_nodes_map.clear()
         get_global_nodes.clear()
-        get_all_nodes_for_map.clear() # 确保好友界面也能刷到
+        get_all_nodes_for_map.clear()
         
-        log_system_event("INFO", "Node", f"Node created by {username} (Score: {logic:.2f})", username)
+        log_system_event("INFO", "Node", f"Node created by {username} ({logic:.2f})", username)
         return True, "Success"
     except Exception as e:
-        log_system_event("ERROR", "NodeSave", str(e), username)
         return False, str(e)
 
 @st.cache_data(ttl=60)
@@ -187,11 +152,12 @@ def get_all_nodes_for_map(username):
 @st.cache_data(ttl=120)
 def get_global_nodes():
     try: 
-        return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(200).execute().data
+        # 获取更多节点以便做统计
+        return supabase.table('nodes').select("*").eq('is_deleted', False).order('id', desc=True).limit(500).execute().data
     except: return []
 
 # ==========================================
-# 📡 社交功能
+# 📡 社交 & 消息
 # ==========================================
 @st.cache_data(ttl=60)
 def get_all_users(curr):
@@ -208,12 +174,8 @@ def get_direct_messages(u1, u2):
     except: return []
 
 def send_direct_message(s, r, c):
-    try: 
-        supabase.table('direct_messages').insert({"sender":s,"receiver":r,"content":c}).execute()
-        return True
-    except Exception as e:
-        log_system_event("ERROR", "DM", str(e), s)
-        return False
+    try: supabase.table('direct_messages').insert({"sender":s,"receiver":r,"content":c}).execute(); return True
+    except: return False
 
 def get_unread_counts(curr):
     try:
@@ -229,48 +191,37 @@ def mark_read(s, r):
 
 def process_time_decay():
     try:
-        res = supabase.table('nodes').select("*").neq('mode', 'Sediment').neq('mode', 'Genesis_Sim').execute()
+        res = supabase.table('nodes').select("*").neq('mode', 'Sediment').execute()
         active_nodes = res.data
         sediment_count = 0
         now = datetime.now(timezone.utc)
-        TTL_HOURS = 24 
         for node in active_nodes:
             try:
-                created_at_str = node['created_at']
-                if created_at_str.endswith('Z'): created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                else: created_at = datetime.fromisoformat(created_at_str)
-                if created_at.tzinfo is None: created_at = created_at.replace(tzinfo=timezone.utc)
-                age = (now - created_at).total_seconds() / 3600
-                if age > TTL_HOURS:
+                created_at = datetime.fromisoformat(node['created_at'].replace('Z', '+00:00'))
+                if (now - created_at).total_seconds() / 3600 > 24:
                     supabase.table('nodes').update({"mode": "Sediment"}).eq("id", node['id']).execute()
                     sediment_count += 1
             except: continue
-        if sediment_count > 0:
-            log_system_event("INFO", "Decay", f"{sediment_count} nodes became sediment")
         return sediment_count
-    except Exception as e: 
-        log_system_event("ERROR", "Decay", str(e))
-        return 0
-    
-# ==========================================
-# 🆕 获取系统日志 (供 Admin 使用)
-# ==========================================
+    except: return 0
+
 def get_system_logs(limit=50):
     try:
-        res = supabase.table('system_logs').select("*").order('created_at', desc=True).limit(limit).execute()
-        return res.data
+        return supabase.table('system_logs').select("*").order('created_at', desc=True).limit(limit).execute().data
     except: return []
+
 # ==========================================
-# 🧨 危险操作：核打击 (级联删除用户)
+# 🧨 危险操作：核打击 (容错版)
 # ==========================================
 def nuke_user(target_username):
     """
     彻底抹除一个用户的所有痕迹。
-    顺序：日志 -> 私信 -> 节点 -> 聊天 -> 用户表
+    增加了 try-except 忽略表不存在的错误。
     """
     try:
-        # 1. 删除系统日志
-        supabase.table('system_logs').delete().eq('user_id', target_username).execute()
+        # 1. 删除系统日志 (容错)
+        try: supabase.table('system_logs').delete().eq('user_id', target_username).execute()
+        except: pass 
         
         # 2. 删除私信
         supabase.table('direct_messages').delete().eq('sender', target_username).execute()
@@ -285,15 +236,12 @@ def nuke_user(target_username):
         # 5. 最后删除用户本体
         supabase.table('users').delete().eq('username', target_username).execute()
         
-        # 6. 记录日志
-        try: log_system_event("WARN", "NUKE", f"User {target_username} wiped.")
-        except: pass
-        
-        # 7. 清除缓存
+        # 6. 清除所有缓存
         get_active_nodes_map.clear()
         get_global_nodes.clear()
         get_all_users.clear()
         get_user_profile.clear()
+        get_active_chats.clear() # 关键：清除聊天缓存
         
         return True, "Target eliminated."
     except Exception as e:
