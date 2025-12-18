@@ -1,4 +1,4 @@
-### page__admin.py ###
+### page_admin.py ###
 
 import streamlit as st
 import msc_lib as msc
@@ -7,15 +7,17 @@ import msc_sim as sim
 import time
 import pandas as pd
 import json
-import msc_db as db # 引入 DB 以调用核打击函数
+import msc_db as db # 必须引入 DB 才能进行删除操作
 
 def render_admin_dashboard():
     st.markdown("## 👁️ Overseer Terminal")
     st.caption("v75.5 Arrival / System Status: ONLINE")
     
+    # 获取数据
     all_users = msc.get_all_users("admin")
     global_nodes = msc.get_global_nodes()
     
+    # 顶部指标
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Citizens", len(all_users))
     k2.metric("Nodes", len(global_nodes))
@@ -28,8 +30,11 @@ def render_admin_dashboard():
     k4.metric("Engine", "Active")
     
     st.divider()
-    tabs = st.tabs(["🌍 Global Pulse", "🛠️ Genesis Engine", "👥 Citizen Registry", "🧬 Node Inspector", "⚠️ System Logs"])
     
+    # === 标签页导航 ===
+    tabs = st.tabs(["🌍 Global Pulse", "🛠️ Genesis Engine", "👥 Citizen Registry", "🧬 Node Inspector", "⚠️ Logs"])
+    
+    # Tab 1: 地图
     with tabs[0]:
         c1, c2 = st.columns([0.7, 0.3])
         with c1:
@@ -39,6 +44,7 @@ def render_admin_dashboard():
             st.markdown("### 🎨 Spectrum")
             st.info("Spectrum Analysis Module loading...")
 
+    # Tab 2: 模拟器
     with tabs[1]:
         st.markdown("### ⚡ Genesis Protocol")
         c_gen1, c_gen2 = st.columns(2)
@@ -61,8 +67,9 @@ def render_admin_dashboard():
                         logs = sim.inject_thoughts(count_thought)
                         for log in logs: st.text(log)
     
-    # === 👥 Citizen Registry (含删除功能) ===
+    # Tab 3: 用户管理 (删除功能在这里！)
     with tabs[2]:
+        # 分两列：左边看列表，右边删人
         c_list, c_action = st.columns([0.6, 0.4])
         
         with c_list:
@@ -80,29 +87,32 @@ def render_admin_dashboard():
 
         with c_action:
             st.markdown("#### 🧨 Termination Protocol")
+            # 放在一个红色边框的容器里
             with st.container(border=True):
-                st.warning("Warning: This action is irreversible.")
+                st.error("DANGER ZONE: Irreversible Action")
                 
-                # 下拉选择要删除的用户
+                # 1. 选择用户
                 user_list = [u['username'] for u in all_users] if all_users else []
-                target_user = st.selectbox("Select Target", user_list, index=None, placeholder="Choose identity...")
+                target_user = st.selectbox("Select Target to Wipe", user_list, index=None, placeholder="Select identity...")
                 
-                # 防误触机制
-                confirm_nuke = st.checkbox(f"I confirm I want to wipe '{target_user}'")
+                # 2. 确认勾选
+                confirm_nuke = st.checkbox(f"I confirm: Wipe '{target_user}'")
                 
+                # 3. 执行按钮
                 if st.button("EXECUTE NUKE", type="primary", disabled=not (target_user and confirm_nuke)):
                     if target_user == "admin":
-                        st.error("🚫 You cannot delete The Architect.")
+                        st.error("🚫 The Architect cannot be deleted.")
                     else:
                         with st.spinner("Erasing existence..."):
                             success, msg = db.nuke_user(target_user)
                             if success:
                                 st.success(f"Target '{target_user}' eliminated.")
-                                time.sleep(1)
+                                time.sleep(1.5)
                                 st.rerun()
                             else:
-                                st.error(f"Termination Failed: {msg}")
+                                st.error(f"Failed: {msg}")
 
+    # Tab 4: 节点检查
     with tabs[3]:
         if global_nodes:
             debug_data = []
@@ -115,22 +125,17 @@ def render_admin_dashboard():
                 debug_data.append({"User": n['username'], "Content": n['content'], "Score": n.get('logic_score'), "Loc": loc_str})
             st.dataframe(pd.DataFrame(debug_data), use_container_width=True, height=500)
     
+    # Tab 5: 日志
     with tabs[4]:
         st.markdown("### ⚠️ System Telemetry")
         if st.button("Refresh Logs"):
             st.rerun()
         
-        logs = msc.get_system_logs(limit=100)
-        if logs:
-            df_logs = pd.DataFrame(logs)
-            def highlight_err(val):
-                color = '#ff4b4b' if val == 'ERROR' else '#ffa421' if val == 'WARN' else 'transparent'
-                return f'background-color: {color}'
-            
-            st.dataframe(
-                df_logs[['created_at', 'level', 'component', 'message', 'user_id']], 
-                use_container_width=True, 
-                height=500
-            )
-        else:
-            st.info("System is quiet. No anomalies detected.")
+        try:
+            logs = msc.get_system_logs(limit=50) # 调用 lib 里的接口
+            if logs:
+                st.dataframe(pd.DataFrame(logs), use_container_width=True)
+            else:
+                st.caption("No logs available.")
+        except:
+            st.caption("Log system not fully initialized.")
