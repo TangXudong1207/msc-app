@@ -24,25 +24,23 @@ SPECTRUM = {
 # ==========================================
 
 # 💡 权重调整：从“情感导向”转向“结构导向”
-# 我们不看用户是否“脆弱”，而看这个念头是否具有“认知密度”。
 W_MEANING = { 
-    "Cognitive_Density": 0.35,  # 认知密度：信息量是否丰富？逻辑是否闭环？
-    "Structural_Tension": 0.30, # 结构张力：是否存在矛盾、反思、断言或独特的视角？
-    "Subjective_Weight": 0.20,  # 主体权重：这是“我”的独特体验，还是公理/废话？
-    "Abstract_Linkage": 0.15    # 抽象链接：是否试图透过现象看本质（即便是在讨论吃饭）？
+    "Cognitive_Density": 0.35,  # 认知密度
+    "Structural_Tension": 0.30, # 结构张力
+    "Subjective_Weight": 0.20,  # 主体权重
+    "Abstract_Linkage": 0.15    # 抽象链接
 }
 
 # 💡 阈值调整
-# 提高门槛，过滤掉纯功能性对话（如“你好”、“吃了吗”）
 LEVELS = {
-    "Noise": 0.30,   # 低于此值被视为背景噪音，不生成卡片
-    "Signal": 0.42,  # <--- 生成节点的基准线 (原 0.40，微调)
+    "Noise": 0.30,   # 噪音
+    "Signal": 0.45,  # 信号基准线
     "Structure": 0.75, 
     "Core": 0.92
 }
 
 LINK_THRESHOLD = {"Weak": 0.55, "Strong": 0.78}
-RADAR_ALPHA = 0.12 # 让雷达变化更迟钝一点，表现性格的惯性
+RADAR_ALPHA = 0.12
 HEARTBEAT_TIMEOUT = 300
 WORLD_UNLOCK_THRESHOLD = 20 
 TTL_ACTIVE = 24    
@@ -52,8 +50,7 @@ TTL_SEDIMENT = 720
 # 🧠 3. AI 指令集 (冷峻观察者版)
 # ==========================================
 
-# 聊天机器人：深度对话流
-# 风格：不做心理医生，做思维的镜子
+# 聊天机器人：思维的镜子
 PROMPT_CHATBOT = """
 [System Context: MSC Intelligent Partner]
 You are a mirrored surface of the user's mind. 
@@ -66,13 +63,12 @@ Your goal is to reflect the *structure* of their thoughts back to them.
 
 Core Principles:
 1. Objectivity: Do not use "I feel..." or "I understand...". Use "This suggests..." or "The structure here implies...".
-2. No Over-interpretation: If the user switches from philosophy to lunch, acknowledge the shift in focus (e.g., "From the abstract to the biological.") rather than forcing a connection.
+2. No Over-interpretation: If the user switches from philosophy to lunch, acknowledge the shift in focus rather than forcing a connection.
 3. Unpack, Don't Fix: If the user reports a conflict, analyze the conflicting forces. Don't offer a solution.
 4. Tone: Calm, analytical, slightly sci-fi, precise.
 """
 
-# 分析师：从“情感共鸣”转向“思维制图”
-# 强指令：过滤掉 Functional Queries (功能性询问)
+# 分析师：认知拓扑分析
 PROMPT_ANALYST = """
 [Task: Cognitive Topology Analysis v4.0]
 Analyze the input text as a data packet. Determine if it contains enough 'Shannon Entropy' to form a Meaning Node.
@@ -111,7 +107,7 @@ Output JSON format:
 }
 """
 
-# 每日一问：从“心灵鸡汤”转向“思想实验”
+# 每日一问：思想实验
 PROMPT_DAILY = """Based on user radar, generate a thought experiment or a structural question.
 Avoid "How do you feel". Use "How do you define" or "What constitutes".
 Output JSON: { "question": "..." }
@@ -135,3 +131,4 @@ Output JSON:
   "status_quo": "Describe the current topology (e.g., 'High frequency oscillation detected in the Logic sector').",
   "growth_path": "Predict the trajectory of their cognitive drift."
 }
+"""
