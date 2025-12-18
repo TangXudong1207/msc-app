@@ -4,7 +4,8 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
-import msc_forest as forest 
+import msc_forest as forest
+import msc_i18n as i18n # 引用语言包
 
 # ==========================================
 # 🎨 CSS：Cyber-Zen 极简主义设计系统
@@ -130,6 +131,44 @@ if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" # 默认英文
 
+# ==========================================
+# 🆕 首次接触逻辑 (First Contact Logic)
+# ==========================================
+def check_and_send_first_contact(username):
+    # 1. 检查是否有聊天记录
+    history = msc.get_active_chats(username)
+    if not history:
+        # 2. 如果为空，发送第一条消息
+        lang = st.session_state.language
+        if lang == 'zh':
+            first_msg = """先说清楚一件事：
+
+这里就是一个
+和 AI 聊天的对话框，
+和你用过的那些差不多。
+
+如果你现在
+不知道该从哪开始，
+那也正常。
+
+那就从最简单的开始吧——
+吃了吗？"""
+        else:
+            first_msg = """Let's get one thing clear:
+
+This is just a chat box
+where you talk to an AI,
+much like the others you've used.
+
+If you don't know
+where to start right now,
+that's perfectly normal.
+
+Let's start with something simple—
+How is your day going?"""
+        
+        msc.save_chat(username, "assistant", first_msg)
+
 # --- 1. 登录注册 ---
 if not st.session_state.logged_in:
     pages.render_login_page()
@@ -147,6 +186,10 @@ else:
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
         st.stop() # 🛑 停止渲染下方的主界面，只显示引导页
+    
+    # === 🆕 新手引导完成后，检查是否需要发送第一条消息 ===
+    if node_count == 0 and not st.session_state.is_admin:
+        check_and_send_first_contact(st.session_state.username)
 
     # === 以下是正常主界面 (引导已完成或老用户) ===
     
@@ -226,29 +269,20 @@ else:
 
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
-        # === 修复点：侧边栏语言切换 ===
+        # 语言切换 (侧边栏)
         st.divider()
-        
-        # 1. 定义选项（纯字符串）
         lang_opts = ['EN', '中文']
-        # 2. 获取当前索引
         curr_idx = 0 if st.session_state.language == 'en' else 1
-        
-        # 3. 渲染
         lang_choice = sac.segmented(
             items=lang_opts, 
             align='center', size='xs', index=curr_idx, key="sidebar_lang_selector"
         )
-        
-        # 4. 逻辑映射
         mapped_lang = 'en' if lang_choice == 'EN' else 'zh'
-        
-        # 5. 刷新
         if mapped_lang != st.session_state.language:
             st.session_state.language = mapped_lang
             st.rerun()
 
-    # 页面路由 - 根据当前语言匹配
+    # 页面路由
     if selected_menu == T['Logout']: 
         st.session_state.logged_in = False
         st.session_state.is_admin = False
