@@ -1,4 +1,4 @@
-### page_social.py ###
+### page__social.py ###
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -6,7 +6,7 @@ import msc_viz as viz
 import msc_i18n as i18n
 
 # ==========================================
-# 💬 好友页面
+# 💬 好友页面 (视觉升级版)
 # ==========================================
 def render_friends_page(username, unread_counts):
     try:
@@ -18,24 +18,71 @@ def render_friends_page(username, unread_counts):
     all_nodes = msc.get_all_nodes_for_map(username)
     node_count = len(all_nodes)
     
+    # 🔒 锁定界面优化
     if node_count < 50 and not st.session_state.is_admin:
-        c1, c2, c3 = st.columns([1, 2, 1])
+        c1, c2, c3 = st.columns([1, 6, 1]) # 使用更宽的中间列
         with c2:
-            st.markdown("<div style='height:50px'></div>", unsafe_allow_html=True)
-            st.warning(i18n.get_text('lock_title'))
-            st.markdown(
-                f"""
-                <div style='text-align:center; color:#666;'>
-                <h3 style='font-family: "Inter", sans-serif;'>{i18n.get_text('lock_msg')}</h3>
-                <h1 style='font-size:3em; margin:30px 0; font-family: "JetBrains Mono";'>{node_count} / 50</h1>
-                <p style='color:#999; text-transform:uppercase; letter-spacing:2px; font-size:0.8em;'>{i18n.get_text('lock_stat')}</p>
+            st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
+            
+            # CSS 注入：只针对这个页面的样式
+            st.markdown("""
+            <style>
+                .lock-container {
+                    text-align: center;
+                    color: #555;
+                    font-family: 'Inter', sans-serif;
+                }
+                .lock-icon { font-size: 3em; color: #EEE; margin-bottom: 20px; }
+                .lock-title { 
+                    font-size: 1.2em; 
+                    font-weight: 600; 
+                    letter-spacing: 1px; 
+                    text-transform: uppercase;
+                    margin-bottom: 30px;
+                    color: #333;
+                }
+                .lock-quote {
+                    font-family: 'Noto Serif SC', serif;
+                    font-size: 1.1em;
+                    line-height: 2.0;
+                    color: #666;
+                    margin-bottom: 40px;
+                    font-style: italic;
+                }
+                .lock-stat-number {
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 4em;
+                    font-weight: 700;
+                    color: #222;
+                }
+                .lock-stat-label {
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 0.8em;
+                    letter-spacing: 2px;
+                    color: #BBB;
+                    text-transform: uppercase;
+                    margin-top: -10px;
+                    margin-bottom: 20px;
+                }
+            </style>
+            
+            <div class='lock-container'>
+                <div class='lock-icon'>🔒</div>
+                <div class='lock-title'>Signal Transmitter Locked</div>
+                <div class='lock-quote'>
+                    深度的连接 · 始于深度的自我<br>
+                    在邀请他人进入之前，请先耕耘你自己的灵魂森林<br>
+                    这是为了确保每一次连接都是信号，而非噪音
                 </div>
-                """, 
-                unsafe_allow_html=True
-            )
+                <div class='lock-stat-number'>{count} / 50</div>
+                <div class='lock-stat-label'>Meaning Nodes Generated</div>
+            </div>
+            """.format(count=node_count), unsafe_allow_html=True)
+            
             st.progress(node_count / 50)
         return
 
+    # === 解锁后的正常界面 ===
     col_list, col_chat = st.columns([0.25, 0.75])
     user_map = {}
 
