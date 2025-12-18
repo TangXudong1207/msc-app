@@ -72,6 +72,7 @@ TRANSLATIONS = {
 }
 
 def get_text(key):
+    # 默认为英文，防止未初始化报错
     lang = st.session_state.get('language', 'en')
     return TRANSLATIONS[lang].get(key, key)
 
@@ -93,17 +94,27 @@ def render_login_page():
     with c2:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
         
-        # 语言切换 (登录页独有)
+        # === 修复点：简单的语言切换 ===
+        # 确保 session_state 初始化
         if "language" not in st.session_state: st.session_state.language = "en"
-        lang_idx = 0 if st.session_state.language == "en" else 1
         
-        # 使用 segmented 组件做语言切换，更美观
-        lang_sel = sac.segmented(
-            items=[sac.SegmentedItem(label='English', value='en'), sac.SegmentedItem(label='中文', value='zh')], 
-            align='center', size='xs', index=lang_idx, key="login_lang"
+        # 1. 定义选项（纯字符串，不使用 SegmentedItem 对象以避免报错）
+        lang_options = ['English', '中文']
+        # 2. 计算当前索引
+        current_idx = 0 if st.session_state.language == 'en' else 1
+        
+        # 3. 渲染组件
+        selected_lang_label = sac.segmented(
+            items=lang_options, 
+            align='center', size='xs', index=current_idx, key="login_lang_selector"
         )
-        if lang_sel != st.session_state.language:
-            st.session_state.language = lang_sel
+        
+        # 4. 逻辑映射：Label -> Code
+        new_lang_code = 'en' if selected_lang_label == 'English' else 'zh'
+        
+        # 5. 如果变更则刷新
+        if new_lang_code != st.session_state.language:
+            st.session_state.language = new_lang_code
             st.rerun()
 
         st.markdown("""
@@ -152,10 +163,10 @@ def render_login_page():
                     else: st.error("Initialization Failed")
 
 # ==========================================
-# 🚀 新手引导：降临 (The Arrival) - 轻量化版
+# 🚀 新手引导：降临 (The Arrival) - 双语版
 # ==========================================
 def render_onboarding(username):
-    # 🎨 注入“降临”风格 CSS：
+    # 🎨 注入“降临”风格 CSS
     # 保持字体的史诗感，但背景改为 clean 的灰白，类似高级对话界面
     st.markdown("""
     <style>
@@ -340,15 +351,15 @@ def render_admin_dashboard():
     global_nodes = msc.get_global_nodes()
     
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Citizens", len(all_users), delta="Live")
-    k2.metric("Nodes", len(global_nodes), delta="Global")
+    k1.metric("Citizens", len(all_users))
+    k2.metric("Nodes", len(global_nodes))
     
     avg_care = 0
     if global_nodes:
         total_care = sum([float(n.get('logic_score', 0)) for n in global_nodes])
         avg_care = total_care / len(global_nodes)
-    k3.metric("Avg. Meaning", f"{avg_care:.2f}", delta="Quality")
-    k4.metric("Engine", "Vertex/DeepSeek", delta="Active")
+    k3.metric("Avg. Meaning", f"{avg_care:.2f}")
+    k4.metric("Engine", "Active")
     
     st.divider()
     
@@ -415,8 +426,6 @@ def render_ai_page(username):
     
     chat_history = msc.get_active_chats(username)
     nodes_map = msc.get_active_nodes_map(username)
-    
-    # 语言检测
     lang = st.session_state.get('language', 'en')
     
     # 渲染历史
