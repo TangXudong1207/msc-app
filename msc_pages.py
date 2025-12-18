@@ -1,3 +1,4 @@
+### msc_pages.py ###
 # msc_pages.py - The Gateway (Router)
 # 该文件现已重构为“路由”，所有具体逻辑都在子模块中。
 
