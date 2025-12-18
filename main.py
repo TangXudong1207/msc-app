@@ -124,9 +124,11 @@ def inject_custom_css():
 st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
+# === 全局状态初始化 ===
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
+if "language" not in st.session_state: st.session_state.language = "en" # 默认英文
 
 # --- 1. 登录注册 ---
 if not st.session_state.logged_in:
@@ -155,6 +157,14 @@ else:
     else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
     
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
+    lang = st.session_state.language
+
+    # 字典：菜单翻译
+    MENU_TEXT = {
+        "en": {"AI": "AI Partner", "Chat": "Signal", "World": "World", "God": "God Mode", "Sys": "System", "Logout": "Logout", "Map": "Map", "DNA": "DNA", "Ins": "Insight", "Ref": "Refresh"},
+        "zh": {"AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", "God": "上帝视角", "Sys": "系统", "Logout": "登出连接", "Map": "星图", "DNA": "基因", "Ins": "生成洞察", "Ref": "刷新"}
+    }
+    T = MENU_TEXT[lang]
 
     with st.sidebar:
         # 用户信息区
@@ -171,7 +181,7 @@ else:
         # 每日一问 (卡片式)
         if "daily_q" not in st.session_state: st.session_state.daily_q = None
         if st.session_state.daily_q is None:
-            if st.button("📅 Insight Generator", use_container_width=True):
+            if st.button(f"📅 {T['Ins']}", use_container_width=True):
                 with st.spinner("Extracting meaning..."):
                     st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
                     st.rerun()
@@ -185,7 +195,7 @@ else:
                 """, 
                 unsafe_allow_html=True
             )
-            if st.button("↻ Refresh", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
+            if st.button(f"↻ {T['Ref']}", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
 
         # === 森林 (3D 灵魂形态) ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
@@ -193,35 +203,48 @@ else:
         
         c_b1, c_b2 = st.columns(2)
         with c_b1:
-            if st.button("🧬 DNA", use_container_width=True):
+            if st.button(f"🧬 {T['DNA']}", use_container_width=True):
                 viz.view_radar_details(radar_dict, st.session_state.username)
         with c_b2:
             all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-            if st.button("🔭 Map", use_container_width=True): 
+            if st.button(f"🔭 {T['Map']}", use_container_width=True): 
                 viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
         
         st.divider()
         
         # 菜单
         menu_items = [
-            sac.MenuItem('AI Partner', icon='robot'),
-            sac.MenuItem('Chat', icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
-            sac.MenuItem('World', icon='globe'),
+            sac.MenuItem(T['AI'], icon='robot'),
+            sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
+            sac.MenuItem(T['World'], icon='globe'),
         ]
         
         if st.session_state.is_admin:
-            menu_items.append(sac.MenuItem('God Mode', icon='eye-fill'))
+            menu_items.append(sac.MenuItem(T['God'], icon='eye-fill'))
         
-        menu_items.append(sac.MenuItem('System', type='group', children=[sac.MenuItem('Logout', icon='box-arrow-right')]))
+        menu_items.append(sac.MenuItem(T['Sys'], type='group', children=[sac.MenuItem(T['Logout'], icon='box-arrow-right')]))
 
-        menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
+        selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
+        
+        # 语言切换器 (放在侧边栏底部)
+        st.divider()
+        lang_choice = sac.segmented(
+            items=[
+                sac.SegmentedItem(label='EN', value='en'),
+                sac.SegmentedItem(label='中文', value='zh'),
+            ], 
+            align='center', size='xs', index=0 if lang=='en' else 1
+        )
+        if lang_choice != st.session_state.language:
+            st.session_state.language = lang_choice
+            st.rerun()
 
-    # 页面路由
-    if menu == 'Logout': 
+    # 页面路由 - 根据当前语言匹配
+    if selected_menu == T['Logout']: 
         st.session_state.logged_in = False
         st.session_state.is_admin = False
         st.rerun()
-    elif menu == 'AI Partner': pages.render_ai_page(st.session_state.username)
-    elif menu == 'Chat': pages.render_friends_page(st.session_state.username, unread_counts)
-    elif menu == 'World': pages.render_world_page()
-    elif menu == 'God Mode': pages.render_admin_dashboard()
+    elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
+    elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
+    elif selected_menu == T['World']: pages.render_world_page()
+    elif selected_menu == T['God']: pages.render_admin_dashboard()
