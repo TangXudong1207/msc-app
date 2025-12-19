@@ -43,50 +43,66 @@ def get_random_ocean_coordinate():
     return lat, lon
 
 # ==========================================
-# 📐 1. 真·3D 坐标转换 (Spherical to Cartesian)
+# 📐 1. 真·3D 坐标转换
 # ==========================================
 def ll2xyz(lat, lon, radius=1.0):
-    """
-    将经纬度转换为 3D 空间坐标 (x, y, z)
-    lat: -90 ~ 90
-    lon: -180 ~ 180
-    radius: 球体半径
-    """
     phi = (90 - lat) * (math.pi / 180)
     theta = (lon + 180) * (math.pi / 180)
-    
     x = -(radius * math.sin(phi) * math.cos(theta))
     y = (radius * math.sin(phi) * math.sin(theta))
     z = (radius * math.cos(phi))
-    
     return x, y, z
 
+def generate_globe_wireframe(radius=100):
+    """生成地球经纬网格线 (全息地球骨架)"""
+    lines_x, lines_y, lines_z = [], [], []
+    
+    # 经线 (每30度一条)
+    for lon in range(-180, 180, 30):
+        lat_range = np.linspace(-90, 90, 50)
+        for i in range(len(lat_range)-1):
+            x1, y1, z1 = ll2xyz(lat_range[i], lon, radius)
+            x2, y2, z2 = ll2xyz(lat_range[i+1], lon, radius)
+            lines_x.extend([x1, x2, None])
+            lines_y.extend([y1, y2, None])
+            lines_z.extend([z1, z2, None])
+            
+    # 纬线 (每30度一条)
+    for lat in range(-60, 90, 30): # 不画极点，太密集
+        lon_range = np.linspace(-180, 180, 50)
+        for i in range(len(lon_range)-1):
+            x1, y1, z1 = ll2xyz(lat, lon_range[i], radius)
+            x2, y2, z2 = ll2xyz(lat, lon_range[i+1], radius)
+            lines_x.extend([x1, x2, None])
+            lines_y.extend([y1, y2, None])
+            lines_z.extend([z1, z2, None])
+            
+    return lines_x, lines_y, lines_z
+
 # ==========================================
-# 🌍 2. 3D 轨道地球 (The Orbital Earth)
+# 🌍 2. 3D 轨道地球 (修正版：卫星美学)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
     if not nodes: 
         st.info("The universe is empty.")
         return
 
-    # 半径定义
     R_EARTH = 100
-    R_ORBIT = 135 # 您的意义卡悬浮高度 (1.35倍地球半径)
+    # 调整：高度稍微降低一点，不要飞太远，增强“引力感”
+    R_ORBIT = 125 
 
-    # 容器初始化
     traces = []
     
-    # 数据分类容器
-    # 地表层
+    # 数据容器
     sed_x, sed_y, sed_z, sed_c = [], [], [], []
     sig_x, sig_y, sig_z, sig_c = [], [], [], []
-    # 轨道层 (我的)
+    drift_x, drift_y, drift_z, drift_c = [], [], [], []
+    
+    # 我的轨道数据
     my_x, my_y, my_z, my_c, my_t = [], [], [], [], []
-    # 牵引线 (连接地表和轨道)
     line_x, line_y, line_z = [], [], [] 
 
     for node in nodes:
-        # 1. 坐标解析
         loc = None
         is_drift = False
         try:
@@ -94,7 +110,6 @@ def render_3d_particle_map(nodes, current_user):
             elif isinstance(node.get('location'), dict): loc = node['location']
         except: pass
         
-        # 漂流瓶逻辑
         if not loc or not loc.get('lat'): 
             d_lat, d_lon = get_random_ocean_coordinate()
             loc = {"lat": d_lat, "lon": d_lon}
@@ -104,26 +119,22 @@ def render_3d_particle_map(nodes, current_user):
         color = get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
         
-        # 2. 分层逻辑
-        
-        # === A. 我的意义卡 (My Orbit) ===
+        # === A. 我的卫星 (My Orbit) ===
         if node['username'] == current_user:
-            # 计算悬浮坐标
             ox, oy, oz = ll2xyz(lat, lon, R_ORBIT)
-            # 计算地表锚点坐标
             gx, gy, gz = ll2xyz(lat, lon, R_EARTH)
             
-            # 添加点
             my_x.append(ox); my_y.append(oy); my_z.append(oz)
             my_c.append(color)
-            my_t.append(f"<b>{node['care_point']}</b><br><i>{node.get('insight','')}</i>")
+            # Tooltip 内容优化：只显示核心词和insight
+            my_t.append(f"<b>{node['care_point']}</b><br><span style='font-size:0.8em; color:#ccc'>{node.get('insight','')}</span>")
             
-            # 添加牵引线 (Tether)
-            line_x.extend([gx, ox, None]) # None 用于断开线段
+            # 牵引线：极细的“风筝线”
+            line_x.extend([gx, ox, None])
             line_y.extend([gy, oy, None])
             line_z.extend([gz, oz, None])
             
-            # 同时也画一个地表的小点，表示根基
+            # 地面投影点（空心圆），表示“根”
             sig_x.append(gx); sig_y.append(gy); sig_z.append(gz)
             sig_c.append(color)
 
@@ -133,96 +144,106 @@ def render_3d_particle_map(nodes, current_user):
             sed_x.append(sx); sed_y.append(sy); sed_z.append(sz)
             sed_c.append(color)
             
-        # === C. 他人信号/漂流 (Signals) ===
+        # === C. 漂流瓶 (Drift) ===
+        elif is_drift:
+            dx, dy, dz = ll2xyz(lat, lon, R_EARTH)
+            drift_x.append(dx); drift_y.append(dy); drift_z.append(dz)
+            drift_c.append(color)
+
+        # === D. 他人信号 (Signals) ===
         else:
             sx, sy, sz = ll2xyz(lat, lon, R_EARTH)
             sig_x.append(sx); sig_y.append(sy); sig_z.append(sz)
             sig_c.append(color)
 
-    # 3. 构建 Plotly Traces
-    
-    # [Layer 0] 黑体球 (遮挡背面的点，制造实体感)
-    # 使用网格构建一个黑球
-    u = np.linspace(0, 2 * np.pi, 20)
-    v = np.linspace(0, np.pi, 20)
-    x_sphere = R_EARTH * 0.98 * np.outer(np.cos(u), np.sin(v))
-    y_sphere = R_EARTH * 0.98 * np.outer(np.sin(u), np.sin(v))
-    z_sphere = R_EARTH * 0.98 * np.outer(np.ones(np.size(u)), np.cos(v))
-    
+    # --- 绘图层 ---
+
+    # [Layer 0] 黑色实体球 (遮挡背面)
+    u = np.linspace(0, 2 * np.pi, 30)
+    v = np.linspace(0, np.pi, 30)
+    x_s = R_EARTH * 0.99 * np.outer(np.cos(u), np.sin(v))
+    y_s = R_EARTH * 0.99 * np.outer(np.sin(u), np.sin(v))
+    z_s = R_EARTH * 0.99 * np.outer(np.ones(np.size(u)), np.cos(v))
     traces.append(go.Surface(
-        x=x_sphere, y=y_sphere, z=z_sphere,
-        colorscale=[[0, 'black'], [1, 'black']], 
-        opacity=1.0, showscale=False, hoverinfo='skip',
-        name="Planet Body"
+        x=x_s, y=y_s, z=z_s, colorscale=[[0, '#0a0a0a'], [1, '#0a0a0a']], 
+        opacity=1.0, showscale=False, hoverinfo='skip', name="Void"
     ))
 
-    # [Layer 1] 经纬网 (Wireframe Grid) - 帮助定位中东/巴黎等位置
-    # 简单画几条线作为地球骨架
-    
-    # [Layer 2] 历史沉淀 (暗淡地表)
+    # [Layer 1] 全息经纬网 (替代地图轮廓，更有科技感)
+    wx, wy, wz = generate_globe_wireframe(R_EARTH)
+    traces.append(go.Scatter3d(
+        x=wx, y=wy, z=wz, mode='lines',
+        line=dict(color='#222', width=1), # 非常暗的网格
+        hoverinfo='skip', name='Grid'
+    ))
+
+    # [Layer 2] 历史沉淀 (地表尘埃)
     if sed_x:
         traces.append(go.Scatter3d(
-            x=sed_x, y=sed_y, z=sed_z,
-            mode='markers',
-            marker=dict(size=2, color=sed_c, opacity=0.3, symbol='circle'),
-            hoverinfo='skip', name='History'
+            x=sed_x, y=sed_y, z=sed_z, mode='markers',
+            marker=dict(size=2, color=sed_c, opacity=0.3, symbol='circle'), # 极小，像沙子
+            hoverinfo='skip', name='Sediment'
         ))
-        
-    # [Layer 3] 他人信号 (地表亮灯)
+
+    # [Layer 3] 他人信号 (地表微光)
     if sig_x:
         traces.append(go.Scatter3d(
-            x=sig_x, y=sig_y, z=sig_z,
-            mode='markers',
-            marker=dict(size=4, color=sig_c, opacity=0.8, symbol='circle'),
-            text=["Signal"]*len(sig_x), hoverinfo='text',
-            name='Collective'
+            x=sig_x, y=sig_y, z=sig_z, mode='markers',
+            marker=dict(size=3, color=sig_c, opacity=0.7, symbol='circle'), # 小光点
+            text=["Signal"]*len(sig_x), hoverinfo='text', name='World'
         ))
-
-    # [Layer 4] 牵引线 (Tethers) - 连接地表与高空
+        
+    # [Layer 4] 牵引线 (孤独的脐带)
     if line_x:
         traces.append(go.Scatter3d(
-            x=line_x, y=line_y, z=line_z,
-            mode='lines',
-            line=dict(color='rgba(255,255,255,0.3)', width=1),
-            hoverinfo='skip', name='Links'
+            x=line_x, y=line_y, z=line_z, mode='lines',
+            line=dict(color='rgba(255,255,255,0.15)', width=1), # 极其微弱的线
+            hoverinfo='skip', name='Tether'
         ))
 
-    # [Layer 5] 我的轨道 (My Orbit) - 悬浮高空
+    # [Layer 5] 我的卫星 (精密仪器感)
     if my_x:
         traces.append(go.Scatter3d(
-            x=my_x, y=my_y, z=my_z,
-            mode='markers+text',
-            # 只有鼠标移上去才显示文字
-            text=my_t, hoverinfo='text', 
+            x=my_x, y=my_y, z=my_z, mode='markers', # 去掉 text 模式，只在 hover 显示
+            text=my_t, hoverinfo='text',
             marker=dict(
-                size=8, color=my_c, opacity=1.0, 
-                symbol='diamond', line=dict(width=1, color='white')
+                size=4, # 缩小尺寸，精致化
+                color=my_c, 
+                opacity=1.0, 
+                symbol='diamond', # 菱形卫星
+                line=dict(width=0) # 无边框，纯色光点
             ),
             name='My Orbit'
         ))
 
-    # 4. 布局设置
     layout = go.Layout(
         scene=dict(
-            xaxis=dict(visible=False, showgrid=False),
-            yaxis=dict(visible=False, showgrid=False),
-            zaxis=dict(visible=False, showgrid=False),
+            xaxis=dict(visible=False, showgrid=False, showbackground=False),
+            yaxis=dict(visible=False, showgrid=False, showbackground=False),
+            zaxis=dict(visible=False, showgrid=False, showbackground=False),
             bgcolor='black',
-            dragmode='orbit', # 允许旋转
-            aspectmode='data' # 保持球体比例
+            dragmode='orbit',
+            aspectmode='data',
+            camera=dict(eye=dict(x=1.8, y=1.8, z=0.8)) # 默认视角拉远一点，更有太空感
         ),
         paper_bgcolor='black',
         margin={"r":0,"t":0,"l":0,"b":0},
         height=600,
         showlegend=True,
-        legend=dict(x=0, y=0, font=dict(color="#666"))
+        legend=dict(
+            x=0, y=0, 
+            font=dict(color="#444", size=10), # 图例做得很暗，不抢眼
+            bgcolor="rgba(0,0,0,0)"
+        )
     )
 
     fig = go.Figure(data=traces, layout=layout)
     st.plotly_chart(fig, use_container_width=True)
 
+# ... (以下函数保持不变，为节省篇幅省略，请确保 msc_viz.py 文件里有它们) ...
+# compute_clusters, render_3d_galaxy, render_radar_chart, render_cyberpunk_map, view_fullscreen_map, view_radar_details
 # ==========================================
-# 3. 聚类 (Helper)
+# 补全保留的函数 (防止报错)
 # ==========================================
 def compute_clusters(nodes, n_clusters=5):
     raw_vectors = []
@@ -236,12 +257,10 @@ def compute_clusters(nodes, n_clusters=5):
                     raw_meta.append({"care_point": node['care_point'], "id": str(node['id'])})
             except: pass
     if not raw_vectors or len(raw_vectors) < 2: return pd.DataFrame()
-    
     target_len = len(raw_vectors[0])
     clean_vectors = [v for v in raw_vectors if len(v) == target_len]
     clean_meta = [m for i, m in enumerate(raw_meta) if len(raw_vectors[i]) == target_len]
     if len(clean_vectors) < 2: return pd.DataFrame()
-
     try:
         kmeans = KMeans(n_clusters=min(n_clusters, len(clean_vectors)), random_state=42, n_init=10)
         labels = kmeans.fit_predict(clean_vectors)
@@ -254,9 +273,6 @@ def compute_clusters(nodes, n_clusters=5):
         return df
     except: return pd.DataFrame()
 
-# ==========================================
-# 🌌 4. 星河 (Galaxy View)
-# ==========================================
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: 
         st.info("🌌 星河汇聚中...")
@@ -268,18 +284,12 @@ def render_3d_galaxy(nodes):
     fig.update_layout(scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
 
-# ==========================================
-# 🕸️ 5. 雷达图
-# ==========================================
 def render_radar_chart(radar_dict, height="200px"):
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
     scores = [radar_dict.get(k, 3.0) for k in keys]
     option = {"backgroundColor": "transparent", "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]}
     st_echarts(options=option, height=height)
 
-# ==========================================
-# 🔮 6. 赛博朋克关系图
-# ==========================================
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     if not nodes: return None
     cluster_df = compute_clusters(nodes, n_clusters=5)
@@ -310,7 +320,7 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i in range(start_idx, node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
-            score = 0 # 简化连线逻辑
+            score = 0 
             graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 1, "color": "#555", "curveness": 0.2, "opacity": 0.3}})
     option = {"backgroundColor": "#0e1117", "tooltip": {"formatter": "{b}"}, "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 800 if is_fullscreen else 200, "gravity": 0.1, "edgeLength": 50}, "itemStyle": {"shadowBlur": 10}, "lineStyle": {"color": "source", "curveness": 0.2}}]}
     events = {"click": "function(params) { return params.name }"}
@@ -320,9 +330,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         if target_node: return target_node['full_data']
     return None
 
-# ==========================================
-# 🔭 7. 弹窗组件
-# ==========================================
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
