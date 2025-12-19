@@ -5,6 +5,7 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_i18n as i18n
 import msc_config as config
+import time
 
 # ==========================================
 # 🔒 统一的锁定界面组件
@@ -14,7 +15,7 @@ def render_lock_screen(current_count, target_count, title, message):
     with c2:
         st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
         
-        # 注入 CSS
+        # 注入 CSS (复用)
         st.markdown("""
         <style>
             .lock-container { text-align: center; color: #555; font-family: 'Inter', sans-serif; }
@@ -40,6 +41,63 @@ def render_lock_screen(current_count, target_count, title, message):
         st.progress(min(current_count / target_count, 1.0))
 
 # ==========================================
+# 🚀 升空动画 (Ascension) - 解锁时播放
+# ==========================================
+def render_ascension_animation():
+    st.markdown("""
+    <style>
+        @keyframes floatUp {
+            0% { transform: translateY(100px); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(-50px); opacity: 0; }
+        }
+        .particle {
+            position: fixed; bottom: 0;
+            width: 4px; height: 4px; background: #00CCFF; border-radius: 50%;
+            animation: floatUp 3s infinite linear;
+            z-index: 9999;
+        }
+        .ascension-msg {
+            position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            color: #333; font-family: 'Noto Serif SC', serif; font-size: 2em;
+            text-align: center; z-index: 10000;
+            background: rgba(255,255,255,0.95); padding: 40px; border-radius: 8px;
+            box-shadow: 0 10px 50px rgba(0,200,255,0.2);
+            border: 1px solid #E0E0E0;
+        }
+        .guide-arrow {
+            position: fixed; top: 80px; left: 20px; /* 调整位置指向左上角菜单 */
+            font-size: 2em; color: #FF2B2B; z-index: 10001;
+            font-weight: bold;
+            animation: bounce 1s infinite;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(10px); }
+        }
+    </style>
+    
+    <div class='ascension-msg'>
+        <div>阈值突破</div>
+        <div style='font-size:0.5em; margin-top:10px; color:#666; letter-spacing: 2px;'>THRESHOLD BREACHED</div>
+        <div style='font-size:0.4em; margin-top:20px; font-family:monospace; color: #00CCFF;'>World Layer Access: GRANTED</div>
+    </div>
+    
+    <div class='particle' style='left:10%; animation-duration: 4s;'></div>
+    <div class='particle' style='left:30%; animation-duration: 2.5s;'></div>
+    <div class='particle' style='left:60%; animation-duration: 3.2s;'></div>
+    <div class='particle' style='left:80%; animation-duration: 4.5s;'></div>
+    
+    <!-- 提示用户点击侧边栏 World 按钮 -->
+    <div class='guide-arrow'>⬅ CLICK 'WORLD'</div>
+    """, unsafe_allow_html=True)
+    
+    time.sleep(4.0) # 播放4秒
+    st.session_state.has_shown_ascension = True # 标记已播放
+    st.rerun()
+
+# ==========================================
 # 💬 1. 好友 / 信号页面
 # ==========================================
 def render_friends_page(username, unread_counts):
@@ -52,11 +110,17 @@ def render_friends_page(username, unread_counts):
     all_nodes = msc.get_all_nodes_for_map(username)
     node_count = len(all_nodes)
     
-    # 🔒 锁定界面
-    if node_count < 50 and not st.session_state.is_admin:
+    # 动画触发逻辑：如果达到阈值且未播放过动画
+    if node_count >= config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
+        if "has_shown_ascension" not in st.session_state:
+            render_ascension_animation()
+            return # 播放动画时停止渲染其他内容
+
+    # 🔒 锁定逻辑
+    if node_count < config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
         render_lock_screen(
             node_count, 
-            50, 
+            config.WORLD_UNLOCK_THRESHOLD, 
             i18n.get_text('lock_title'), 
             i18n.get_text('lock_msg')
         )
@@ -129,7 +193,7 @@ def render_friends_page(username, unread_counts):
             st.info(i18n.get_text('chat_sel'))
 
 # ==========================================
-# 🌍 2. 世界 / 全球层 (必须顶格写，不要有空格)
+# 🌍 2. 世界页面 (World Layer)
 # ==========================================
 def render_world_page():
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
@@ -137,11 +201,10 @@ def render_world_page():
     # 检查权限
     unlocked, count = msc.check_world_access(st.session_state.username)
     
-    # 如果是管理员，直接放行
     if st.session_state.is_admin:
         unlocked = True
 
-    # 🔒 锁定界面 (复用漂亮样式)
+    # 🔒 锁定界面 (复用)
     if not unlocked:
         render_lock_screen(
             count, 
@@ -154,13 +217,11 @@ def render_world_page():
     # 🔓 解锁后的世界视图
     st.markdown(f"### 🌍 {i18n.get_text('World')}")
     
-    # 选项卡切换视图
     view_type = sac.tabs([
         sac.TabsItem(label='Planet', icon='globe'),
         sac.TabsItem(label='Galaxy', icon='stars'),
     ], size='sm', variant='outline')
     
-    # 获取全球数据
     global_nodes = msc.get_global_nodes()
     
     if view_type == 'Planet':
@@ -170,7 +231,6 @@ def render_world_page():
         st.caption("Semantic clustering in vector space...")
         viz.render_3d_galaxy(global_nodes)
     
-    # 底部显示一些统计信息
     st.divider()
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("Active Signals", len(global_nodes))
