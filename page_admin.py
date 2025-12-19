@@ -9,18 +9,17 @@ import streamlit_antd_components as sac
 def render_admin_dashboard():
     st.markdown("## 👁️ God Mode Dashboard")
     
-    # 顶部导航
+    # 顶部导航 (保留原有风格)
     admin_menu = sac.tabs([
         sac.TabsItem(label='System Monitor', icon='activity'),
         sac.TabsItem(label='The Matrix (Sim)', icon='robot'),
         sac.TabsItem(label='User Management', icon='people'),
     ], align='center', variant='outline')
 
-    # === Tab 1: 系统监控 ===
+    # === Tab 1: System Monitor (保留) ===
     if admin_menu == 'System Monitor':
         c1, c2, c3 = st.columns(3)
         
-        # 统计数据
         all_nodes = msc.get_global_nodes()
         all_users = msc.get_all_users("admin")
         active_sims = len([u for u in all_users if u['username'].startswith("sim_")])
@@ -38,7 +37,7 @@ def render_admin_dashboard():
         else:
             st.info("System operational. No logs.")
 
-    # === Tab 2: 矩阵模拟器 (The Matrix) ===
+    # === Tab 2: The Matrix (AI 增强版) ===
     elif admin_menu == 'The Matrix (Sim)':
         st.info("💡 Generate virtual citizens to populate the World Layer for testing.")
         
@@ -74,7 +73,6 @@ def render_admin_dashboard():
                         new_logs = sim.inject_thoughts(count=1) # 一次生成一条
                         logs.extend(new_logs)
                         progress_bar.progress((i + 1) / inject_count)
-                        # 实时显示最后一条日志
                         if new_logs: log_box.caption(new_logs[-1])
                     
                     st.success("Injection Complete.")
@@ -96,13 +94,13 @@ def render_admin_dashboard():
                     "Bot Name": u['nickname'],
                     "Username": u['username'],
                     "Nodes": len(nodes),
-                    "City": u.get('country', 'Unknown') # 这里借用 country 字段存城市
+                    "City": u.get('country', 'Unknown') 
                 })
             st.dataframe(pd.DataFrame(sim_data), use_container_width=True)
         else:
             st.warning("No virtual citizens found. Run Genesis first.")
 
-    # === Tab 3: 用户管理 (核打击) ===
+    # === Tab 3: User Management (保留核打击) ===
     elif admin_menu == 'User Management':
         st.warning("⚠️ DANGER ZONE")
         
