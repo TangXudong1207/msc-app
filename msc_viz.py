@@ -6,7 +6,6 @@ import pandas as pd
 import json
 import numpy as np
 import random
-import math
 from streamlit_echarts import st_echarts
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -27,224 +26,169 @@ def get_cluster_color(cluster_id):
     CLUSTER_COLORS = list(config.SPECTRUM.values())
     return CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
 
-def get_random_ocean_coordinate():
-    """太平洋/大西洋随机坐标"""
-    oceans = [
-        {"lat_min": -30, "lat_max": 30, "lon_min": 160, "lon_max": -140},
-        {"lat_min": -40, "lat_max": 40, "lon_min": -45, "lon_max": -15}
-    ]
-    ocean = random.choice(oceans)
-    if ocean["lon_min"] > ocean["lon_max"]:
-        if random.random() > 0.5: lon = random.uniform(ocean["lon_min"], 180)
-        else: lon = random.uniform(-180, ocean["lon_max"])
-    else:
-        lon = random.uniform(ocean["lon_min"], ocean["lon_max"])
-    lat = random.uniform(ocean["lat_min"], ocean["lat_max"])
+def get_random_coordinate():
+    """完全随机的全球坐标（模拟卫星巡游）"""
+    lat = random.uniform(-60, 70) # 避开极地
+    lon = random.uniform(-180, 180)
     return lat, lon
 
 # ==========================================
-# 📐 1. 真·3D 坐标转换
-# ==========================================
-def ll2xyz(lat, lon, radius=1.0):
-    phi = (90 - lat) * (math.pi / 180)
-    theta = (lon + 180) * (math.pi / 180)
-    x = -(radius * math.sin(phi) * math.cos(theta))
-    y = (radius * math.sin(phi) * math.sin(theta))
-    z = (radius * math.cos(phi))
-    return x, y, z
-
-def generate_globe_wireframe(radius=100):
-    """生成地球经纬网格线 (全息地球骨架)"""
-    lines_x, lines_y, lines_z = [], [], []
-    
-    # 经线 (每30度一条)
-    for lon in range(-180, 180, 30):
-        lat_range = np.linspace(-90, 90, 50)
-        for i in range(len(lat_range)-1):
-            x1, y1, z1 = ll2xyz(lat_range[i], lon, radius)
-            x2, y2, z2 = ll2xyz(lat_range[i+1], lon, radius)
-            lines_x.extend([x1, x2, None])
-            lines_y.extend([y1, y2, None])
-            lines_z.extend([z1, z2, None])
-            
-    # 纬线 (每30度一条)
-    for lat in range(-60, 90, 30): # 不画极点，太密集
-        lon_range = np.linspace(-180, 180, 50)
-        for i in range(len(lon_range)-1):
-            x1, y1, z1 = ll2xyz(lat, lon_range[i], radius)
-            x2, y2, z2 = ll2xyz(lat, lon_range[i+1], radius)
-            lines_x.extend([x1, x2, None])
-            lines_y.extend([y1, y2, None])
-            lines_z.extend([z1, z2, None])
-            
-    return lines_x, lines_y, lines_z
-
-# ==========================================
-# 🌍 2. 3D 轨道地球 (修正版：卫星美学)
+# 🌍 1. 伪3D 地球 (高光效版)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
     if not nodes: 
         st.info("The universe is empty.")
         return
 
-    R_EARTH = 100
-    # 调整：高度稍微降低一点，不要飞太远，增强“引力感”
-    R_ORBIT = 125 
-
-    traces = []
-    
     # 数据容器
-    sed_x, sed_y, sed_z, sed_c = [], [], [], []
-    sig_x, sig_y, sig_z, sig_c = [], [], [], []
-    drift_x, drift_y, drift_z, drift_c = [], [], [], []
+    # 1. 别人的信号 (实点)
+    sig_lats, sig_lons, sig_colors, sig_texts = [], [], [], []
+    # 2. 别人的信号 (光晕 - 用于制造灯光感)
+    glow_lats, glow_lons, glow_colors = [], [], []
     
-    # 我的轨道数据
-    my_x, my_y, my_z, my_c, my_t = [], [], [], [], []
-    line_x, line_y, line_z = [], [], [] 
+    # 3. 我的卫星 (实点)
+    my_lats, my_lons, my_colors, my_texts = [], [], [], []
+    
+    # 4. 历史沉淀 (暗淡)
+    sed_lats, sed_lons, sed_colors = [], [], []
 
     for node in nodes:
+        # --- 位置解析 ---
         loc = None
-        is_drift = False
+        is_random = False
         try:
             if isinstance(node.get('location'), str): loc = json.loads(node['location'])
             elif isinstance(node.get('location'), dict): loc = node['location']
         except: pass
         
+        # 如果没有位置，随机飞在天上
         if not loc or not loc.get('lat'): 
-            d_lat, d_lon = get_random_ocean_coordinate()
+            d_lat, d_lon = get_random_coordinate()
             loc = {"lat": d_lat, "lon": d_lon}
-            is_drift = True
+            is_random = True
 
         lat, lon = loc.get('lat'), loc.get('lon')
         color = get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
+
+        # --- 分层逻辑 ---
         
-        # === A. 我的卫星 (My Orbit) ===
-        if node['username'] == current_user:
-            ox, oy, oz = ll2xyz(lat, lon, R_ORBIT)
-            gx, gy, gz = ll2xyz(lat, lon, R_EARTH)
+        # A. 历史沉淀 (Sediment) -> 极暗，贴地
+        if mode == 'Sediment':
+            sed_lats.append(lat); sed_lons.append(lon)
+            sed_colors.append(color) 
             
-            my_x.append(ox); my_y.append(oy); my_z.append(oz)
-            my_c.append(color)
-            # Tooltip 内容优化：只显示核心词和insight
-            my_t.append(f"<b>{node['care_point']}</b><br><span style='font-size:0.8em; color:#ccc'>{node.get('insight','')}</span>")
+        # B. 我的意义 (My Orbit) -> 卫星
+        elif node['username'] == current_user:
+            my_lats.append(lat); my_lons.append(lon)
+            my_colors.append(color)
+            # 只有我的显示具体内容
+            my_texts.append(f"<b>{node['care_point']}</b><br><span style='font-size:0.8em; color:#ccc'>{node.get('insight','')}</span>")
             
-            # 牵引线：极细的“风筝线”
-            line_x.extend([gx, ox, None])
-            line_y.extend([gy, oy, None])
-            line_z.extend([gz, oz, None])
-            
-            # 地面投影点（空心圆），表示“根”
-            sig_x.append(gx); sig_y.append(gy); sig_z.append(gz)
-            sig_c.append(color)
-
-        # === B. 历史沉淀 (Sediment) ===
-        elif mode == 'Sediment':
-            sx, sy, sz = ll2xyz(lat, lon, R_EARTH)
-            sed_x.append(sx); sed_y.append(sy); sed_z.append(sz)
-            sed_c.append(color)
-            
-        # === C. 漂流瓶 (Drift) ===
-        elif is_drift:
-            dx, dy, dz = ll2xyz(lat, lon, R_EARTH)
-            drift_x.append(dx); drift_y.append(dy); drift_z.append(dz)
-            drift_c.append(color)
-
-        # === D. 他人信号 (Signals) ===
+        # C. 他人信号 (Signals) -> 城市灯光
         else:
-            sx, sy, sz = ll2xyz(lat, lon, R_EARTH)
-            sig_x.append(sx); sig_y.append(sy); sig_z.append(sz)
-            sig_c.append(color)
+            sig_lats.append(lat); sig_lons.append(lon)
+            sig_colors.append(color)
+            sig_texts.append(f"Signal: {node['care_point']}")
+            # 添加到光晕层
+            glow_lats.append(lat); glow_lons.append(lon)
+            glow_colors.append(color)
 
-    # --- 绘图层 ---
+    fig = go.Figure()
 
-    # [Layer 0] 黑色实体球 (遮挡背面)
-    u = np.linspace(0, 2 * np.pi, 30)
-    v = np.linspace(0, np.pi, 30)
-    x_s = R_EARTH * 0.99 * np.outer(np.cos(u), np.sin(v))
-    y_s = R_EARTH * 0.99 * np.outer(np.sin(u), np.sin(v))
-    z_s = R_EARTH * 0.99 * np.outer(np.ones(np.size(u)), np.cos(v))
-    traces.append(go.Surface(
-        x=x_s, y=y_s, z=z_s, colorscale=[[0, '#0a0a0a'], [1, '#0a0a0a']], 
-        opacity=1.0, showscale=False, hoverinfo='skip', name="Void"
-    ))
-
-    # [Layer 1] 全息经纬网 (替代地图轮廓，更有科技感)
-    wx, wy, wz = generate_globe_wireframe(R_EARTH)
-    traces.append(go.Scatter3d(
-        x=wx, y=wy, z=wz, mode='lines',
-        line=dict(color='#222', width=1), # 非常暗的网格
-        hoverinfo='skip', name='Grid'
-    ))
-
-    # [Layer 2] 历史沉淀 (地表尘埃)
-    if sed_x:
-        traces.append(go.Scatter3d(
-            x=sed_x, y=sed_y, z=sed_z, mode='markers',
-            marker=dict(size=2, color=sed_c, opacity=0.3, symbol='circle'), # 极小，像沙子
+    # --- Layer 1: 历史沉淀 (Sediment) ---
+    if sed_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=sed_lons, lat=sed_lats, mode='markers',
+            marker=dict(size=2, color=sed_colors, opacity=0.3, symbol='circle'),
             hoverinfo='skip', name='Sediment'
         ))
 
-    # [Layer 3] 他人信号 (地表微光)
-    if sig_x:
-        traces.append(go.Scatter3d(
-            x=sig_x, y=sig_y, z=sig_z, mode='markers',
-            marker=dict(size=3, color=sig_c, opacity=0.7, symbol='circle'), # 小光点
-            text=["Signal"]*len(sig_x), hoverinfo='text', name='World'
-        ))
-        
-    # [Layer 4] 牵引线 (孤独的脐带)
-    if line_x:
-        traces.append(go.Scatter3d(
-            x=line_x, y=line_y, z=line_z, mode='lines',
-            line=dict(color='rgba(255,255,255,0.15)', width=1), # 极其微弱的线
-            hoverinfo='skip', name='Tether'
+    # --- Layer 2: 城市光晕 (The Glow) ---
+    # 这一层画得大一点，透明一点，制造“发光”的错觉
+    if glow_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=glow_lons, lat=glow_lats, mode='markers',
+            marker=dict(
+                size=8, # 大光晕
+                color=glow_colors, 
+                opacity=0.2, # 很透明
+                symbol='circle'
+            ),
+            hoverinfo='skip', showlegend=False
         ))
 
-    # [Layer 5] 我的卫星 (精密仪器感)
-    if my_x:
-        traces.append(go.Scatter3d(
-            x=my_x, y=my_y, z=my_z, mode='markers', # 去掉 text 模式，只在 hover 显示
-            text=my_t, hoverinfo='text',
+    # --- Layer 3: 信号核心 (The Core) ---
+    if sig_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=sig_lons, lat=sig_lats, mode='markers',
+            text=sig_texts, hoverinfo='text',
             marker=dict(
-                size=4, # 缩小尺寸，精致化
-                color=my_c, 
+                size=3, # 核心小亮点
+                color=sig_colors, 
+                opacity=0.9, 
+                symbol='circle',
+                line=dict(width=0)
+            ),
+            name='Signals'
+        ))
+
+    # --- Layer 4: 我的卫星 (My Orbit) ---
+    if my_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=my_lons, lat=my_lats, mode='markers',
+            text=my_texts, hoverinfo='text',
+            marker=dict(
+                size=10, # 明显大
+                color=my_colors, 
                 opacity=1.0, 
-                symbol='diamond', # 菱形卫星
-                line=dict(width=0) # 无边框，纯色光点
+                symbol='diamond', # 菱形，像人造卫星
+                line=dict(width=1, color='white') # 白边，高对比度
             ),
             name='My Orbit'
         ))
 
-    layout = go.Layout(
-        scene=dict(
-            xaxis=dict(visible=False, showgrid=False, showbackground=False),
-            yaxis=dict(visible=False, showgrid=False, showbackground=False),
-            zaxis=dict(visible=False, showgrid=False, showbackground=False),
-            bgcolor='black',
-            dragmode='orbit',
-            aspectmode='data',
-            camera=dict(eye=dict(x=1.8, y=1.8, z=0.8)) # 默认视角拉远一点，更有太空感
+    # --- 视觉配置 ---
+    fig.update_layout(
+        geo=dict(
+            scope='world', 
+            projection_type='orthographic', # 伪3D球体
+            
+            # 🌑 暗黑星球风格设置
+            showland=True, landcolor='rgb(15, 15, 15)', # 极暗的陆地
+            showocean=True, oceancolor='rgb(5, 5, 10)', # 近乎黑色的海洋
+            showlakes=False,
+            showcountries=True, countrycolor='rgb(40, 40, 40)', # 隐约的国界线
+            showcoastlines=True, coastlinecolor='rgb(50, 50, 50)', # 海岸线
+            
+            # 🌌 大气层效果 (Atmosphere)
+            projection_rotation=dict(lon=120, lat=20), # 默认视角
+            showatmosphere=True, 
+            atmospherecolor='rgb(0, 30, 60)', # 幽蓝的大气层
+            atmospherewidth=5,
+            
+            bgcolor='black'
         ),
-        paper_bgcolor='black',
-        margin={"r":0,"t":0,"l":0,"b":0},
-        height=600,
+        paper_bgcolor='black', 
+        margin={"r":0,"t":0,"l":0,"b":0}, 
+        height=600, 
         showlegend=True,
         legend=dict(
             x=0, y=0, 
-            font=dict(color="#444", size=10), # 图例做得很暗，不抢眼
-            bgcolor="rgba(0,0,0,0)"
+            font=dict(color="#666"), 
+            bgcolor="rgba(0,0,0,0)",
+            orientation="h"
         )
     )
-
-    fig = go.Figure(data=traces, layout=layout)
+    
     st.plotly_chart(fig, use_container_width=True)
 
-# ... (以下函数保持不变，为节省篇幅省略，请确保 msc_viz.py 文件里有它们) ...
-# compute_clusters, render_3d_galaxy, render_radar_chart, render_cyberpunk_map, view_fullscreen_map, view_radar_details
-# ==========================================
-# 补全保留的函数 (防止报错)
-# ==========================================
+# ... (保留其他函数: compute_clusters, render_3d_galaxy, render_radar_chart, render_cyberpunk_map, view_fullscreen_map, view_radar_details) ...
+
+# -------------------------------------------------------------------------
+# 为了保证文件完整性，以下是必须保留的函数
+# -------------------------------------------------------------------------
+
 def compute_clusters(nodes, n_clusters=5):
     raw_vectors = []
     raw_meta = []
