@@ -31,25 +31,19 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
-        /* 🛠️ 按钮样式修改：灰底，类似聊天框 */
         .stButton > button {
-            border-radius: 4px; /* 稍微圆角一点，为了匹配 st.chat_input */
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85em;
+            border-radius: 4px;
             font-weight: 500;
-            border: 1px solid #E0E0E0; /* 边框淡化 */
-            background: #F0F2F6; /* 核心修改：变灰 */
+            border: 1px solid #E0E0E0;
+            background: #F0F2F6; 
             color: #444;
             transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
         }
         .stButton > button:hover {
             border-color: #BBB;
             color: #000;
-            background: #E8EAED; /* 悬停时稍微变深一点点的灰 */
-            transform: translateY(-1px); 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            background: #E8EAED;
+            transform: translateY(-1px);
         }
         
         .chat-bubble-me {
@@ -101,10 +95,9 @@ def inject_custom_css():
         }
         .meaning-dot-btn:hover { opacity: 1.0; }
         
-        /* 每日洞察卡片：保持灰底风格 */
         .daily-card {
             border: 1px solid #DDD; 
-            background: #F0F2F6; /* 也变灰 */
+            background: #F0F2F6; 
             padding: 20px;
             border-radius: 4px;
             text-align: center;
@@ -161,7 +154,6 @@ if not st.session_state.logged_in:
 else:
     msc.update_heartbeat(st.session_state.username)
 
-    # === 🚀 新手引导拦截 ===
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
@@ -172,7 +164,6 @@ else:
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
-    # === 正常界面 ===
     user_profile = msc.get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
@@ -186,19 +177,18 @@ else:
         "en": {
             "AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", 
             "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", 
-            "Map": "[ STAR_MAP ]", "DNA": "[ DNA_SEQ ]", "Ins": "[ INSIGHT ]", "Ref": "[ REFRESH ]"
+            "Map": "STAR_MAP", "DNA": "DNA_SEQ", "Ins": "[ INSIGHT ]", "Ref": "[ REFRESH ]"
         },
         "zh": {
             "AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", 
             "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", 
-            "Map": "[ 星图投影 ]", "DNA": "[ 基因序列 ]", "Ins": "[ 每日洞察 ]", "Ref": "[ 刷新 ]"
+            "Map": "星图投影", "DNA": "基因序列", "Ins": "[ 每日洞察 ]", "Ref": "[ 刷新 ]"
         }
     }
     T = MENU_TEXT[lang]
 
-    # === 侧边栏导航 (Sidebar Navigation) ===
+    # === 侧边栏导航 ===
     with st.sidebar:
-        # 用户信息区
         c_av, c_info = st.columns([0.25, 0.75])
         with c_av:
             rank_name, rank_icon = msc.calculate_rank(radar_dict)
@@ -228,27 +218,32 @@ else:
             )
             if st.button(f"{T['Ref']}", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
 
-        # === 森林 (3D 灵魂形态) ===
+        # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
-        # 按钮：增加了具体的小图标
-        c_b1, c_b2 = st.columns(2)
-        with c_b1:
-            if st.button(f"🧬 {T['DNA']}", use_container_width=True):
-                viz.view_radar_details(radar_dict, st.session_state.username)
-        with c_b2:
-            all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-            if st.button(f"🔭 {T['Map']}", use_container_width=True): 
-                viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+        # 修改：使用 sac.buttons 替代 st.button，实现图文并茂的线性图标风格
+        # 这种风格与截图中的 Menu 风格一致 (Outline, Icon)
         
+        viz_action = sac.buttons([
+            sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), # 基因结构图标
+            sac.ButtonsItem(label=T['Map'], icon='stars')      # 星图图标
+        ], align='center', variant='outline', radius='sm', use_container_width=True, key="viz_toolbar")
+        
+        # sac.buttons 会保持状态，所以我们通过状态变化来触发 Dialog
+        if viz_action == T['DNA']:
+             viz.view_radar_details(radar_dict, st.session_state.username)
+        elif viz_action == T['Map']:
+             all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
+             viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+
         st.divider()
         
-        # 核心菜单：World 图标更新为 globe-americas
+        # 核心菜单：World 图标改为 globe-americas
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
-            sac.MenuItem(T['World'], icon='globe-americas'), # 改为美洲地球，线条更丰富
+            sac.MenuItem(T['World'], icon='globe-americas'), 
         ]
         
         if st.session_state.is_admin:
@@ -258,7 +253,6 @@ else:
 
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
-        # 语言切换 (侧边栏底部)
         st.divider()
         lang_opts = ['EN', '中文']
         curr_idx = 0 if st.session_state.language == 'en' else 1
