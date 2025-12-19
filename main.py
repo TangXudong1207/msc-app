@@ -31,25 +31,25 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
-        /* World Layer Style Button */
+        /* 🛠️ 按钮样式修改：灰底，类似聊天框 */
         .stButton > button {
-            border-radius: 0px; /* 直角，更机械感 */
+            border-radius: 4px; /* 稍微圆角一点，为了匹配 st.chat_input */
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.85em;
             font-weight: 500;
-            border: 1px solid #DDD;
-            background: #fff;
-            color: #555;
+            border: 1px solid #E0E0E0; /* 边框淡化 */
+            background: #F0F2F6; /* 核心修改：变灰 */
+            color: #444;
             transition: all 0.2s;
             text-transform: uppercase;
             letter-spacing: 1px;
         }
         .stButton > button:hover {
-            border-color: #000;
+            border-color: #BBB;
             color: #000;
-            background: #F0F0F0;
-            transform: translateX(2px); /* 悬停时稍微右移，像机械开关 */
-            box-shadow: none;
+            background: #E8EAED; /* 悬停时稍微变深一点点的灰 */
+            transform: translateY(-1px); 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         
         .chat-bubble-me {
@@ -101,20 +101,21 @@ def inject_custom_css():
         }
         .meaning-dot-btn:hover { opacity: 1.0; }
         
+        /* 每日洞察卡片：保持灰底风格 */
         .daily-card {
-            border: 1px solid #333; /* 更黑的边框 */
-            background: #FAFAFA;
+            border: 1px solid #DDD; 
+            background: #F0F2F6; /* 也变灰 */
             padding: 20px;
-            border-radius: 0px; /* 直角 */
+            border-radius: 4px;
             text-align: center;
             margin-bottom: 20px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 13px;
-            color: #222;
+            color: #333;
         }
         .daily-label {
-            font-size: 9px; text-transform: uppercase; letter-spacing: 3px; color: #888; margin-bottom: 12px;
-            border-bottom: 1px solid #EEE; padding-bottom: 5px;
+            font-size: 9px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 12px;
+            border-bottom: 1px solid #DDD; padding-bottom: 5px;
         }
         
         header, [data-testid="stHeader"] {
@@ -180,7 +181,7 @@ else:
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
 
-    # 翻译字典 (World Layer Style)
+    # 翻译字典
     MENU_TEXT = {
         "en": {
             "AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", 
@@ -208,7 +209,7 @@ else:
 
         st.divider()
 
-        # 每日一问 (Style: Terminal Card)
+        # 每日一问
         if "daily_q" not in st.session_state: st.session_state.daily_q = None
         if st.session_state.daily_q is None:
             if st.button(f"{T['Ins']}", use_container_width=True):
@@ -231,23 +232,23 @@ else:
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
-        # 按钮：纯文本风格，去掉了 Emoji，改用方括号
+        # 按钮：增加了具体的小图标
         c_b1, c_b2 = st.columns(2)
         with c_b1:
-            if st.button(f"{T['DNA']}", use_container_width=True):
+            if st.button(f"🧬 {T['DNA']}", use_container_width=True):
                 viz.view_radar_details(radar_dict, st.session_state.username)
         with c_b2:
             all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-            if st.button(f"{T['Map']}", use_container_width=True): 
+            if st.button(f"🔭 {T['Map']}", use_container_width=True): 
                 viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
         
         st.divider()
         
-        # 核心菜单 (sac 组件样式较难深度定制，但我们通过文案风格来统一)
+        # 核心菜单：World 图标更新为 globe-americas
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
-            sac.MenuItem(T['World'], icon='globe'),
+            sac.MenuItem(T['World'], icon='globe-americas'), # 改为美洲地球，线条更丰富
         ]
         
         if st.session_state.is_admin:
