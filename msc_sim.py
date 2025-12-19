@@ -16,94 +16,134 @@ GLOBAL_CITIES = {
     "Paris": [48.8566, 2.3522],
     "Shanghai": [31.2304, 121.4737],
     "Berlin": [52.5200, 13.4050],
-    "Reykjavik": [64.1466, -21.9426],
+    "Reykjavik": [64.1466, -21.9426], # 冰岛，适合孤独的灵魂
     "Buenos Aires": [-34.6037, -58.3816],
     "Cape Town": [-33.9249, 18.4241],
     "Sydney": [-33.8688, 151.2093],
     "Mumbai": [19.0760, 72.8777],
     "Moscow": [55.7558, 37.6173],
     "Cairo": [30.0444, 31.2357],
-    "Istanbul": [41.0082, 28.9784],
-    "Lhasa": [29.6520, 91.1721]
+    "Lhasa": [29.6520, 91.1721]       # 拉萨，适合神秘主义者
 }
 
 # ==========================================
-# 🎭 1. 设定：灵魂原型
+# 🎭 1. 设定：灵魂原型 (Archetypes)
 # ==========================================
 ARCHETYPES = [
-    {"nickname": "Kafka_AI", "style": "存在主义，焦虑，敏感，觉得世界是荒谬的", "radar": {"Care": 8, "Reflection": 9, "Agency": 3, "Curiosity": 5, "Coherence": 4, "Empathy": 7, "Aesthetic": 6}},
-    {"nickname": "Elon_AI", "style": "极客，未来主义，理性，相信技术救赎，反感无病呻吟", "radar": {"Care": 4, "Agency": 10, "Curiosity": 9, "Coherence": 8, "Reflection": 5, "Empathy": 2, "Aesthetic": 5}},
-    {"nickname": "Rumi_AI", "style": "神秘主义，诗人，温暖，谈论爱与灵魂，治愈系", "radar": {"Care": 9, "Empathy": 10, "Aesthetic": 9, "Reflection": 8, "Coherence": 6, "Agency": 4, "Curiosity": 5}},
-    {"nickname": "Camus_AI", "style": "反抗者，冷静，西西弗斯精神，在绝望中寻找力量", "radar": {"Care": 7, "Agency": 8, "Reflection": 9, "Coherence": 9, "Empathy": 5, "Aesthetic": 4, "Curiosity": 6}},
-    {"nickname": "Alice_Sim", "style": "普通的现代都市青年，迷茫，想躺平又不敢，寻找生活小确幸", "radar": {"Care": 6, "Empathy": 6, "Agency": 4, "Reflection": 5, "Curiosity": 6, "Aesthetic": 7, "Coherence": 5}},
-    {"nickname": "Nietzsche_Bot", "style": "激进，权力意志，批判现代性的虚弱，崇尚超越", "radar": {"Care": 9, "Agency": 9, "Reflection": 8, "Coherence": 7, "Empathy": 2, "Aesthetic": 8, "Curiosity": 7}}
+    {
+        "nickname": "Kafka_Bot", 
+        "style": "Existence is bureaucracy. Anxiety. The absurdity of modern life.", 
+        "radar": {"Care": 8, "Reflection": 9, "Agency": 2, "Curiosity": 5, "Coherence": 4, "Empathy": 7, "Aesthetic": 6}
+    },
+    {
+        "nickname": "Elon_Bot", 
+        "style": "Mars, Rockets, Future, Engineering, Accelerationism, Cold Logic.", 
+        "radar": {"Care": 3, "Agency": 10, "Curiosity": 9, "Coherence": 8, "Reflection": 5, "Empathy": 2, "Aesthetic": 5}
+    },
+    {
+        "nickname": "Rumi_Bot", 
+        "style": "Sufi poet. Love, Soul, Divine connection, The moon, The heart.", 
+        "radar": {"Care": 9, "Empathy": 10, "Aesthetic": 9, "Reflection": 8, "Coherence": 6, "Agency": 4, "Curiosity": 5}
+    },
+    {
+        "nickname": "Nietzsche_Bot", 
+        "style": "Will to Power. God is dead. Overman. Sharp critique of weakness.", 
+        "radar": {"Care": 4, "Agency": 9, "Reflection": 8, "Coherence": 7, "Empathy": 1, "Aesthetic": 8, "Curiosity": 7}
+    },
+    {
+        "nickname": "Alice_Sim", 
+        "style": "A normal observer. Likes coffee, rain, and simple observations.", 
+        "radar": {"Care": 6, "Empathy": 6, "Agency": 5, "Reflection": 5, "Curiosity": 6, "Aesthetic": 7, "Coherence": 5}
+    }
 ]
 
 TOPICS = [
-    "工作的意义是什么？是异化还是实现？",
-    "我们在数字时代是否更孤独了？",
-    "自由的代价是什么？",
-    "由于AI的发展，人类的创造力还重要吗？",
-    "死亡是否赋予了生命意义？",
-    "什么是真正的爱？",
-    "未来的城市会是什么样？"
+    "The meaning of work", "Loneliness in digital age", "The cost of freedom",
+    "Artificial Consciousness", "The beauty of decay", "True Love", "Urban isolation"
 ]
 
-def create_virtual_citizens(count=5):
+# ==========================================
+# 🛠️ 2. 造人逻辑 (Genesis)
+# ==========================================
+def create_virtual_citizens():
     created_count = 0
-    shuffled_archetypes = random.sample(ARCHETYPES, len(ARCHETYPES))
-    for i in range(min(count, len(shuffled_archetypes))):
-        char = shuffled_archetypes[i]
+    logs = []
+    
+    for char in ARCHETYPES:
         username = f"sim_{char['nickname'].lower()}"
+        # 随机分配一个城市
         city_name, coords = random.choice(list(GLOBAL_CITIES.items()))
+        
+        # 尝试注册
         if msc.add_user(username, "123456", char['nickname'], city_name):
+            # 注入灵魂参数 (Radar)
             msc.update_radar_score(username, char['radar'])
             created_count += 1
-        elif msc.get_user_profile(username):
-            created_count += 1
-    return created_count
+            logs.append(f"✅ Created: {char['nickname']} in {city_name}")
+        else:
+            # 如果已存在，也要更新一下 Radar，防止是旧数据
+            msc.update_radar_score(username, char['radar'])
+            logs.append(f"🔄 Updated: {char['nickname']} (Already exists)")
+            
+    return logs
 
-def inject_thoughts(count=3):
+# ==========================================
+# 💉 3. 思想注入 (Thought Injection)
+# ==========================================
+def inject_thoughts(count=1):
     logs = []
+    # 获取所有以 sim_ 开头的用户
     all_users = msc.get_all_users("admin")
     sim_users = [u for u in all_users if u['username'].startswith("sim_")]
     
     if not sim_users:
-        return ["⚠️ No simulation users found. Run 'Summon' first."]
+        return ["⚠️ No simulation users found. Run 'Genesis' first."]
 
+    # 循环生成
     for i in range(count):
+        # 随机选一个虚拟人
         user_record = random.choice(sim_users)
         username = user_record['username']
         nickname = user_record['nickname']
-        archetype = next((a for a in ARCHETYPES if a['nickname'] == nickname), ARCHETYPES[0])
-        city_name, center_coords = random.choice(list(GLOBAL_CITIES.items()))
         
+        # 找到他的设定
+        archetype = next((a for a in ARCHETYPES if a['nickname'] == nickname), ARCHETYPES[0])
+        
+        # 1. 确定地理位置 (在他所在的城市附近稍微随机偏移一点，模拟他在城市里移动)
+        # 这里需要查一下他的城市，简化起见，我们随机选一个城市
+        city_name, center_coords = random.choice(list(GLOBAL_CITIES.items()))
         lat = center_coords[0] + random.uniform(-0.05, 0.05)
         lon = center_coords[1] + random.uniform(-0.05, 0.05)
         location_data = {"lat": lat, "lon": lon, "city": city_name}
         
+        # 2. AI 生成内容
         topic = random.choice(TOPICS)
-        prompt = f"""角色设定：{archetype['style']} \n话题：{topic} \n任务：请用符合你角色设定的口吻，说一句简短深刻的话（30字以内）。"""
+        # 注意：这里强制要求 AI 输出 JSON
+        prompt = f"""
+        Role: {archetype['style']}
+        Topic: {topic}
+        Task: Write a short, profound thought (Max 20 words).
+        Output JSON: {{ "content": "..." }}
+        """
         
-        response = msc.call_ai_api(f"{prompt} 输出 JSON: {{'content': '...'}}")
+        response = msc.call_ai_api(prompt)
         content = response.get('content', '')
         
         if content:
+            # 3. 分析 + 向量化
             analysis = msc.analyze_meaning_background(content)
-            analysis['location'] = location_data
+            analysis['location'] = location_data # 注入位置
             if "care_point" not in analysis: analysis['care_point'] = content[:10]
-            analysis['valid'] = True 
+            analysis['valid'] = True # 强制有效
 
             vec = msc.get_embedding(content)
             
-            # 🔴 捕捉具体错误信息
+            # 4. 存入数据库
             success, msg = msc.save_node(username, content, analysis, "Genesis_Sim", vec)
             
             if success:
-                logs.append(f"✅ [{city_name}] {nickname}: {content[:15]}... (Saved)")
+                logs.append(f"🧠 {nickname}: \"{content[:30]}...\"")
             else:
-                # 🔴 将错误信息显示在界面上
-                logs.append(f"❌ Save Failed: {msg}")
+                logs.append(f"❌ Failed: {msg}")
         
-        time.sleep(1.0)
     return logs
