@@ -1,5 +1,3 @@
-### msc_lib.py ###
-
 import streamlit as st
 import numpy as np
 import json
@@ -89,7 +87,7 @@ def save_node(u, c, d, m, v): return db.save_node(u, c, d, m, v)
 def get_active_nodes_map(u): return db.get_active_nodes_map(u)
 def get_all_nodes_for_map(u): return db.get_all_nodes_for_map(u)
 def get_global_nodes(): return db.get_global_nodes()
-def get_system_logs(): return db.get_system_logs() # 导出日志函数
+def get_system_logs(): return db.get_system_logs() 
 
 def check_world_access(username):
     nodes = db.get_all_nodes_for_map(username)
@@ -105,7 +103,6 @@ def get_embedding(text):
             return embeddings[0].values
         except Exception as e:
              db.log_system_event("ERROR", "Embedding", str(e))
-    # Fallback: Random Vector (避免系统完全崩溃)
     return np.random.rand(768).tolist()
 
 def cosine_similarity(v1, v2):
@@ -121,7 +118,6 @@ def cosine_similarity(v1, v2):
 # 🧠 4. AI 智能核心 (流式升级版)
 # ==========================================
 def call_ai_api(prompt, use_google=False):
-    # 非流式调用（用于后台分析）
     if not client_ai: return {"error": "AI未连接"}
     try:
         response = client_ai.chat.completions.create(
@@ -140,28 +136,27 @@ def call_ai_api(prompt, use_google=False):
         return {"error": True, "msg": str(e)}
 
 def get_stream_response(history_messages):
-    """
-    核心升级：返回一个生成器，支持流式输出
-    """
     if not client_ai: 
         yield "⚠️ AI Client Init Failed."
         return
-
     try:
-        api_messages = [{"role": "system", "content": config.PROMPT_CHATBOT}]
+        # 获取当前语言设置
+        lang = st.session_state.get('language', 'en')
+        lang_instruction = "Reply in Chinese." if lang == 'zh' else "Reply in English."
+        
+        system_prompt = config.PROMPT_CHATBOT + f"\n[CURRENT LANGUAGE INSTRUCTION]: {lang_instruction}"
+
+        api_messages = [{"role": "system", "content": system_prompt}]
         for msg in history_messages: 
             if msg['role'] in ['user', 'assistant']:
                 api_messages.append({"role": msg["role"], "content": msg["content"]})
         
-        # 开启 stream=True
         stream = client_ai.chat.completions.create(
             model=TARGET_MODEL, 
             messages=api_messages, 
             temperature=0.8, 
             stream=True 
         )
-        
-        # 逐块 yield
         for chunk in stream:
             if chunk.choices[0].delta.content is not None:
                 yield chunk.choices[0].delta.content
@@ -171,7 +166,12 @@ def get_stream_response(history_messages):
         yield f"❌ API Error: {str(e)}"
 
 def analyze_meaning_background(text):
-    prompt = f"{config.PROMPT_ANALYST}\nUser Input: \"{text}\""
+    # 同样注入语言指令
+    lang = st.session_state.get('language', 'en')
+    lang_instruction = "Output 'care_point' and 'insight' in Simplified Chinese." if lang == 'zh' else "Output 'care_point' and 'insight' in English."
+    
+    prompt = f"{config.PROMPT_ANALYST}\n[LANGUAGE_OVERRIDE]: {lang_instruction}\nUser Input: \"{text}\""
+    
     res = call_ai_api(prompt)
     if not isinstance(res, dict):
         return {"valid": False, "m_score": 0, "insight": "Analysis Failed"}
@@ -180,9 +180,8 @@ def analyze_meaning_background(text):
         c = res.get('c_score', 0)
         n = res.get('n_score', 0)
         if n == 0: n = 0.5 
-        m = c * n * 2 # 计算逻辑
+        m = c * n * 2 
         res['m_score'] = m
-        # 硬门槛过滤
         if m < config.LEVELS["Signal"]: res["valid"] = False
         else: res["valid"] = True
     else:
@@ -191,8 +190,13 @@ def analyze_meaning_background(text):
     return res
 
 def generate_daily_question(username, radar_data):
+    # 强制语言适配
+    lang = st.session_state.get('language', 'en')
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"{config.PROMPT_DAILY}\nUser Data: {radar_str}"
+    
+    lang_instruction = "Output the question strictly in Simplified Chinese." if lang == 'zh' else "Output the question strictly in English."
+    
+    prompt = f"{config.PROMPT_DAILY}\nUser Data: {radar_str}\n[CRITICAL]: {lang_instruction}"
     res = call_ai_api(prompt, use_google=False)
     return res.get("question", "What constitutes the boundary of your self?")
 
@@ -214,38 +218,30 @@ def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
     others = db.get_global_nodes()
     if not others: return None
-    
     best_match, highest_score = None, 0
-    
-    # 获取当前内容的颜色 (作为一种情感滤镜)
     my_color = current_data.get('keywords', [''])[0] if current_data.get('keywords') else ''
     
     for row in others:
         if row['username'] == current_user: continue
-        
-        # 1. 向量相似度 (基础分)
         if row['vector']:
             try:
                 o_vec = json.loads(row['vector'])
                 sim_score = cosine_similarity(current_vector, o_vec)
-                
-                # 2. 颜色共鸣加成 (Bonus)
                 bonus = 0
-                if my_color and my_color in str(row.get('keywords','')):
-                    bonus = 0.1
-                
+                if my_color and my_color in str(row.get('keywords','')): bonus = 0.1
                 final_score = sim_score + bonus
-                
                 if final_score > config.LINK_THRESHOLD["Strong"] and final_score > highest_score:
                     highest_score = final_score
                     best_match = {"user": row['username'], "content": row['content'], "score": round(final_score * 100, 1)}
             except: continue
-            
     return best_match
     
 def analyze_persona_report(radar_data):
+    lang = st.session_state.get('language', 'en')
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    prompt = f"{config.PROMPT_PROFILE}\nDATA: {radar_str}"
+    lang_instruction = "Output the analysis in Simplified Chinese." if lang == 'zh' else "Output the analysis in English."
+    
+    prompt = f"{config.PROMPT_PROFILE}\nDATA: {radar_str}\n[INSTRUCTION]: {lang_instruction}"
     return call_ai_api(prompt, use_google=False)
 
 def process_time_decay():
