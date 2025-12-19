@@ -114,8 +114,26 @@ def inject_custom_css():
             font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #AAA; margin-bottom: 8px;
         }
         
-        header {visibility: hidden;}
+        /* 📱 关键修复：手机端侧边栏按钮逻辑 */
         
+        /* 1. 不要隐藏 Header，而是让它透明 */
+        [data-testid="stHeader"] {
+            background-color: transparent !important;
+            z-index: 99 !important; /* 确保按钮在最上层 */
+        }
+        
+        /* 2. 隐藏右上角的“汉堡菜单”和“Deploy”按钮，只保留左上角的侧边栏箭头 */
+        /* 这样既极简，又能用 */
+        [data-testid="stToolbar"] {
+            right: 2rem;
+            display: none; /* 如果你想连右上角菜单也隐藏，就留这行。如果想保留设置菜单，请删掉这行 */
+        }
+        
+        /* 3. 强制把顶部的彩色装饰条去掉 */
+        header .decoration {
+            display: none;
+        }
+
         .stToast {
             background-color: #333 !important;
             color: #fff !important;
