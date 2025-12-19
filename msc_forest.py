@@ -168,7 +168,8 @@ def render_forest_scene(radar_dict, user_nodes=None):
         "Aesthetic": {"en": "Aesthetic", "zh": "美学"},
         "Structure": {"en": "Structure", "zh": "结构"},
         "Hybrid": {"en": "Hybrid", "zh": "复合体"},
-        "Proto-Consciousness": {"en": "Proto-Consciousness", "zh": "原生意识体"}
+        "Proto-Consciousness": {"en": "Proto-Consciousness", "zh": "原生意识体"},
+        "Soul Form": {"en": "SOUL_FORM", "zh": "灵魂形态"}
     }
     
     def t(key): return TERM_MAP.get(key, {}).get(lang, key)
@@ -177,14 +178,15 @@ def render_forest_scene(radar_dict, user_nodes=None):
     if len(user_nodes) < 5:
         creature_name = t("Proto-Consciousness")
     else:
-        # e.g., "Care-Agency Hybrid" -> "关怀-能动 复合体"
         p_str = t(p_attr)
         s_str = t(s_attr)
         suffix = t("Hybrid")
         creature_name = f"{p_str}-{s_str} {suffix}"
     
-    label_title = "Soul Form" if lang == 'en' else "灵魂形态"
-    st.markdown(f"### 🧬 {label_title}: **{creature_name}**")
+    label_title = t("Soul Form")
+    
+    # 修改：图标为 💠，字体强制为 JetBrains Mono
+    st.markdown(f"### 💠 <span style='font-family:JetBrains Mono'>{label_title}</span> : **{creature_name}**", unsafe_allow_html=True)
     
     grid_color = "#333333" 
     split_color = "#222222"
