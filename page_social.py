@@ -7,7 +7,7 @@ import msc_i18n as i18n
 import msc_config as config
 
 # ==========================================
-# 🔒 统一的锁定界面组件 (复用样式)
+# 🔒 统一的锁定界面组件
 # ==========================================
 def render_lock_screen(current_count, target_count, title, message):
     c1, c2, c3 = st.columns([1, 6, 1])
@@ -52,7 +52,7 @@ def render_friends_page(username, unread_counts):
     all_nodes = msc.get_all_nodes_for_map(username)
     node_count = len(all_nodes)
     
-    # 🔒 锁定界面 (复用)
+    # 🔒 锁定界面
     if node_count < 50 and not st.session_state.is_admin:
         render_lock_screen(
             node_count, 
@@ -129,7 +129,7 @@ def render_friends_page(username, unread_counts):
             st.info(i18n.get_text('chat_sel'))
 
 # ==========================================
-# 🌍 2. 世界 / 全球层 (新增修复)
+# 🌍 2. 世界 / 全球层 (必须顶格写，不要有空格)
 # ==========================================
 def render_world_page():
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
