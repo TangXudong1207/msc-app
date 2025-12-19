@@ -1,4 +1,3 @@
-### page_social.py ###
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -14,8 +13,6 @@ def render_lock_screen(current_count, target_count, title, message):
     c1, c2, c3 = st.columns([1, 6, 1])
     with c2:
         st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
-        
-        # 注入 CSS (复用)
         st.markdown("""
         <style>
             .lock-container { text-align: center; color: #555; font-family: 'Inter', sans-serif; }
@@ -26,8 +23,6 @@ def render_lock_screen(current_count, target_count, title, message):
             .lock-stat-label { font-family: 'JetBrains Mono', monospace; font-size: 0.8em; letter-spacing: 2px; color: #BBB; text-transform: uppercase; margin-top: -10px; margin-bottom: 20px; }
         </style>
         """, unsafe_allow_html=True)
-        
-        # 渲染 HTML
         st.markdown(f"""
         <div class='lock-container'>
             <div class='lock-icon'>🔒</div>
@@ -37,7 +32,6 @@ def render_lock_screen(current_count, target_count, title, message):
             <div class='lock-stat-label'>{i18n.get_text('lock_stat')}</div>
         </div>
         """, unsafe_allow_html=True)
-        
         st.progress(min(current_count / target_count, 1.0))
 
 # ==========================================
@@ -77,24 +71,19 @@ def render_ascension_animation():
             50% { transform: translateX(10px); }
         }
     </style>
-    
     <div class='ascension-msg'>
         <div>阈值突破</div>
         <div style='font-size:0.5em; margin-top:10px; color:#666; letter-spacing: 2px;'>THRESHOLD BREACHED</div>
         <div style='font-size:0.4em; margin-top:20px; font-family:monospace; color: #00CCFF;'>World Layer Access: GRANTED</div>
     </div>
-    
     <div class='particle' style='left:10%; animation-duration: 4s;'></div>
     <div class='particle' style='left:30%; animation-duration: 2.5s;'></div>
     <div class='particle' style='left:60%; animation-duration: 3.2s;'></div>
     <div class='particle' style='left:80%; animation-duration: 4.5s;'></div>
-    
-    <!-- 提示用户点击侧边栏 World 按钮 -->
     <div class='guide-arrow'>⬅ CLICK 'WORLD'</div>
     """, unsafe_allow_html=True)
-    
-    time.sleep(4.0) # 播放4秒
-    st.session_state.has_shown_ascension = True # 标记已播放
+    time.sleep(4.0) 
+    st.session_state.has_shown_ascension = True 
     st.rerun()
 
 # ==========================================
@@ -110,13 +99,11 @@ def render_friends_page(username, unread_counts):
     all_nodes = msc.get_all_nodes_for_map(username)
     node_count = len(all_nodes)
     
-    # 动画触发逻辑：如果达到阈值且未播放过动画
     if node_count >= config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
         if "has_shown_ascension" not in st.session_state:
             render_ascension_animation()
-            return # 播放动画时停止渲染其他内容
+            return 
 
-    # 🔒 锁定逻辑
     if node_count < config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
         render_lock_screen(
             node_count, 
@@ -126,14 +113,12 @@ def render_friends_page(username, unread_counts):
         )
         return
 
-    # === 解锁后的正常界面 ===
     col_list, col_chat = st.columns([0.25, 0.75])
     user_map = {}
 
     with col_list:
         st.markdown(f"### 📡 {i18n.get_text('chat_signals')}")
         users = msc.get_all_users(username)
-        
         if users:
             menu_items = []
             for u in users:
@@ -198,13 +183,9 @@ def render_friends_page(username, unread_counts):
 def render_world_page():
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
     
-    # 检查权限
     unlocked, count = msc.check_world_access(st.session_state.username)
-    
-    if st.session_state.is_admin:
-        unlocked = True
+    if st.session_state.is_admin: unlocked = True
 
-    # 🔒 锁定界面 (复用)
     if not unlocked:
         render_lock_screen(
             count, 
@@ -214,12 +195,11 @@ def render_world_page():
         )
         return
 
-    # 🔓 解锁后的世界视图
     st.markdown(f"### 🌍 {i18n.get_text('World')}")
     
     view_type = sac.tabs([
         sac.TabsItem(label='Planet', icon='globe'),
-        sac.TabsItem(label='Galaxy', icon='stars'),
+        sac.TabsItem(label='Galaxy', icon='stars'), # 保持可选，但下方做逻辑判断
     ], size='sm', variant='outline')
     
     global_nodes = msc.get_global_nodes()
@@ -228,8 +208,21 @@ def render_world_page():
         st.caption("Real-time cognitive topology mapping...")
         viz.render_3d_particle_map(global_nodes, st.session_state.username)
     else:
-        st.caption("Semantic clustering in vector space...")
-        viz.render_3d_galaxy(global_nodes)
+        # 变灰、显示正在计算的提示
+        st.markdown("""
+        <div style='background-color: #F8F8F8; border: 1px dashed #CCC; padding: 40px; text-align: center; border-radius: 4px; margin-top: 20px;'>
+            <div style='font-size: 3em; color: #DDD; margin-bottom: 20px;'>🌌</div>
+            <div style='font-family: "JetBrains Mono", monospace; font-size: 1.2em; color: #888; letter-spacing: 2px;'>
+                GALAXY_VIEW_COMPUTING...
+            </div>
+            <div style='font-size: 0.9em; color: #AAA; margin-top: 10px; font-style: italic;'>
+                Vector dimensionality reduction in progress. Check back in future cycles.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        # 点击时弹出说明 (toast)
+        if st.button("Query Status", key="galaxy_query"):
+            st.toast("Module [Galaxy] is currently under construction by The Architect.", icon="🚧")
     
     st.divider()
     c1, c2, c3 = st.columns(3)
