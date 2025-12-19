@@ -31,21 +31,7 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
-        .stButton > button {
-            border-radius: 4px;
-            font-weight: 500;
-            border: 1px solid #E0E0E0;
-            background: #F0F2F6; 
-            color: #444;
-            transition: all 0.2s;
-        }
-        .stButton > button:hover {
-            border-color: #BBB;
-            color: #000;
-            background: #E8EAED;
-            transform: translateY(-1px);
-        }
-        
+        /* 聊天气泡样式 */
         .chat-bubble-me {
             background-color: #2D2D2D; 
             color: #FFFFFF; 
@@ -177,12 +163,12 @@ else:
         "en": {
             "AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", 
             "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", 
-            "Map": "STAR_MAP", "DNA": "DNA_SEQ", "Ins": "[ INSIGHT ]", "Ref": "[ REFRESH ]"
+            "Map": "STAR_MAP", "DNA": "DNA_SEQ", "Ins": "INSIGHT", "Ref": "REFRESH"
         },
         "zh": {
             "AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", 
             "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", 
-            "Map": "星图投影", "DNA": "基因序列", "Ins": "[ 每日洞察 ]", "Ref": "[ 刷新 ]"
+            "Map": "星图投影", "DNA": "基因序列", "Ins": "每日洞察", "Ref": "刷新"
         }
     }
     T = MENU_TEXT[lang]
@@ -199,10 +185,15 @@ else:
 
         st.divider()
 
-        # 每日一问
+        # 每日一问：使用 sac.buttons 实现带图标的触发器
         if "daily_q" not in st.session_state: st.session_state.daily_q = None
         if st.session_state.daily_q is None:
-            if st.button(f"{T['Ins']}", use_container_width=True):
+            # 修改：index=None 防止自动触发
+            daily_action = sac.buttons([
+                sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
+            ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, key="daily_trigger")
+            
+            if daily_action == T['Ins']:
                 with st.spinner("Extracting meaning..."):
                     st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
                     st.rerun()
@@ -216,21 +207,25 @@ else:
                 """, 
                 unsafe_allow_html=True
             )
-            if st.button(f"{T['Ref']}", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
+            # 刷新按钮
+            refresh_action = sac.buttons([
+                sac.ButtonsItem(label=T['Ref'], icon='arrow-clockwise')
+            ], align='center', variant='outline', radius='sm', size='xs', use_container_width=True, index=None, key="daily_refresh")
+            
+            if refresh_action == T['Ref']:
+                st.session_state.daily_q = None
+                st.rerun()
 
         # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
-        # 修改：使用 sac.buttons 替代 st.button，实现图文并茂的线性图标风格
-        # 这种风格与截图中的 Menu 风格一致 (Outline, Icon)
-        
+        # 修改：index=None (修复自动跳转), color='#FF4B4B' (红色)
         viz_action = sac.buttons([
-            sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), # 基因结构图标
-            sac.ButtonsItem(label=T['Map'], icon='stars')      # 星图图标
-        ], align='center', variant='outline', radius='sm', use_container_width=True, key="viz_toolbar")
+            sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
+            sac.ButtonsItem(label=T['Map'], icon='stars')      
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_toolbar")
         
-        # sac.buttons 会保持状态，所以我们通过状态变化来触发 Dialog
         if viz_action == T['DNA']:
              viz.view_radar_details(radar_dict, st.session_state.username)
         elif viz_action == T['Map']:
@@ -239,7 +234,7 @@ else:
 
         st.divider()
         
-        # 核心菜单：World 图标改为 globe-americas
+        # 核心菜单
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
