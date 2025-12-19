@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit_antd_components as sac # 引入 sac
 from streamlit_echarts import st_echarts
 import random
 import math
@@ -157,7 +158,6 @@ def render_forest_scene(radar_dict, user_nodes=None):
     
     lang = st.session_state.get('language', 'en')
     
-    # 词汇表映射
     TERM_MAP = {
         "Reflection": {"en": "Reflection", "zh": "深思"},
         "Coherence": {"en": "Coherence", "zh": "连贯"},
@@ -174,7 +174,6 @@ def render_forest_scene(radar_dict, user_nodes=None):
     
     def t(key): return TERM_MAP.get(key, {}).get(lang, key)
     
-    # 构建名称
     if len(user_nodes) < 5:
         creature_name = t("Proto-Consciousness")
     else:
@@ -185,8 +184,9 @@ def render_forest_scene(radar_dict, user_nodes=None):
     
     label_title = t("Soul Form")
     
-    # 修改：图标为 💠，字体强制为 JetBrains Mono
-    st.markdown(f"### 💠 <span style='font-family:JetBrains Mono'>{label_title}</span> : **{creature_name}**", unsafe_allow_html=True)
+    # 修改：使用 sac.divider 替代 markdown header，实现统一的图标风格 (Icon: box-seam)
+    sac.divider(label=label_title, icon='box-seam', align='center', color='gray')
+    st.caption(f"**{creature_name}**")
     
     grid_color = "#333333" 
     split_color = "#222222"
