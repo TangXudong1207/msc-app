@@ -1,4 +1,3 @@
-### msc_viz_3d.py ###
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
@@ -90,15 +89,17 @@ def render_3d_particle_map(nodes, current_user):
         ))
 
     # --- 视觉配置 ---
+    # 修复说明：移除了不兼容的 atmosphere 参数，调整了 oceancolor 以模拟深空感
     fig.update_layout(
         geo=dict(
-            scope='world', projection_type='orthographic',
+            scope='world', 
+            projection_type='orthographic',
             showland=True, landcolor='rgb(15, 15, 15)',
             showocean=True, oceancolor='rgb(5, 5, 10)',
-            showlakes=False, showcountries=True, countrycolor='rgb(40, 40, 40)',
+            showlakes=False, 
+            showcountries=True, countrycolor='rgb(40, 40, 40)',
             showcoastlines=True, coastlinecolor='rgb(50, 50, 50)',
             projection_rotation=dict(lon=120, lat=20),
-            showatmosphere=True, atmospherecolor='rgb(0, 30, 60)', atmospherewidth=5,
             bgcolor='black'
         ),
         paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, 
