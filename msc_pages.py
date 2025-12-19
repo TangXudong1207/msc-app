@@ -1,7 +1,4 @@
 ### msc_pages.py ###
-# msc_pages.py - The Gateway (Router)
-# 该文件现已重构为“路由”，所有具体逻辑都在子模块中。
-
 import page_auth
 import page_ai
 import page_social
@@ -23,6 +20,7 @@ def render_ai_page(username):
 def render_friends_page(username, unread_counts):
     page_social.render_friends_page(username, unread_counts)
 
+# 关键在这里，确保这里调用的是 page_social.render_world_page()
 def render_world_page():
     page_social.render_world_page()
 
