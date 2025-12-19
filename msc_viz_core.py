@@ -1,4 +1,3 @@
-### msc_viz_core.py ###
 import pandas as pd
 import json
 import random
@@ -22,9 +21,24 @@ def get_cluster_color(cluster_id):
     return CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
 
 def get_random_coordinate():
-    """完全随机的全球坐标（模拟卫星巡游）"""
-    lat = random.uniform(-60, 70) # 避开极地
-    lon = random.uniform(-180, 180)
+    """
+    随机海洋坐标生成器 (Pacific / Atlantic / Indian Ocean)
+    避免落在陆地上，模拟漂流感。
+    """
+    zones = [
+        # 太平洋 (Pacific) - 分两块处理跨越 180 度经线的情况
+        {"lat_min": -40, "lat_max": 40, "lon_min": 160, "lon_max": 180},
+        {"lat_min": -40, "lat_max": 40, "lon_min": -180, "lon_max": -130},
+        # 大西洋 (Atlantic)
+        {"lat_min": -30, "lat_max": 40, "lon_min": -60, "lon_max": -20},
+        # 印度洋 (Indian)
+        {"lat_min": -30, "lat_max": 20, "lon_min": 60, "lon_max": 90}
+    ]
+    
+    zone = random.choice(zones)
+    lat = random.uniform(zone["lat_min"], zone["lat_max"])
+    lon = random.uniform(zone["lon_min"], zone["lon_max"])
+    
     return lat, lon
 
 # ==========================================
