@@ -1,5 +1,5 @@
 import streamlit as st
-import streamlit_antd_components as sac # 引入 sac
+import streamlit_antd_components as sac 
 from streamlit_echarts import st_echarts
 import random
 import math
@@ -150,7 +150,7 @@ def synthesize_creature_data(radar, user_nodes):
     return echarts_series_data, primary_attr, secondary_attr
 
 # ==========================================
-# 🌲 3. 渲染主程序 (I18N Edition)
+# 🌲 3. 渲染主程序 (Line Icon Edition)
 # ==========================================
 def render_forest_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
@@ -184,8 +184,8 @@ def render_forest_scene(radar_dict, user_nodes=None):
     
     label_title = t("Soul Form")
     
-    # 修改：使用 sac.divider 替代 markdown header，实现统一的图标风格 (Icon: box-seam)
-    sac.divider(label=label_title, icon='box-seam', align='center', color='gray')
+    # 修改：图标改为 'layers'，更具结构感，符合 Line Icon 风格
+    sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.caption(f"**{creature_name}**")
     
     grid_color = "#333333" 
