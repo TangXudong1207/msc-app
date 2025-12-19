@@ -114,24 +114,38 @@ def inject_custom_css():
             font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #AAA; margin-bottom: 8px;
         }
         
-        /* 📱 关键修复：手机端侧边栏按钮逻辑 */
+        /* ========================================================== */
+        /* 📱 终极修复：手机端侧边栏按钮 (Sidebar Toggle) */
+        /* ========================================================== */
         
-        /* 1. 不要隐藏 Header，而是让它透明 */
-        [data-testid="stHeader"] {
-            background-color: transparent !important;
-            z-index: 99 !important; /* 确保按钮在最上层 */
+        /* 1. 强制显示 Header 容器 */
+        header, [data-testid="stHeader"] {
+            visibility: visible !important;
+            background-color: transparent !important; /* 背景透明 */
+            z-index: 100000 !important; /* 确保在最上层 */
         }
         
-        /* 2. 隐藏右上角的“汉堡菜单”和“Deploy”按钮，只保留左上角的侧边栏箭头 */
-        /* 这样既极简，又能用 */
-        [data-testid="stToolbar"] {
-            right: 2rem;
-            display: none; /* 如果你想连右上角菜单也隐藏，就留这行。如果想保留设置菜单，请删掉这行 */
+        /* 2. 隐藏 Header 里那条彩色的装饰线 (Decoration Bar) */
+        [data-testid="stDecoration"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        /* 3. 强制让 Header 里的所有按钮（包括侧边栏箭头）变黑 */
+        /* 这样在白色背景上就能看见了 */
+        [data-testid="stHeader"] button {
+            color: #222 !important; 
+            border-color: transparent !important;
         }
         
-        /* 3. 强制把顶部的彩色装饰条去掉 */
-        header .decoration {
-            display: none;
+        /* 4. 鼠标悬停时稍微变灰 */
+        [data-testid="stHeader"] button:hover {
+            background-color: rgba(0,0,0,0.05) !important;
+        }
+
+        /* 5. 确保汉堡菜单和其他图标也是可见的 */
+        [data-testid="stHeader"] svg {
+            fill: #333 !important;
         }
 
         .stToast {
