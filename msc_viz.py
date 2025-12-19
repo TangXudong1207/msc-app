@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import json
 import numpy as np
+import random
 from streamlit_echarts import st_echarts
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -12,45 +13,52 @@ import msc_config as config
 import msc_lib as msc
 
 # ==========================================
-# 🎨 12维光谱颜色匹配器
+# 🎨 0. 辅助工具 (颜色与坐标)
 # ==========================================
 def get_spectrum_color(keywords_str):
-    """
-    根据关键词字符串匹配 MSC 12 维光谱颜色。
-    如果没匹配到，返回默认科技蓝。
-    """
-    if not keywords_str: return "#00CCFF"
-    
+    """根据关键词字符串匹配 MSC 12 维光谱颜色"""
+    if not keywords_str: return "#00CCFF" # 默认科技蓝
     # 优先匹配 Dimension Name
     for dim, color in config.SPECTRUM.items():
-        if dim in keywords_str:
-            return color
-            
-    # 其次匹配 Color Hex (有时候 keywords 里直接存了颜色)
+        if dim in keywords_str: return color
+    # 其次匹配 Color Hex
     for color in config.SPECTRUM.values():
-        if color in keywords_str:
-            return color
-            
+        if color in keywords_str: return color
     return "#00CCFF"
 
-# 用于聚类的简单色盘 (Fallback)
-CLUSTER_COLORS = list(config.SPECTRUM.values())
 def get_cluster_color(cluster_id):
+    CLUSTER_COLORS = list(config.SPECTRUM.values())
     return CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
 
+def get_random_ocean_coordinate():
+    """生成随机的海洋坐标（太平洋/大西洋），用于展示无地理信息的漂流瓶"""
+    oceans = [
+        {"lat_min": -30, "lat_max": 30, "lon_min": 160, "lon_max": -140}, # 太平洋带
+        {"lat_min": -40, "lat_max": 40, "lon_min": -45, "lon_max": -15}   # 大西洋带
+    ]
+    ocean = random.choice(oceans)
+    
+    # 经度处理 (跨越日界线逻辑)
+    if ocean["lon_min"] > ocean["lon_max"]:
+        if random.random() > 0.5: lon = random.uniform(ocean["lon_min"], 180)
+        else: lon = random.uniform(-180, ocean["lon_max"])
+    else:
+        lon = random.uniform(ocean["lon_min"], ocean["lon_max"])
+        
+    lat = random.uniform(ocean["lat_min"], ocean["lat_max"])
+    return lat, lon
+
 # ==========================================
-# 🧠 核心算法：聚类 (带数据清洗)
+# 🧠 1. 聚类算法 (Clustering)
 # ==========================================
 def compute_clusters(nodes, n_clusters=5):
     raw_vectors = []
     raw_meta = []
     
-    # 1. 提取所有原始数据
     for node in nodes:
         if node['vector']:
             try:
                 v = json.loads(node['vector'])
-                # 确保是列表且不为空
                 if isinstance(v, list) and len(v) > 0:
                     raw_vectors.append(v)
                     raw_meta.append({
@@ -60,28 +68,17 @@ def compute_clusters(nodes, n_clusters=5):
                     })
             except: pass
     
-    if not raw_vectors: return pd.DataFrame()
+    if not raw_vectors or len(raw_vectors) < 2: return pd.DataFrame()
 
-    # 2. 数据清洗 (长度对齐)
-    lengths = [len(v) for v in raw_vectors]
-    if not lengths: return pd.DataFrame()
+    # 简单对齐
+    target_len = len(raw_vectors[0])
+    clean_vectors = [v for v in raw_vectors if len(v) == target_len]
+    clean_meta = [m for i, m in enumerate(raw_meta) if len(raw_vectors[i]) == target_len]
     
-    from collections import Counter
-    target_len = Counter(lengths).most_common(1)[0][0]
-    
-    clean_vectors = []
-    clean_meta = []
-    for i, v in enumerate(raw_vectors):
-        if len(v) == target_len:
-            clean_vectors.append(v)
-            clean_meta.append(raw_meta[i])
-            
     if len(clean_vectors) < 2: return pd.DataFrame()
 
-    # 3. 聚类计算
-    real_n_clusters = min(n_clusters, len(clean_vectors))
-    
     try:
+        real_n_clusters = min(n_clusters, len(clean_vectors))
         kmeans = KMeans(n_clusters=real_n_clusters, random_state=42, n_init=10)
         labels = kmeans.fit_predict(clean_vectors)
         
@@ -95,12 +92,10 @@ def compute_clusters(nodes, n_clusters=5):
         df['y'] = coords_3d[:, 1]
         df['z'] = coords_3d[:, 2]
         return df
-    except Exception as e:
-        print(f"Cluster Error: {e}")
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 # ==========================================
-# 🌍 3D 粒子地球 (核心可视化)
+# 🌍 2. 3D 粒子地球 (World Map)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
     if not nodes: 
@@ -108,103 +103,91 @@ def render_3d_particle_map(nodes, current_user):
         return
 
     # 分层容器
-    my_lats, my_lons, my_texts, my_colors = [], [], [], [] # Layer 3: My Thoughts (High)
-    others_lats, others_lons, others_colors = [], [], [] # Layer 2: Others (Low)
-    sediment_lats, sediment_lons, sediment_colors = [], [], [] # Layer 1: History (Ground)
+    my_lats, my_lons, my_texts, my_colors = [], [], [], [] 
+    others_lats, others_lons, others_colors = [], [], [] 
+    sediment_lats, sediment_lons, sediment_colors = [], [], [] 
+    drift_lats, drift_lons, drift_colors = [], [], [] # 海洋漂流层
 
     for node in nodes:
-        # 解析坐标
         loc = None
+        is_drift = False
         try:
             if isinstance(node.get('location'), str): loc = json.loads(node['location'])
             elif isinstance(node.get('location'), dict): loc = node['location']
         except: pass
         
-        if not loc: continue 
+        # 🚨 无位置信息 -> 丢入海洋
+        if not loc or not loc.get('lat'): 
+            d_lat, d_lon = get_random_ocean_coordinate()
+            loc = {"lat": d_lat, "lon": d_lon}
+            is_drift = True
 
         lat, lon = loc.get('lat'), loc.get('lon')
         color = get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
 
-        # === 逻辑分支 ===
-        # 1. 历史沉淀 (不论是谁的，都变成地质层)
         if mode == 'Sediment':
             sediment_lats.append(lat); sediment_lons.append(lon)
             sediment_colors.append(color) 
-            
-        # 2. 我的活跃思想 (高亮，可交互)
         elif node['username'] == current_user:
             my_lats.append(lat); my_lons.append(lon)
             my_texts.append(f"<b>My Thought:</b> {node['care_point']}")
             my_colors.append(color) 
-            
-        # 3. 别人的活跃思想 (匿名，仅光点)
+        elif is_drift:
+            drift_lats.append(lat); drift_lons.append(lon)
+            drift_colors.append(color)
         else:
             others_lats.append(lat); others_lons.append(lon)
             others_colors.append(color)
 
     fig = go.Figure()
 
-    # 1. 地球基底
-    fig.add_trace(go.Scattergeo(
-        lon=[], lat=[], mode='lines', line=dict(width=1, color='#111'),
-    ))
+    # Base Earth
+    fig.add_trace(go.Scattergeo(lon=[], lat=[], mode='lines', line=dict(width=1, color='#111')))
 
-    # Layer 1: 历史沉淀 (暗淡方块)
+    # Layers
     if sediment_lats:
         fig.add_trace(go.Scattergeo(
             lon=sediment_lons, lat=sediment_lats, mode='markers',
-            marker=dict(size=3, color=sediment_colors, opacity=0.4, symbol='square'),
-            hoverinfo='skip', name='Human History'
+            marker=dict(size=2, color=sediment_colors, opacity=0.3, symbol='square'),
+            hoverinfo='skip', name='Sediment'
         ))
-
-    # Layer 2: 他人思想 (柔和光晕)
     if others_lats:
         fig.add_trace(go.Scattergeo(
             lon=others_lons, lat=others_lats, mode='markers',
-            # 不显示文字，只显示 "Anonymous Resonance"
-            text=["Anonymous Resonance"] * len(others_lats),
-            hoverinfo='text',
-            marker=dict(size=8, color=others_colors, opacity=0.6, line=dict(width=0)),
-            name='Collective Mind'
+            text=["Signal"] * len(others_lats), hoverinfo='text',
+            marker=dict(size=5, color=others_colors, opacity=0.8),
+            name='Signals'
         ))
-
-    # Layer 3: 我的思想 (明亮星辰)
+    if drift_lats:
+        fig.add_trace(go.Scattergeo(
+            lon=drift_lons, lat=drift_lats, mode='markers',
+            text=["Drifting Thought"] * len(drift_lats), hoverinfo='text',
+            marker=dict(size=4, color=drift_colors, opacity=0.5, symbol='diamond'),
+            name='Drift'
+        ))
     if my_lats:
         fig.add_trace(go.Scattergeo(
             lon=my_lons, lat=my_lats, mode='markers',
             text=my_texts, hoverinfo='text',
-            marker=dict(
-                size=12, color=my_colors, opacity=1.0, 
-                symbol='star', line=dict(width=1, color='white')
-            ),
-            name='My Orbit'
+            marker=dict(size=10, color=my_colors, opacity=1.0, symbol='star', line=dict(width=1, color='white')),
+            name='Me'
         ))
 
     fig.update_layout(
         geo=dict(
             scope='world', projection_type='orthographic',
-            showland=True, landcolor='rgb(20, 20, 20)',
-            showocean=True, oceancolor='rgb(10, 10, 10)',
+            showland=True, landcolor='rgb(15, 15, 15)',
+            showocean=True, oceancolor='rgb(5, 5, 10)',
             bgcolor='black', showlakes=False, showcountries=False
         ),
-        paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=True,
-        legend=dict(font=dict(color="#888"), bgcolor="rgba(0,0,0,0)")
+        paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=500, 
+        showlegend=True, legend=dict(font=dict(color="#888"), bgcolor="rgba(0,0,0,0)", orientation="h", y=0)
     )
-    
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 🕸️ 雷达图 (Echarts)
-# ==========================================
-def render_radar_chart(radar_dict, height="200px"):
-    keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
-    scores = [radar_dict.get(k, 3.0) for k in keys]
-    option = {"backgroundColor": "transparent", "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]}
-    st_echarts(options=option, height=height)
-
-# ==========================================
-# 🌌 3D 星河 (Abstract Galaxy)
+# 🌌 3. 3D 星河 (Abstract Galaxy)
 # ==========================================
 def render_3d_galaxy(nodes):
     if len(nodes) < 3: 
@@ -229,10 +212,19 @@ def render_3d_galaxy(nodes):
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 🔮 赛博朋克关系图 (Echarts)
+# 🕸️ 4. 雷达图 (Radar)
+# ==========================================
+def render_radar_chart(radar_dict, height="200px"):
+    keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
+    scores = [radar_dict.get(k, 3.0) for k in keys]
+    option = {"backgroundColor": "transparent", "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]}
+    st_echarts(options=option, height=height)
+
+# ==========================================
+# 🔮 5. 赛博朋克关系图 (Network Graph)
 # ==========================================
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
-    if not nodes: return
+    if not nodes: return None
     
     cluster_df = compute_clusters(nodes, n_clusters=5)
     id_to_color = {}
@@ -269,32 +261,23 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
             "itemStyle": {"color": node_color}
         })
 
+    # 简单连线逻辑
     node_count = len(graph_nodes)
-    start_idx = max(0, node_count - 50)
+    start_idx = max(0, node_count - 50) # 只算最近50个，防止卡死
     for i in range(start_idx, node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
             score = 0
             if na['keywords'] and nb['keywords']:
                 shared = len(set(na['keywords']).intersection(set(nb['keywords'])))
-                if shared > 0: score += min(0.4 + (shared * 0.15), 0.9)
-            if na['vector'] and nb['vector'] and score < 0.9:
-                try:
-                    vec1, vec2 = np.array(na['vector']), np.array(nb['vector'])
-                    norm = np.linalg.norm(vec1) * np.linalg.norm(vec2)
-                    if norm > 0:
-                        sim = np.dot(vec1, vec2) / norm
-                        if sim > 0.8: score += 0.2
-                except: pass
+                if shared > 0: score += 0.5
             
             line_color = "#00fff2"
             if na.get("itemStyle", {}).get("color") == nb.get("itemStyle", {}).get("color"):
                 line_color = na["itemStyle"]["color"]
 
-            if score >= 0.65: 
-                graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 2.5, "color": line_color, "curveness": 0.2}})
-            elif score >= 0.45: 
-                graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 1, "color": "#555", "type": "dashed", "curveness": 0.2}})
+            if score >= 0.5: 
+                graph_links.append({"source": na['name'], "target": nb['name'], "lineStyle": {"width": 1, "color": line_color, "curveness": 0.2, "opacity": 0.3}})
 
     option = {"backgroundColor": "#0e1117", "tooltip": {"formatter": "{b}"}, "series": [{"type": "graph", "layout": "force", "data": graph_nodes, "links": graph_links, "roam": True, "force": {"repulsion": 800 if is_fullscreen else 200, "gravity": 0.1, "edgeLength": 50}, "itemStyle": {"shadowBlur": 10}, "lineStyle": {"color": "source", "curveness": 0.2}}]}
     
@@ -306,6 +289,9 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
         if target_node: return target_node['full_data']
     return None
 
+# ==========================================
+# 🔭 6. 弹窗组件 (Dialogs)
+# ==========================================
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
