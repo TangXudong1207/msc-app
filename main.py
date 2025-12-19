@@ -1,5 +1,3 @@
-### msc_main.py ###
-
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -33,20 +31,25 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
+        /* World Layer Style Button */
         .stButton > button {
-            border-radius: 4px;
+            border-radius: 0px; /* 直角，更机械感 */
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
             font-weight: 500;
-            border: 1px solid #E0E0E0;
+            border: 1px solid #DDD;
             background: #fff;
-            color: #333;
+            color: #555;
             transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         .stButton > button:hover {
             border-color: #000;
             color: #000;
-            background: #F8F9FA;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background: #F0F0F0;
+            transform: translateX(2px); /* 悬停时稍微右移，像机械开关 */
+            box-shadow: none;
         }
         
         .chat-bubble-me {
@@ -99,60 +102,31 @@ def inject_custom_css():
         .meaning-dot-btn:hover { opacity: 1.0; }
         
         .daily-card {
-            border: 1px solid #E0E0E0;
-            background: #fff;
+            border: 1px solid #333; /* 更黑的边框 */
+            background: #FAFAFA;
             padding: 20px;
-            border-radius: 8px;
+            border-radius: 0px; /* 直角 */
             text-align: center;
             margin-bottom: 20px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            color: #444;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            font-size: 13px;
+            color: #222;
         }
         .daily-label {
-            font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #AAA; margin-bottom: 8px;
+            font-size: 9px; text-transform: uppercase; letter-spacing: 3px; color: #888; margin-bottom: 12px;
+            border-bottom: 1px solid #EEE; padding-bottom: 5px;
         }
         
-        /* ========================================================== */
-        /* 📱 终极修复：手机端侧边栏按钮 (Sidebar Toggle) */
-        /* ========================================================== */
-        
-        /* 1. 强制显示 Header 容器 */
         header, [data-testid="stHeader"] {
             visibility: visible !important;
-            background-color: transparent !important; /* 背景透明 */
-            z-index: 100000 !important; /* 确保在最上层 */
+            background-color: transparent !important;
+            z-index: 100000 !important;
         }
-        
-        /* 2. 隐藏 Header 里那条彩色的装饰线 (Decoration Bar) */
-        [data-testid="stDecoration"] {
-            display: none !important;
-            visibility: hidden !important;
-        }
-
-        /* 3. 强制让 Header 里的所有按钮（包括侧边栏箭头）变黑 */
-        /* 这样在白色背景上就能看见了 */
-        [data-testid="stHeader"] button {
-            color: #222 !important; 
-            border-color: transparent !important;
-        }
-        
-        /* 4. 鼠标悬停时稍微变灰 */
-        [data-testid="stHeader"] button:hover {
-            background-color: rgba(0,0,0,0.05) !important;
-        }
-
-        /* 5. 确保汉堡菜单和其他图标也是可见的 */
-        [data-testid="stHeader"] svg {
-            fill: #333 !important;
-        }
-
-        .stToast {
-            background-color: #333 !important;
-            color: #fff !important;
-            border-radius: 4px !important;
-        }
+        [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
+        [data-testid="stHeader"] button { color: #222 !important; border-color: transparent !important; }
+        [data-testid="stHeader"] button:hover { background-color: rgba(0,0,0,0.05) !important; }
+        [data-testid="stHeader"] svg { fill: #333 !important; }
+        .stToast { background-color: #333 !important; color: #fff !important; border-radius: 0px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -169,10 +143,8 @@ if "language" not in st.session_state: st.session_state.language = "en"
 # 🆕 首次接触逻辑 (First Contact Logic)
 # ==========================================
 def check_and_send_first_contact(username):
-    # 1. 检查是否有聊天记录
     history = msc.get_active_chats(username)
     if not history:
-        # 2. 如果为空，发送第一条消息
         lang = st.session_state.language
         if lang == 'zh':
             first_msg = """先说清楚一件事：\n这里就是一个和 AI 聊天的对话框，\n和你用过的那些差不多。\n\n如果你现在不知道该从哪开始，\n那也正常。\n\n那就从最简单的开始吧——\n吃了吗？"""
@@ -192,12 +164,10 @@ else:
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
-    # 强制引导逻辑
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
-        st.stop() # 停止渲染，确保只显示引导页
+        st.stop()
     
-    # 首次接触
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
@@ -210,10 +180,18 @@ else:
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
 
-    # 翻译
+    # 翻译字典 (World Layer Style)
     MENU_TEXT = {
-        "en": {"AI": "AI Partner", "Chat": "Signal", "World": "World", "God": "God Mode", "Sys": "System", "Logout": "Logout", "Map": "Map", "DNA": "DNA", "Ins": "Insight", "Ref": "Refresh"},
-        "zh": {"AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", "God": "上帝视角", "Sys": "系统", "Logout": "登出连接", "Map": "星图", "DNA": "基因", "Ins": "生成洞察", "Ref": "刷新"}
+        "en": {
+            "AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", 
+            "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", 
+            "Map": "[ STAR_MAP ]", "DNA": "[ DNA_SEQ ]", "Ins": "[ INSIGHT ]", "Ref": "[ REFRESH ]"
+        },
+        "zh": {
+            "AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", 
+            "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", 
+            "Map": "[ 星图投影 ]", "DNA": "[ 基因序列 ]", "Ins": "[ 每日洞察 ]", "Ref": "[ 刷新 ]"
+        }
     }
     T = MENU_TEXT[lang]
 
@@ -230,10 +208,10 @@ else:
 
         st.divider()
 
-        # 每日一问 (卡片式)
+        # 每日一问 (Style: Terminal Card)
         if "daily_q" not in st.session_state: st.session_state.daily_q = None
         if st.session_state.daily_q is None:
-            if st.button(f"📅 {T['Ins']}", use_container_width=True):
+            if st.button(f"{T['Ins']}", use_container_width=True):
                 with st.spinner("Extracting meaning..."):
                     st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
                     st.rerun()
@@ -241,30 +219,31 @@ else:
             st.markdown(
                 f"""
                 <div class='daily-card'>
-                    <div class='daily-label'>DAILY REFLECTION</div>
+                    <div class='daily-label'>DAILY_PROTOCOL</div>
                     {st.session_state.daily_q}
                 </div>
                 """, 
                 unsafe_allow_html=True
             )
-            if st.button(f"↻ {T['Ref']}", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
+            if st.button(f"{T['Ref']}", key="refresh_daily"): st.session_state.daily_q = None; st.rerun()
 
         # === 森林 (3D 灵魂形态) ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
+        # 按钮：纯文本风格，去掉了 Emoji，改用方括号
         c_b1, c_b2 = st.columns(2)
         with c_b1:
-            if st.button(f"🧬 {T['DNA']}", use_container_width=True):
+            if st.button(f"{T['DNA']}", use_container_width=True):
                 viz.view_radar_details(radar_dict, st.session_state.username)
         with c_b2:
             all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-            if st.button(f"🔭 {T['Map']}", use_container_width=True): 
+            if st.button(f"{T['Map']}", use_container_width=True): 
                 viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
         
         st.divider()
         
-        # 核心菜单
+        # 核心菜单 (sac 组件样式较难深度定制，但我们通过文案风格来统一)
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
@@ -292,7 +271,6 @@ else:
             st.rerun()
 
     # === 页面路由 ===
-    # 🔴 关键修复：登出时清除 session，防止跳过引导
     if selected_menu == T['Logout']: 
         st.session_state.clear()
         st.rerun()
