@@ -7,7 +7,7 @@ import time
 import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (Fixed UI: Full Width & Clean Inputs)
+# 🔐 登录页 (Fixed: 100% Width Button)
 # ==========================================
 def render_login_page():
     st.markdown("""
@@ -26,30 +26,36 @@ def render_login_page():
             font-weight: 300; 
         }
         
-        /* 🛠️ 修复核心：精准定位提交按钮，不误伤密码眼睛 */
+        /* 🛠️ 修复核心：让按钮填满宽度，自动解决居中问题 */
+        /* 1. 针对提交按钮容器 */
+        [data-testid="stFormSubmitButton"] {
+            border: none !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        
+        /* 2. 针对按钮本体 */
         [data-testid="stFormSubmitButton"] button { 
-            width: 100% !important; /* 填满对话框 */
+            width: 100% !important; /* 填满整行 */
+            margin: 10px 0 0 0 !important; /* 上方留一点空隙 */
+            display: block !important;
             border-radius: 4px !important;
             font-family: 'JetBrains Mono', monospace !important;
-            background-color: #FF4B4B !important; /* 保持红色 */
+            background-color: #FF4B4B !important; /* 红色 */
             color: white !important;
             border: none !important;
-            height: 42px !important; /* 增加高度，更有质感 */
-            margin-top: 10px !important;
-            font-weight: 600 !important;
+            height: 45px !important; /* 增加高度，与输入框匹配 */
+            font-size: 14px !important;
             letter-spacing: 1px !important;
+            font-weight: 600 !important;
         }
         
-        /* 悬停效果 */
+        /* 3. 悬停效果 */
         [data-testid="stFormSubmitButton"] button:hover {
             background-color: #FF2B2B !important;
-            box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
         }
-
-        /* 修复输入框样式，确保眼睛图标归位 */
-        /* 之前错误的 CSS 可能影响了这里，现在移除通用 button 样式后会自动恢复 */
-        
     </style>
     """, unsafe_allow_html=True)
 
