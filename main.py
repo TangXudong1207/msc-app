@@ -258,7 +258,7 @@ else:
             daily_insight_dialog(st.session_state.username, radar_dict)
         
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-        forest.render_forest_scene(radar_dict, my_nodes_list)
+        soul_viz.render_soul_scene(radar_dict, my_nodes_list)
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         
         # 2. 可视化工具栏 (原生 st.button)
