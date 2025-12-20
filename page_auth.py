@@ -5,7 +5,7 @@ import time
 import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (Browser-Friendly Edition)
+# 🔐 登录页 (Red Button & Centered)
 # ==========================================
 def render_login_page():
     st.markdown("""
@@ -24,7 +24,7 @@ def render_login_page():
             font-weight: 300; 
         }
         
-        /* 🛠️ 核心修改：按钮居中 & 样式优化 */
+        /* 🛠️ 核心修改：按钮居中 & 红色风格 */
         [data-testid="stForm"] .stButton {
             text-align: center; /* 容器居中 */
         }
@@ -34,25 +34,22 @@ def render_login_page():
             display: block !important;
             border-radius: 4px;
             font-family: 'JetBrains Mono', monospace;
-            background-color: #222; /* 稍微深一点的黑，更有质感 */
+            background-color: #FF4B4B; /* 改回红色 */
             color: white;
             border: none;
         }
         [data-testid="stForm"] button:hover {
-            background-color: #444;
+            background-color: #FF2B2B; /* 悬停稍微变深一点 */
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
         }
     </style>
     """, unsafe_allow_html=True)
 
-
-    # 1. 语言记忆逻辑 (基于 URL 参数)
-    # 检查 URL 是否有 lang 参数
+    # 1. 语言记忆逻辑
     qp = st.query_params
     url_lang = qp.get("lang", "en")
     
-    # 如果 session 中还没有设置，就用 URL 的
     if "language" not in st.session_state:
         st.session_state.language = url_lang
 
@@ -61,9 +58,8 @@ def render_login_page():
     with c2:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
         
-        # 语言切换器
+        # 语言切换
         lang_options = ['English', '中文']
-        # 根据当前 session 状态决定 index
         current_idx = 0 if st.session_state.language == 'en' else 1
         
         selected_lang_label = sac.segmented(
@@ -71,14 +67,12 @@ def render_login_page():
             align='center', size='xs', index=current_idx, key="login_lang_selector"
         )
         
-        # 状态更新逻辑：同步到 URL，实现刷新不丢失
         new_lang_code = 'en' if selected_lang_label == 'English' else 'zh'
         if new_lang_code != st.session_state.language:
             st.session_state.language = new_lang_code
             st.query_params["lang"] = new_lang_code
             st.rerun()
 
-        # 标题区域
         st.markdown("""
         <div style='text-align: center;'>
             <div class='login-title'>MSC</div>
@@ -87,21 +81,16 @@ def render_login_page():
         <div style='height: 40px;'></div>
         """, unsafe_allow_html=True)
         
-        # 登录/注册 Tab
         with st.container(border=True):
             tab = sac.tabs([i18n.get_text('login_tab'), i18n.get_text('signup_tab')], align='center', size='md', variant='outline')
             st.write("") 
 
             if tab == i18n.get_text('login_tab'):
-                # ✨ 核心修改：使用 st.form 包裹登录框
-                # 这会让浏览器识别出这是一个登录表单，从而触发 "保存密码"
                 with st.form(key="login_form", clear_on_submit=False):
                     u = st.text_input(i18n.get_text('identity'), placeholder="Username", label_visibility="collapsed")
                     p = st.text_input(i18n.get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
                     st.write("")
-                    
-                    # Form 内的提交按钮
-                    submit_clicked = st.form_submit_button(i18n.get_text('connect'), type="primary")
+                    submit_clicked = st.form_submit_button(i18n.get_text('connect')) 
                 
                 if submit_clicked:
                     if u == "admin" and p == "msc": 
@@ -121,7 +110,6 @@ def render_login_page():
                     else: 
                         st.error(i18n.get_text('signal_lost'))
             else:
-                # 注册表单也用 st.form，提升体验
                 with st.form(key="signup_form"):
                     nu = st.text_input(i18n.get_text('new_id'), label_visibility="collapsed", placeholder="Username")
                     np = st.text_input(i18n.get_text('new_pw'), type='password', label_visibility="collapsed", placeholder="Password")
@@ -131,232 +119,83 @@ def render_login_page():
                     signup_clicked = st.form_submit_button(i18n.get_text('init'))
                 
                 if signup_clicked:
-                    if msc.add_user(nu, np, nn, nc): 
-                        st.success(i18n.get_text('created'))
-                    else: 
-                        st.error("Initialization Failed: User already exists.")
+                    if msc.add_user(nu, np, nn, nc): st.success(i18n.get_text('created'))
+                    else: st.error("Initialization Failed")
 
 # ==========================================
-# 🚀 新手引导：降临风格 (Arrival Aesthetic)
+# 🚀 新手引导
 # ==========================================
 def render_onboarding(username):
-    # CSS: 极简主义，左对齐，打字机风格
     st.markdown("""
     <style>
-        /* 隐藏侧边栏，营造全屏沉浸感 */
         [data-testid="stSidebar"] {display: none;}
-        
-        .stApp {
-            background-color: #FAFAFA !important;
-            color: #222 !important;
-        }
-        
+        .stApp { background-color: #FAFAFA !important; color: #222 !important; }
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400&family=Noto+Serif+SC:wght@300;400;600&display=swap');
         
-        /* 核心容器：左侧边框线，类似日志 */
         .log-container {
-            border-left: 2px solid #E0E0E0;
-            padding-left: 24px;
-            margin-left: 20px;
-            margin-top: 50px;
+            border-left: 2px solid #E0E0E0; padding-left: 24px; margin-left: 20px; margin-top: 50px;
             animation: fadeIn 1.2s ease-out;
         }
-
-        @keyframes fadeIn {
-            0% { opacity: 0; margin-left: 10px; }
-            100% { opacity: 1; margin-left: 20px; }
-        }
-
-        .log-header {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.75em;
-            color: #AAA;
-            letter-spacing: 2px;
-            margin-bottom: 20px;
-            text-transform: uppercase;
-        }
-
-        .main-verse {
-            font-family: 'Noto Serif SC', serif;
-            font-size: 1.1em;
-            font-weight: 400;
-            line-height: 2.4; /* 大行高，诗意 */
-            color: #333;
-            margin-bottom: 40px;
-            white-space: pre-wrap; /* 保留换行 */
-        }
-        
-        .highlight {
-            background: #F0F0F0;
-            padding: 2px 6px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9em;
-            color: #000;
-        }
-
-        /* 极简按钮：纯文字链接感 */
-        .stButton button {
-            background-color: transparent !important;
-            border: 1px solid #CCC !important;
-            color: #444 !important;
-            border-radius: 0px !important;
-            padding: 8px 24px !important;
-            font-family: 'JetBrains Mono', monospace !important;
-            font-size: 0.8em !important;
-            transition: all 0.3s !important;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            display: inline-block;
-        }
-        .stButton button:hover {
-            border-color: #000 !important;
-            color: #000 !important;
-            background-color: #FFF !important;
-            padding-left: 30px !important; /* 悬停右移效果 */
-        }
-        
+        @keyframes fadeIn { 0% { opacity: 0; margin-left: 10px; } 100% { opacity: 1; margin-left: 20px; } }
+        .log-header { font-family: 'JetBrains Mono', monospace; font-size: 0.75em; color: #AAA; letter-spacing: 2px; margin-bottom: 20px; text-transform: uppercase; }
+        .main-verse { font-family: 'Noto Serif SC', serif; font-size: 1.1em; font-weight: 400; line-height: 2.4; color: #333; margin-bottom: 40px; white-space: pre-wrap; }
+        .highlight { background: #F0F0F0; padding: 2px 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.9em; color: #000; }
+        .stButton button { background-color: transparent !important; border: 1px solid #CCC !important; color: #444 !important; border-radius: 0px !important; padding: 8px 24px !important; font-family: 'JetBrains Mono', monospace !important; font-size: 0.8em !important; transition: all 0.3s !important; text-transform: uppercase; letter-spacing: 1px; display: inline-block; }
+        .stButton button:hover { border-color: #000 !important; color: #000 !important; background-color: #FFF !important; padding-left: 30px !important; }
     </style>
     """, unsafe_allow_html=True)
     
     if "onboarding_step" not in st.session_state: st.session_state.onboarding_step = 0
     step = st.session_state.onboarding_step
     
-    # 使用列布局来控制内容宽度，但保持左对齐视觉
     c_space, c_content, c_right = st.columns([1, 6, 3])
     
     with c_content:
-        # 🟢 Log 00: 欢迎
         if step == 0:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 000 // ARRIVAL</div>
-                <div class='main-verse'>{i18n.get_text('s0_main').replace('<br>', '\n')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 000 // ARRIVAL</div><div class='main-verse'>{i18n.get_text('s0_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s0_btn')}", use_container_width=False):
-                st.session_state.onboarding_step = 1
-                st.rerun()
-
-        # 🟢 Log 01: 观察
+            if st.button(f"/// {i18n.get_text('s0_btn')}", use_container_width=False): st.session_state.onboarding_step = 1; st.rerun()
+        
         elif step == 1:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 001 // PROTOCOL</div>
-                <div class='main-verse'>{i18n.get_text('s1_main').replace('<br>', '\n')}
-                <br><br><span class='highlight'>{i18n.get_text('s1_sub').replace('<br>', ' ')}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 001 // PROTOCOL</div><div class='main-verse'>{i18n.get_text('s1_main').replace('<br>', '\n')}<br><br><span class='highlight'>{i18n.get_text('s1_sub').replace('<br>', ' ')}</span></div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s1_btn')}", use_container_width=False):
-                st.session_state.onboarding_step = 2
-                st.rerun()
+            if st.button(f"/// {i18n.get_text('s1_btn')}", use_container_width=False): st.session_state.onboarding_step = 2; st.rerun()
 
-        # 🟢 Log 02: 意义 (分支)
         elif step == 2:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 002 // FILTER</div>
-                <div class='main-verse'>{i18n.get_text('s2_main').replace('<br>', '\n')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 002 // FILTER</div><div class='main-verse'>{i18n.get_text('s2_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
             col_a, col_b = st.columns([1, 2])
-            with col_a:
-                if st.button(i18n.get_text('s2_btn1')):
-                    st.session_state.onboarding_step = 3
-                    st.rerun()
-            with col_b:
-                if st.button(i18n.get_text('s2_btn2')):
-                    st.session_state.onboarding_step = 3
-                    st.rerun()
-
-        # 🟢 Log 03: AI 角色
+            with col_a: 
+                if st.button(i18n.get_text('s2_btn1')): st.session_state.onboarding_step = 3; st.rerun()
+            with col_b: 
+                if st.button(i18n.get_text('s2_btn2')): st.session_state.onboarding_step = 3; st.rerun()
+        
         elif step == 3:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 003 // PARTNER</div>
-                <div class='main-verse'>{i18n.get_text('s3_main').replace('<br>', '\n')}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 003 // PARTNER</div><div class='main-verse'>{i18n.get_text('s3_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s3_btn')}", use_container_width=False):
-                st.session_state.onboarding_step = 4
-                st.rerun()
+            if st.button(f"/// {i18n.get_text('s3_btn')}", use_container_width=False): st.session_state.onboarding_step = 4; st.rerun()
 
-        # 🟢 Log 04: 卡片 (分支)
         elif step == 4:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 004 // RECORD</div>
-                <div class='main-verse'>{i18n.get_text('s4_main').replace('<br>', '\n')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 004 // RECORD</div><div class='main-verse'>{i18n.get_text('s4_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
             col_a, col_b = st.columns([1, 2])
-            with col_a:
-                if st.button(i18n.get_text('s4_btn1')):
-                    st.session_state.onboarding_step = 5
-                    st.rerun()
-            with col_b:
-                if st.button(i18n.get_text('s4_btn2')):
-                    st.session_state.onboarding_step = 5
-                    st.rerun()
+            with col_a: 
+                if st.button(i18n.get_text('s4_btn1')): st.session_state.onboarding_step = 5; st.rerun()
+            with col_b: 
+                if st.button(i18n.get_text('s4_btn2')): st.session_state.onboarding_step = 5; st.rerun()
 
-        # 🟢 Log 05: 社交
         elif step == 5:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 005 // CONNECT</div>
-                <div class='main-verse'>{i18n.get_text('s5_main').replace('<br>', '\n')}
-                <br><br><span class='highlight'>{i18n.get_text('s5_sub').replace('<br>', ' ')}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 005 // CONNECT</div><div class='main-verse'>{i18n.get_text('s5_main').replace('<br>', '\n')}<br><br><span class='highlight'>{i18n.get_text('s5_sub').replace('<br>', ' ')}</span></div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s5_btn')}", use_container_width=False):
-                st.session_state.onboarding_step = 6
-                st.rerun()
+            if st.button(f"/// {i18n.get_text('s5_btn')}", use_container_width=False): st.session_state.onboarding_step = 6; st.rerun()
 
-        # 🟢 Log 06: 世界
         elif step == 6:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 006 // FOREST</div>
-                <div class='main-verse'>{i18n.get_text('s6_main').replace('<br>', '\n')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 006 // FOREST</div><div class='main-verse'>{i18n.get_text('s6_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s6_btn')}", use_container_width=False):
-                st.session_state.onboarding_step = 7
-                st.rerun()
+            if st.button(f"/// {i18n.get_text('s6_btn')}", use_container_width=False): st.session_state.onboarding_step = 7; st.rerun()
 
-        # 🟢 Log 07: 结束 (触发初始化)
         elif step == 7:
-            st.markdown(f"""
-            <div class='log-container'>
-                <div class='log-header'>LOG: 007 // TRANSMIT</div>
-                <div class='main-verse'>{i18n.get_text('s7_main').replace('<br>', '\n')}
-                <br>{i18n.get_text('s7_sub').replace('<br>', ' ')}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # 真正的进入点
+            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 007 // TRANSMIT</div><div class='main-verse'>{i18n.get_text('s7_main').replace('<br>', '\n')}<br>{i18n.get_text('s7_sub').replace('<br>', ' ')}</div></div>", unsafe_allow_html=True)
             st.write("")
             if st.button(f">>> {i18n.get_text('s7_btn')}", use_container_width=False, type="primary"):
-                # 初始化默认数据
-                msc.update_radar_score(username, {
-                    "Reflection": 5.0, "Rationality": 5.0, "Curiosity": 5.0,
-                    "Agency": 5.0, "Empathy": 5.0, "Care": 5.0
-                })
-                # 标记引导完成
+                msc.update_radar_score(username, {"Reflection": 5.0, "Rationality": 5.0, "Curiosity": 5.0, "Agency": 5.0, "Empathy": 5.0, "Care": 5.0})
                 st.session_state.onboarding_complete = True
                 st.rerun()
