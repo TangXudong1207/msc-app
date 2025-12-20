@@ -10,29 +10,58 @@ import msc_i18n as i18n
 # 🔐 登录页 (Fixed: 100% Width Button)
 # ==========================================
 def render_login_page():
-    st.markdown("""
+     st.markdown("""
     <style>
-        .login-title { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 3em; color: #333; }
-        .login-subtitle { color: #888; letter-spacing: 4px; font-size: 0.8em; margin-top: -10px; font-weight: 300; }
-        .stButton button { font-family: 'Inter', sans-serif; }
+        .login-title { 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: 700; 
+            font-size: 3em; 
+            color: #333; 
+        }
+        .login-subtitle { 
+            color: #888; 
+            letter-spacing: 4px; 
+            font-size: 0.8em; 
+            margin-top: -10px; 
+            font-weight: 300; 
+        }
+        
+        /* 🛠️ 修复核心：让按钮填满宽度 (100%)，文字居中 */
+        
+        /* 1. 确保按钮容器占满 */
+        [data-testid="stFormSubmitButton"] {
+            width: 100% !important;
+            border: none !important;
+        }
+        
+        /* 2. 按钮样式：红色、填满、居中 */
+        [data-testid="stFormSubmitButton"] button { 
+            width: 100% !important; /* 填满整行 */
+            display: flex !important;
+            justify-content: center !important; /* 水平居中 */
+            align-items: center !important; /* 垂直居中 */
+            text-align: center !important;
+            
+            border-radius: 4px !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            background-color: #FF4B4B !important; /* 红色 */
+            color: white !important;
+            border: none !important;
+            height: 45px !important; 
+            margin-top: 10px !important;
+            font-weight: 600 !important;
+            letter-spacing: 1px !important;
+        }
+        
+        /* 3. 悬停效果 */
+        [data-testid="stFormSubmitButton"] button:hover {
+            background-color: #FF2B2B !important;
+            box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
+            transform: translateY(-1px);
+        }
     </style>
     """, unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns([1, 2, 1])
-    
-    with c2:
-        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-    # 1. 语言记忆逻辑
-    qp = st.query_params
-    url_lang = qp.get("lang", "en")
-    
-    if "language" not in st.session_state:
-        st.session_state.language = url_lang
-
-    c1, c2, c3 = st.columns([1, 2, 1])
-    
-    with c2:
-        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
         
         # 语言切换
         lang_options = ['English', '中文']
