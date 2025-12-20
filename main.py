@@ -34,6 +34,30 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
+        /* 🛠️ 核心修改：美化原生 st.button，替代 sac.buttons */
+        .stButton > button {
+            width: 100%;
+            border-radius: 6px;
+            font-weight: 500;
+            border: 1px solid #E0E0E0;
+            background: #FFFFFF;
+            color: #444;
+            padding: 0.5rem 1rem;
+            transition: all 0.2s;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+        }
+        .stButton > button:hover {
+            border-color: #FF4B4B;
+            color: #FF4B4B;
+            background: #FFF5F5;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+        .stButton > button:active {
+            background: #FFE0E0;
+        }
+        
         .chat-bubble-me {
             background-color: #2D2D2D; 
             color: #FFFFFF; 
@@ -77,12 +101,6 @@ def inject_custom_css():
             border-radius: 0 4px 4px 0;
         }
         
-        .meaning-dot-btn { 
-            display: flex; align-items: center; justify-content: center; height: 100%; 
-            opacity: 0.6; transition: opacity 0.3s;
-        }
-        .meaning-dot-btn:hover { opacity: 1.0; }
-        
         /* 每日洞察卡片 */
         .daily-card {
             border: 1px solid #DDD; 
@@ -119,34 +137,28 @@ st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state=
 inject_custom_css()
 
 # ==========================================
-# 🛠️ 状态管理：使用单一变量控制弹窗
+# ⚙️ 状态管理
 # ==========================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
-# 🟢 核心修复：用这个变量记录当前应该显示的弹窗
-if "active_modal" not in st.session_state: st.session_state.active_modal = None
 
 # ==========================================
-# 📚 本地备选语录库 (Fallback Library)
+# 📚 本地备选语录库 (Fallback)
 # ==========================================
 LOCAL_INSIGHTS = {
     "en": [
         "What constitutes the boundary of your self?",
         "Is your current silence a form of speech?",
         "If memory is a vector, where is it pointing now?",
-        "Are you observing the world, or is the world observing you?",
-        "Structure is the solidified form of meaning.",
-        "Chaos is just a pattern we haven't recognized yet."
+        "Are you observing the world, or is the world observing you?"
     ],
     "zh": [
         "构成你“自我”边界的究竟是什么？",
         "你此刻的沉默，是否也是一种表达？",
         "如果记忆是一个向量，它现在指向哪里？",
-        "是你正在观察世界，还是世界正在观察你？",
-        "结构，是意义凝固后的形态。",
-        "混乱，只是我们尚未识别出的模式。"
+        "是你正在观察世界，还是世界正在观察你？"
     ]
 }
 
@@ -169,8 +181,7 @@ def daily_insight_dialog(username, radar):
             with st.spinner(""):
                 try:
                     insight = msc.generate_daily_question(username, radar)
-                    if not insight or "error" in str(insight).lower() or len(str(insight)) < 5:
-                        raise ValueError("Invalid AI Response")
+                    if not insight or len(str(insight)) < 5: raise ValueError()
                     st.session_state.daily_content = insight
                 except:
                     st.session_state.daily_content = get_fallback_insight()
@@ -223,7 +234,6 @@ else:
         pages.render_onboarding(st.session_state.username)
         st.stop()
     
-    # 首次进入自动发送消息
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
@@ -263,33 +273,28 @@ else:
 
         st.divider()
 
-        # 1. 每日一问按钮
-        # 🟢 修复逻辑：检测返回值，更新 active_modal 状态
-        daily_click = sac.buttons([
-            sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="side_daily_btn")
+        # 1. 每日一问按钮 (原生 st.button + 自定义CSS)
+        # 稳健：点击后直接执行下方的 if 逻辑，下次运行自动为 False
+        if st.button(f"⚡ {T['Ins']}", use_container_width=True):
+            daily_insight_dialog(st.session_state.username, radar_dict)
         
-        if daily_click == T['Ins']:
-            st.session_state.active_modal = 'daily'
-
-        # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
+        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         
-        # 2. 可视化工具栏
-        viz_click = sac.buttons([
-            sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
-            sac.ButtonsItem(label=T['Map'], icon='stars')      
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="side_viz_btn")
-
-        if viz_click == T['DNA']:
-            st.session_state.active_modal = 'dna'
-        elif viz_click == T['Map']:
-            st.session_state.active_modal = 'map'
+        # 2. 可视化工具栏 (原生 st.button)
+        col_viz1, col_viz2 = st.columns(2)
+        with col_viz1:
+            if st.button(f"🧬 {T['DNA']}", use_container_width=True):
+                viz.view_radar_details(radar_dict, st.session_state.username)
+        with col_viz2:
+            if st.button(f"🔭 {T['Map']}", use_container_width=True):
+                all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
+                viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
 
         st.divider()
         
-        # 核心菜单
+        # 核心菜单 (导航保留 sac.menu，因为它适合做 Tab 切换)
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
@@ -315,31 +320,11 @@ else:
             st.session_state.language = mapped_lang
             st.rerun()
 
-    # ==========================================
-    # 🚀 统一弹窗渲染区 (互斥且持久)
-    # ==========================================
-    # 只要 active_modal 有值，就一直渲染对应的 Dialog
-    # 使用 if/elif 结构保证同一时间只有一个 Dialog 处于激活状态
-    
-    if st.session_state.active_modal == 'daily':
-        daily_insight_dialog(st.session_state.username, radar_dict)
-    
-    elif st.session_state.active_modal == 'dna':
-        viz.view_radar_details(radar_dict, st.session_state.username)
-             
-    elif st.session_state.active_modal == 'map': 
-        all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-        viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
-
     # === 页面路由 ===
     if selected_menu == T['Logout']: 
         st.session_state.clear()
         st.rerun()
-    elif selected_menu == T['AI']: 
-        pages.render_ai_page(st.session_state.username)
-    elif selected_menu == T['Chat']: 
-        pages.render_friends_page(st.session_state.username, unread_counts)
-    elif selected_menu == T['World']: 
-        pages.render_world_page()
-    elif selected_menu == T['God']: 
-        pages.render_admin_dashboard()
+    elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
+    elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
+    elif selected_menu == T['World']: pages.render_world_page()
+    elif selected_menu == T['God']: pages.render_admin_dashboard()
