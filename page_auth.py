@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -5,10 +7,9 @@ import time
 import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (Red Button & Centered & Memory)
+# 🔐 登录页 (Fixed UI: Full Width & Clean Inputs)
 # ==========================================
 def render_login_page():
-    # 1. 统一注入 CSS (优化点：集中管理样式)
     st.markdown("""
     <style>
         .login-title { 
@@ -25,43 +26,46 @@ def render_login_page():
             font-weight: 300; 
         }
         
-        /* 🛠️ 按钮样式：红色、居中、半宽 */
-        [data-testid="stForm"] .stButton {
-            text-align: center; /* 容器居中 */
+        /* 🛠️ 修复核心：精准定位提交按钮，不误伤密码眼睛 */
+        [data-testid="stFormSubmitButton"] button { 
+            width: 100% !important; /* 填满对话框 */
+            border-radius: 4px !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            background-color: #FF4B4B !important; /* 保持红色 */
+            color: white !important;
+            border: none !important;
+            height: 42px !important; /* 增加高度，更有质感 */
+            margin-top: 10px !important;
+            font-weight: 600 !important;
+            letter-spacing: 1px !important;
         }
-        [data-testid="stForm"] button { 
-            width: 50% !important; /* 宽度 50% */
-            margin: 0 auto !important; /* 水平居中 */
-            display: block !important;
-            border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace;
-            background-color: #FF4B4B; /* 🔴 保持红色 */
-            color: white;
-            border: none;
-            padding: 10px 0;
-        }
-        [data-testid="stForm"] button:hover {
-            background-color: #FF2B2B; /* 悬停深红 */
-            transform: translateY(-1px);
+        
+        /* 悬停效果 */
+        [data-testid="stFormSubmitButton"] button:hover {
+            background-color: #FF2B2B !important;
             box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
+            transform: translateY(-1px);
         }
+
+        /* 修复输入框样式，确保眼睛图标归位 */
+        /* 之前错误的 CSS 可能影响了这里，现在移除通用 button 样式后会自动恢复 */
+        
     </style>
     """, unsafe_allow_html=True)
 
-    # 2. 语言记忆逻辑 (URL Params)
+    # 1. 语言记忆逻辑
     qp = st.query_params
     url_lang = qp.get("lang", "en")
     
     if "language" not in st.session_state:
         st.session_state.language = url_lang
 
-    # 3. 页面布局
     c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
         
-        # 语言切换组件
+        # 语言切换
         lang_options = ['English', '中文']
         current_idx = 0 if st.session_state.language == 'en' else 1
         
@@ -70,14 +74,12 @@ def render_login_page():
             align='center', size='xs', index=current_idx, key="login_lang_selector"
         )
         
-        # 状态更新
         new_lang_code = 'en' if selected_lang_label == 'English' else 'zh'
         if new_lang_code != st.session_state.language:
             st.session_state.language = new_lang_code
             st.query_params["lang"] = new_lang_code
             st.rerun()
 
-        # LOGO 区域
         st.markdown("""
         <div style='text-align: center;'>
             <div class='login-title'>MSC</div>
@@ -86,18 +88,15 @@ def render_login_page():
         <div style='height: 40px;'></div>
         """, unsafe_allow_html=True)
         
-        # 登录/注册 Tab
         with st.container(border=True):
             tab = sac.tabs([i18n.get_text('login_tab'), i18n.get_text('signup_tab')], align='center', size='md', variant='outline')
             st.write("") 
 
-            # --- 登录表单 ---
             if tab == i18n.get_text('login_tab'):
                 with st.form(key="login_form", clear_on_submit=False):
                     u = st.text_input(i18n.get_text('identity'), placeholder="Username", label_visibility="collapsed")
                     p = st.text_input(i18n.get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
                     st.write("")
-                    # 提交按钮 (样式由上方 CSS 控制)
                     submit_clicked = st.form_submit_button(i18n.get_text('connect')) 
                 
                 if submit_clicked:
@@ -117,8 +116,6 @@ def render_login_page():
                         st.rerun()
                     else: 
                         st.error(i18n.get_text('signal_lost'))
-            
-            # --- 注册表单 ---
             else:
                 with st.form(key="signup_form"):
                     nu = st.text_input(i18n.get_text('new_id'), label_visibility="collapsed", placeholder="Username")
@@ -129,11 +126,8 @@ def render_login_page():
                     signup_clicked = st.form_submit_button(i18n.get_text('init'))
                 
                 if signup_clicked:
-                    if msc.add_user(nu, np, nn, nc): 
-                        st.success(i18n.get_text('created'))
-                    else: 
-                        st.error("Initialization Failed: User exists.")
-
+                    if msc.add_user(nu, np, nn, nc): st.success(i18n.get_text('created'))
+                    else: st.error("Initialization Failed")
 # ==========================================
 # 🚀 新手引导 (Complete Logic)
 # ==========================================
