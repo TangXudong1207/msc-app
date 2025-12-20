@@ -7,6 +7,7 @@ import msc_pages as pages
 import json
 import msc_forest as forest
 import msc_i18n as i18n 
+import time
 
 # ==========================================
 # 🎨 CSS：Cyber-Zen 极简主义设计系统
@@ -135,28 +136,32 @@ def on_daily_change():
     st.session_state.daily_trigger = None
 
 # ==========================================
-# 🔭 弹窗定义 (使用 st.dialog 装饰器)
+# 🔭 弹窗定义 (Daily Insight)
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 使用 session_state 缓存结果，防止弹窗内刷新丢失
+    # 使用 session_state 缓存结果
     if "daily_q_cache" not in st.session_state: 
         st.session_state.daily_q_cache = None
     
-    # 如果缓存为空，则生成
+    # 核心逻辑：如果缓存为空，生成问题
     if st.session_state.daily_q_cache is None:
-        with st.spinner("Extracting meaning from the void..."):
-            # 模拟一点延迟感
-            time.sleep(0.5) 
-            q = msc.generate_daily_question(username, radar)
-            st.session_state.daily_q_cache = q
-    
+        try:
+            with st.spinner("Extracting meaning from the void..."):
+                q = msc.generate_daily_question(username, radar)
+                # 容错：如果 API 返回空或 None，使用默认值
+                if not q: q = "What constitutes the boundary of your self?"
+                st.session_state.daily_q_cache = q
+        except:
+             st.session_state.daily_q_cache = "Silence is also an answer."
+
     # 渲染内容
+    content = st.session_state.daily_q_cache
     st.markdown(
         f"""
         <div class='daily-card' style='margin-top: 20px;'>
             <div class='daily-label'>REFLECTION PROTOCOL</div>
-            <div style='font-size: 1.1em; line-height: 1.6; font-weight: 600;'>{st.session_state.daily_q_cache}</div>
+            <div style='font-size: 1.1em; line-height: 1.6; font-weight: 600;'>{content}</div>
         </div>
         """, 
         unsafe_allow_html=True
@@ -234,16 +239,15 @@ else:
 
         st.divider()
 
-        # 每日一问 (触发逻辑)
+        # 每日一问 (触发按钮)
         sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_trigger", on_change=on_daily_change)
         
-        # 检查事件：如果点击了按钮，则调用弹窗函数
-        # st.dialog 装饰的函数被调用时，会自动在前端渲染模态框
+        # 触发弹窗
         if st.session_state.daily_clicked == T['Ins']:
             daily_insight_dialog(st.session_state.username, radar_dict)
-            st.session_state.daily_clicked = None # 消费事件
+            st.session_state.daily_clicked = None # 重置
 
         # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
