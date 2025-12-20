@@ -72,17 +72,21 @@ def render_ascension_animation():
             50% { transform: translateX(10px); }
         }
     </style>
+    
     <div class='ascension-msg'>
         <div>阈值突破</div>
         <div style='font-size:0.5em; margin-top:10px; color:#666; letter-spacing: 2px;'>THRESHOLD BREACHED</div>
         <div style='font-size:0.4em; margin-top:20px; font-family:monospace; color: #00CCFF;'>World Layer Access: GRANTED</div>
     </div>
+    
     <div class='particle' style='left:10%; animation-duration: 4s;'></div>
     <div class='particle' style='left:30%; animation-duration: 2.5s;'></div>
     <div class='particle' style='left:60%; animation-duration: 3.2s;'></div>
     <div class='particle' style='left:80%; animation-duration: 4.5s;'></div>
+    
     <div class='guide-arrow'>⬅ CLICK 'WORLD'</div>
     """, unsafe_allow_html=True)
+    
     time.sleep(4.0) 
     st.session_state.has_shown_ascension = True 
     st.rerun()
@@ -200,7 +204,7 @@ def render_world_page():
     
     view_type = sac.tabs([
         sac.TabsItem(label='Planet', icon='globe'),
-        sac.TabsItem(label='Galaxy', icon='stars'), # 保持可选，但下方做逻辑判断
+        sac.TabsItem(label='Galaxy', icon='stars'), 
     ], size='sm', variant='outline')
     
     global_nodes = msc.get_global_nodes()
@@ -209,7 +213,6 @@ def render_world_page():
         st.caption("Real-time cognitive topology mapping...")
         viz.render_3d_particle_map(global_nodes, st.session_state.username)
     else:
-        # 变灰、显示正在计算的提示
         st.markdown("""
         <div style='background-color: #F8F8F8; border: 1px dashed #CCC; padding: 40px; text-align: center; border-radius: 4px; margin-top: 20px;'>
             <div style='font-size: 3em; color: #DDD; margin-bottom: 20px;'>🌌</div>
@@ -221,7 +224,6 @@ def render_world_page():
             </div>
         </div>
         """, unsafe_allow_html=True)
-        # 点击时弹出说明 (toast)
         if st.button("Query Status", key="galaxy_query"):
             st.toast("Module [Galaxy] is currently under construction by The Architect.", icon="🚧")
     
@@ -230,3 +232,6 @@ def render_world_page():
     with c1: st.metric("Active Signals", len(global_nodes))
     with c2: st.metric("Observer Status", "Connected")
     with c3: st.metric("Your Contribution", count)
+    
+    # 新增：光谱图例
+    viz.render_spectrum_legend())
