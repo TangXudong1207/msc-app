@@ -14,12 +14,8 @@ import msc_config as config
 # 🎨 CSS：Cyber-Zen 极简主义设计系统 & PWA 配置
 # ==========================================
 def inject_custom_css():
-    # 🔴🔴🔴 【重要】请将下方的链接替换为你上传到 GitHub 后的图标 Raw 链接！ 🔴🔴🔴
-    APP_ICON_URL = "https://github.com/TangXudong1207/msc-app/blob/main/app%E5%9B%BE%E6%A0%87.png"
-    # 例如: "https://raw.githubusercontent.com/username/repo/main/msc_icon.png"
-    
-    # 如果你还没上传图标，可以使用下面这个临时链接占位，体验一下效果：
-    # APP_ICON_URL = "https://placehold.co/512x512/050505/FFFFFF/png?text=MSC&font=montserrat"
+    # 🔴 请将下方的链接替换为你上传到 GitHub 后的图标 Raw 链接
+    APP_ICON_URL = "https://placehold.co/512x512/050505/FFFFFF/png?text=MSC&font=montserrat"
 
     st.markdown(f"""
     <head>
@@ -53,11 +49,10 @@ def inject_custom_css():
         html, body, [class*="css"] {{
             font-family: 'Inter', sans-serif;
             color: #2D3436;
-            # 修复 iOS 滚动回弹时的背景色
             background-color: #FAFAFA;
         }}
 
-        /* 隐藏 Streamlit 默认顶部栏和汉堡菜单，打造原生感 */
+        /* 隐藏 Streamlit 默认顶部栏和汉堡菜单 */
         header[data-testid="stHeader"] {{ visibility: hidden !important; height: 0 !important; }}
         [data-testid="stDecoration"] {{ display: none !important; }}
         #MainMenu {{ visibility: hidden; }}
@@ -71,7 +66,7 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }}
         
-        /* 美化原生 st.button，替代 sac.buttons */
+        /* 🛠️ 核心修改：美化原生 st.button，使其看起来像卡片 */
         .stButton > button {{
             width: 100%;
             border-radius: 6px;
@@ -97,71 +92,35 @@ def inject_custom_css():
         }}
         
         .chat-bubble-me {{
-            background-color: #2D2D2D; 
-            color: #FFFFFF; 
-            padding: 14px 18px; 
-            border-radius: 2px; 
-            border-bottom-right-radius: 12px;
-            align-self: flex-end;
-            max-width: 80%;
-            font-size: 15px;
-            font-weight: 300;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            position: relative;
-            float: right; clear: both; margin-bottom: 8px;
+            background-color: #2D2D2D; color: #FFFFFF; padding: 14px 18px; border-radius: 2px; 
+            border-bottom-right-radius: 12px; align-self: flex-end; max-width: 80%; 
+            font-size: 15px; font-weight: 300; box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+            position: relative; float: right; clear: both; margin-bottom: 8px;
         }}
         
         .chat-bubble-other {{
-            background-color: #FFFFFF; 
-            color: #333; 
-            padding: 14px 18px; 
-            border-radius: 2px;
-            border-bottom-left-radius: 12px;
-            border: 1px solid #EAEAEA;
-            align-self: flex-start;
-            max-width: 80%;
-            font-size: 15px;
-            line-height: 1.6;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+            background-color: #FFFFFF; color: #333; padding: 14px 18px; border-radius: 2px; 
+            border-bottom-left-radius: 12px; border: 1px solid #EAEAEA; align-self: flex-start; 
+            max-width: 80%; font-size: 15px; line-height: 1.6; box-shadow: 0 1px 4px rgba(0,0,0,0.03); 
             float: left; clear: both; margin-bottom: 8px;
         }}
         
         .chat-bubble-ai {{
-            background: #F8F9FA;
-            color: #666;
-            border-left: 3px solid #00CCFF; 
-            padding: 12px 20px;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9em;
-            margin: 10px 0;
-            width: 100%;
-            clear: both;
-            border-radius: 0 4px 4px 0;
+            background: #F8F9FA; color: #666; border-left: 3px solid #00CCFF; padding: 12px 20px; 
+            font-family: 'Inter', sans-serif; font-size: 0.9em; margin: 10px 0; width: 100%; 
+            clear: both; border-radius: 0 4px 4px 0;
         }}
-        
-        .meaning-dot-btn {{ 
-            display: flex; align-items: center; justify-content: center; height: 100%; 
-            opacity: 0.6; transition: opacity 0.3s;
-        }}
-        .meaning-dot-btn:hover {{ opacity: 1.0; }}
         
         /* 每日洞察卡片 */
         .daily-card {{
-            border: 1px solid #DDD; 
-            background: #F0F2F6; 
-            padding: 24px;
-            border-radius: 4px;
-            text-align: center;
-            margin-top: 10px;
-            margin-bottom: 20px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            color: #333;
+            border: 1px solid #DDD; background: #F0F2F6; padding: 24px; border-radius: 4px; 
+            text-align: center; margin-top: 10px; margin-bottom: 20px; 
+            font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #333; 
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }}
         .daily-label {{
-            font-size: 10px; text-transform: uppercase; letter-spacing: 4px; color: #999; margin-bottom: 16px;
-            border-bottom: 1px solid #DDD; padding-bottom: 8px;
+            font-size: 10px; text-transform: uppercase; letter-spacing: 4px; color: #999; 
+            margin-bottom: 16px; border-bottom: 1px solid #DDD; padding-bottom: 8px;
         }}
         
         .stToast {{ background-color: #333 !important; color: #fff !important; border-radius: 0px !important; }}
@@ -208,10 +167,8 @@ def get_fallback_insight():
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    if "daily_content" not in st.session_state:
-        st.session_state.daily_content = None
-
-    if st.session_state.daily_content is None:
+    # 确保有内容可显示
+    if "daily_content" not in st.session_state or st.session_state.daily_content is None:
         with st.container():
             st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
             with st.spinner(""):
@@ -270,6 +227,7 @@ else:
         pages.render_onboarding(st.session_state.username)
         st.stop()
     
+    # 首次进入自动发送消息
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
@@ -309,7 +267,8 @@ else:
 
         st.divider()
 
-        # 1. 每日一问按钮 (原生 st.button)
+        # 1. 每日一问按钮 (使用最稳定的原生 st.button)
+        # 通过 CSS 美化成了白色卡片样式
         if st.button(f"⚡ {T['Ins']}", use_container_width=True):
             daily_insight_dialog(st.session_state.username, radar_dict)
         
