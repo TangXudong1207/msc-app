@@ -1,9 +1,10 @@
-### msc_forest.py ###
 import streamlit as st
 from streamlit_echarts import st_echarts
 import random
 import math
 import msc_viz as viz
+#这行是新增的，用于修复报错
+import streamlit_antd_components as sac 
 
 # ==========================================
 # 📐 1. 数学骨架：基础几何组件 (v2.0)
@@ -214,6 +215,7 @@ def render_forest_scene(radar_dict, user_nodes=None):
         creature_name = f"{p_str}-{s_str} {suffix}"
     
     label_title = t("Soul Form")
+    # 这里就是报错的地方，现在因为最上面导入了 sac，所以不会报错了
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.caption(f"**{creature_name}**")
     
