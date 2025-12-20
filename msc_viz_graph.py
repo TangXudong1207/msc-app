@@ -15,14 +15,14 @@ def render_radar_chart(radar_dict, height="200px"):
     option = {
         "backgroundColor": "transparent", 
         "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, 
-        "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(0,255,242,0.4)"}, "lineStyle": {"color": "#00fff2"}}]}]
+        "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(255, 75, 75, 0.4)"}, "lineStyle": {"color": "#FF4B4B"}}]}]
     }
     st_echarts(options=option, height=height)
 
 # ==========================================
 # 🔮 2. 赛博朋克关系图 (Network Graph)
 # ==========================================
-def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
+def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix="map"):
     if not nodes: return None
     
     cluster_df = core.compute_clusters(nodes, n_clusters=5)
@@ -63,7 +63,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     for i in range(start_idx, node_count):
         for j in range(i + 1, node_count):
             na, nb = graph_nodes[i], graph_nodes[j]
-            # 简单的相连
             graph_links.append({
                 "source": na['name'], "target": nb['name'], 
                 "lineStyle": {"width": 1, "color": "#555", "curveness": 0.2, "opacity": 0.3}
@@ -80,7 +79,8 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
     }
     
     events = {"click": "function(params) { return params.name }"}
-    clicked_id = st_echarts(options=option, height=height, events=events, key=f"map_{height}")
+    # 修复：显式使用 key 参数，避免 ID 冲突
+    clicked_id = st_echarts(options=option, height=height, events=events, key=f"echart_{key_suffix}")
     
     if clicked_id:
         target_node = next((n for n in graph_nodes if n['name'] == clicked_id), None)
@@ -93,7 +93,8 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False):
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
-    clicked_data = render_cyberpunk_map(nodes, height="500px", is_fullscreen=True)
+    # 传递唯一的 key
+    clicked_data = render_cyberpunk_map(nodes, height="500px", is_fullscreen=True, key_suffix="fullscreen_dlg")
     if clicked_data:
         st.divider()
         st.markdown(f"#### ✨ {clicked_data.get('layer', 'Selected Node')}")
