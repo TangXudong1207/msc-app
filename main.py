@@ -4,7 +4,7 @@ import msc_lib as msc
 import msc_viz as viz
 import msc_pages as pages
 import json
-import msc_forest as forest
+import msc_soul_viz as soul_viz
 import msc_i18n as i18n 
 import time
 import random
