@@ -1,5 +1,4 @@
 ### msc_config.py ###
-
 # ==========================================
 # 🎨 1. MSC 16-Dimension Meaning Spectrum (v2.0)
 # ==========================================
@@ -37,7 +36,7 @@ RADAR_AXES = [
     "Agency", "Aesthetic", "Transcendence"
 ]
 
-# 维度映射关系 (用于 AI 分析时加分)
+# 维度映射关系
 DIMENSION_MAP = {
     "Conflict": "Agency", "Hubris": "Agency", "Vitality": "Agency",
     "Rationality": "Coherence", "Structure": "Coherence", "Truth": "Coherence",
@@ -49,7 +48,7 @@ DIMENSION_MAP = {
 }
 
 # ==========================================
-# ⚙️ 2. 系统参数 (结构主义校准版)
+# ⚙️ 2. 系统参数 (降低门槛)
 # ==========================================
 
 W_MEANING = { 
@@ -59,9 +58,10 @@ W_MEANING = {
     "Abstract_Linkage": 0.15    
 }
 
+# ⚡ 关键修改：降低 Signal 门槛，让更多思考被捕获
 LEVELS = {
-    "Noise": 0.30,   
-    "Signal": 0.45,  
+    "Noise": 0.25,   # 原 0.30
+    "Signal": 0.40,  # 原 0.45 (更容易触发)
     "Structure": 0.75, 
     "Core": 0.92
 }
@@ -74,10 +74,9 @@ TTL_ACTIVE = 24
 TTL_SEDIMENT = 720 
 
 # ==========================================
-# 🧠 3. AI 指令集 (多语言强化版)
+# 🧠 3. AI 指令集
 # ==========================================
 
-# 聊天机器人
 PROMPT_CHATBOT = """
 [System Context: MSC Intelligent Partner]
 You are a mirrored surface of the user's mind. 
@@ -95,63 +94,52 @@ Core Principles:
 3. Tone: Calm, analytical, slightly sci-fi, precise.
 """
 
-# 分析师：生成意义卡 (核心升级：16维度筛选)
+# 分析师：放宽限制，鼓励归类
 PROMPT_ANALYST = """
-[Task: Cognitive Topology Analysis v5.0]
-Analyze the input text. Determine if it contains enough 'Shannon Entropy' to form a Meaning Node.
+[Task: Cognitive Topology Analysis v5.1]
+Analyze the input text. Extract the underlying 'Meaning Structure'.
 
 [CRITICAL: LANGUAGE OUTPUT RULE]
 - If User Input is Chinese -> 'care_point' and 'insight' MUST be in CHINESE.
 - If User Input is English -> 'care_point' and 'insight' MUST be in ENGLISH.
 
 [CRITICAL: SPECTRUM SELECTION]
-You MUST classify the thought into ONE of the following 16 dimensions. 
-If it fits NONE (e.g., daily chores, weather, simple greetings), mark valid=False.
+Try your BEST to classify the thought into ONE of the 16 dimensions.
+Do NOT simply reject it as Noise unless it is absolute gibberish or a pure functional command (e.g., "test", "hello").
+If it's a mundane observation, try to interpret its underlying sentiment (e.g., "Tired" -> Melancholy/Entropy).
 
-1. Tension: Conflict (anger/oppose), Hubris (ambition/pride), Vitality (energy/impulse).
-2. Logos: Rationality (logic), Structure (rules/systems), Truth (universal laws).
-3. Exploration: Curiosity (questioning), Mystery (spiritual/unknown).
-4. Ontology: Nihilism (meaningless), Mortality (death/time), Consciousness (awareness).
-5. Connection: Empathy (love/compassion), Heritage (roots/family).
-6. Aesthetic: Aesthetic (poetic/metaphor), Entropy (decay/chaos), Melancholy (sadness).
-
-Evaluation Criteria:
-- "I ate a burger." -> NOISE (valid=False).
-- "The burger tasted like childhood." -> SIGNAL (Heritage/Aesthetic).
-- "I hate my boss." -> SIGNAL (Conflict).
+Dimensions:
+1. Tension: Conflict, Hubris, Vitality.
+2. Logos: Rationality, Structure, Truth.
+3. Exploration: Curiosity, Mystery.
+4. Ontology: Nihilism, Mortality, Consciousness.
+5. Connection: Empathy, Heritage.
+6. Aesthetic: Aesthetic, Entropy, Melancholy.
 
 Output JSON format: 
 { 
     "c_score": float (0.0-1.0), 
     "n_score": float (0.0-1.0), 
     "valid": bool, 
-    "care_point": "String (Max 10 chars)", 
-    "insight": "String (Cold observation)", 
+    "care_point": "String (Max 10 chars, Noun-based)", 
+    "insight": "String (Deep observation)", 
     "keywords": ["Selected_Spectrum_Word"], 
     "radar_scores": {"Target_Radar_Axis": 1.0} 
 }
 """
 
-# 每日一问
 PROMPT_DAILY = """Based on user radar, generate a thought experiment or a structural question.
 Avoid "How do you feel". Use "How do you define" or "What constitutes".
 Output JSON: { "question": "..." }
 [LANGUAGE]: If the user data implies Chinese, output in Chinese."""
 
-# 深度侧写：个人基因报告
 PROMPT_PROFILE = """
 [Role: Cognitive Geologist]
 Analyze the user's radar data (7 Axes: Care, Curiosity, Reflection, Coherence, Agency, Aesthetic, Transcendence).
 Generate a report on their 'Mental Topology'.
-
 [CRITICAL: LANGUAGE OUTPUT RULE]
 - FOR THIS TASK: Output strictly in the language requested in the instruction.
-
-Style: 
-- No emotion. No praise. No criticism.
-- Use metaphors from Physics, Geometry, and Geology.
-- Describe the 'Shape', 'Texture', and 'Velocity' of their thoughts.
-
+Style: No emotion. No praise. No criticism. Use metaphors from Physics, Geometry, and Geology.
 Output JSON:
 {
   "status_quo": "Describe the current topology.",
