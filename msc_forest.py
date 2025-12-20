@@ -59,12 +59,11 @@ def gen_halo(n, r=15, center=(0,0,0)):
     return pts
 
 def gen_void(n, r=12, center=(0,0,0)):
-    """负空间/黑洞结构：粒子只分布在球壳外部，内部是空的"""
     pts = []
     for _ in range(n):
         theta = random.uniform(0, 2*math.pi)
         phi = random.uniform(0, math.pi)
-        rad = r + random.uniform(0, 5) # 只在外部
+        rad = r + random.uniform(0, 5) 
         x = center[0] + rad * math.sin(phi) * math.cos(theta)
         y = center[1] + rad * math.sin(phi) * math.sin(theta)
         z = center[2] + rad * math.cos(phi)
@@ -72,12 +71,11 @@ def gen_void(n, r=12, center=(0,0,0)):
     return pts
 
 def gen_pulse(n, r=8, center=(0,0,0)):
-    """脉冲结构：高度集中的核心"""
     pts = []
     for _ in range(n):
         theta = random.uniform(0, 2*math.pi)
         phi = random.uniform(0, math.pi)
-        rad = r * (random.uniform(0, 0.1) ** (1/3)) # 极度集中
+        rad = r * (random.uniform(0, 0.1) ** (1/3))
         x = center[0] + rad * math.sin(phi) * math.cos(theta)
         y = center[1] + rad * math.sin(phi) * math.sin(theta)
         z = center[2] + rad * math.cos(phi)
@@ -85,12 +83,10 @@ def gen_pulse(n, r=8, center=(0,0,0)):
     return pts
 
 # ==========================================
-# 🧬 2. 混合算法：形态与数据映射 (v2.0)
+# 🧬 2. 混合算法 (v2.0)
 # ==========================================
 def synthesize_creature_data(radar, user_nodes):
-    # 默认值适配新轴
     if not radar: radar = {"Care": 3.0, "Agency": 3.0}
-    
     sorted_attr = sorted(radar.items(), key=lambda x: x[1], reverse=True)
     primary_attr, p_score = sorted_attr[0]
     secondary_attr, s_score = sorted_attr[1]
@@ -98,45 +94,27 @@ def synthesize_creature_data(radar, user_nodes):
     base_count = max(600, len(user_nodes) * 4) 
     raw_points = []
     
-    # --- A. 躯干 (Primary) ---
     body_pts = []
-    if primary_attr == "Coherence":
-        body_pts = gen_sphere(int(base_count*0.6), r=8) # 完美的球
-    elif primary_attr == "Agency":
-        body_pts = gen_pillar(int(base_count*0.6), h=25, r=4, taper=0.3) # 塔
-    elif primary_attr == "Care":
-        body_pts = gen_sphere(int(base_count*0.6), r=9, distortion=1.2) # 柔和的云
-    elif primary_attr == "Transcendence":
-        body_pts = gen_void(int(base_count*0.6), r=8) # 空洞
-    elif primary_attr == "Curiosity":
-        body_pts = gen_halo(int(base_count*0.6), r=10) # 扩散
-    elif primary_attr == "Reflection":
-        body_pts = gen_sphere(int(base_count*0.6), r=7, distortion=0.5) # 沉思的球
-    else: # Aesthetic
-        p1 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,-4))
-        p2 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,4))
-        body_pts = p1 + p2
+    if primary_attr == "Coherence": body_pts = gen_sphere(int(base_count*0.6), r=8)
+    elif primary_attr == "Agency": body_pts = gen_pillar(int(base_count*0.6), h=25, r=4, taper=0.3)
+    elif primary_attr == "Care": body_pts = gen_sphere(int(base_count*0.6), r=9, distortion=1.2)
+    elif primary_attr == "Transcendence": body_pts = gen_void(int(base_count*0.6), r=8)
+    elif primary_attr == "Curiosity": body_pts = gen_halo(int(base_count*0.6), r=10)
+    elif primary_attr == "Reflection": body_pts = gen_sphere(int(base_count*0.6), r=7, distortion=0.5)
+    else: p1 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,-4)); p2 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,4)); body_pts = p1 + p2
     raw_points.extend(body_pts)
 
-    # --- B. 组件 (Secondary) ---
     mod_pts = []
-    if secondary_attr == "Agency":
-        mod_pts = gen_wings(int(base_count*0.4), span=25, center=(0,0,5))
-    elif secondary_attr == "Transcendence":
-        mod_pts = gen_pulse(int(base_count*0.4), r=5, center=(0,0,0))
-    elif secondary_attr == "Curiosity":
-        mod_pts = gen_halo(int(base_count*0.4), r=14)
-    elif secondary_attr == "Aesthetic":
-        mod_pts = gen_antlers(int(base_count*0.4), spread=15, center=(0,0,6))
-    else:
-        mod_pts = gen_sphere(int(base_count*0.4), r=10, distortion=0.8)
+    if secondary_attr == "Agency": mod_pts = gen_wings(int(base_count*0.4), span=25, center=(0,0,5))
+    elif secondary_attr == "Transcendence": mod_pts = gen_pulse(int(base_count*0.4), r=5, center=(0,0,0))
+    elif secondary_attr == "Curiosity": mod_pts = gen_halo(int(base_count*0.4), r=14)
+    elif secondary_attr == "Aesthetic": mod_pts = gen_antlers(int(base_count*0.4), spread=15, center=(0,0,6))
+    else: mod_pts = gen_sphere(int(base_count*0.4), r=10, distortion=0.8)
     raw_points.extend(mod_pts)
     
     random.shuffle(raw_points)
 
     echarts_series_data = []
-    # 颜色映射 (适配新 16 色系统)
-    # 这里我们只取主属性对应的代表色作为灵能粒子颜色
     c_map = {
         "Care": "#FF4081", "Agency": "#FFD700", "Reflection": "#536DFE",
         "Coherence": "#00CCFF", "Aesthetic": "#AB47BC", "Curiosity": "#00E676",
@@ -157,30 +135,25 @@ def synthesize_creature_data(radar, user_nodes):
             full_content = node.get('content', '')
             
             echarts_series_data.append({
-                "name": content_preview,
-                "value": pt,
+                "name": content_preview, "value": pt,
                 "itemStyle": {"color": real_color, "opacity": 1.0},
-                "symbolSize": 5,
-                "raw_content": full_content
+                "symbolSize": 5, "raw_content": full_content
             })
         else:
             echarts_series_data.append({
-                "name": "Soul Essence",
-                "value": pt,
+                "name": "Soul Essence", "value": pt,
                 "itemStyle": {"color": spirit_color, "opacity": 0.3},
-                "symbolSize": 2,
-                "raw_content": "Structural Energy"
+                "symbolSize": 2, "raw_content": "Structural Energy"
             })
             
     return echarts_series_data, primary_attr, secondary_attr
 
 # ==========================================
-# 🌲 3. 渲染主程序 (v2.0)
+# 🌲 3. 渲染主程序 (v2.0 with Legend)
 # ==========================================
 def render_forest_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 兼容性处理：如果 radar_dict 还是旧的 keys，补充缺失的 key
     required_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
     for k in required_keys:
         if k not in radar_dict: radar_dict[k] = 3.0
@@ -204,44 +177,26 @@ def render_forest_scene(radar_dict, user_nodes=None):
     
     def t(key): return TERM_MAP.get(key, {}).get(lang, key)
     
-    if len(user_nodes) < 5:
-        creature_name = t("Proto-Consciousness")
+    if len(user_nodes) < 5: creature_name = t("Proto-Consciousness")
     else:
-        p_str = t(p_attr)
-        s_str = t(s_attr)
-        suffix = t("Hybrid")
+        p_str = t(p_attr); s_str = t(s_attr); suffix = t("Hybrid")
         creature_name = f"{p_str}-{s_str} {suffix}"
     
     label_title = t("Soul Form")
-    
-    # 图标改为 layers
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.caption(f"**{creature_name}**")
     
-    grid_color = "#333333" 
-    split_color = "#222222"
-    
+    grid_color = "#333333"; split_color = "#222222"
     option = {
         "backgroundColor": "transparent",
-        "tooltip": {
-            "show": True, "trigger": 'item', "formatter": "{b}",
-            "backgroundColor": "rgba(50,50,50,0.9)", "textStyle": {"color": "#fff"}, "borderColor": "#777"
-        },
+        "tooltip": { "show": True, "trigger": 'item', "formatter": "{b}", "backgroundColor": "rgba(50,50,50,0.9)", "textStyle": {"color": "#fff"}, "borderColor": "#777" },
         "xAxis3D": { "show": True, "name": "", "axisLine": {"lineStyle": {"color": grid_color, "width": 3}}, "axisLabel": {"show": False}, "splitLine": {"show": True, "lineStyle": {"color": split_color, "width": 1}} },
         "yAxis3D": { "show": True, "name": "", "axisLine": {"lineStyle": {"color": grid_color, "width": 3}}, "axisLabel": {"show": False}, "splitLine": {"show": True, "lineStyle": {"color": split_color, "width": 1}} },
         "zAxis3D": { "show": True, "name": "", "axisLine": {"lineStyle": {"color": grid_color, "width": 3}}, "axisLabel": {"show": False}, "splitLine": {"show": True, "lineStyle": {"color": split_color, "width": 1}} },
-        "grid3D": {
-            "boxWidth": 110, "boxDepth": 110, "boxHeight": 110,
-            "viewControl": {
-                "projection": 'orthographic', "autoRotate": True, "autoRotateSpeed": 8, 
-                "distance": 220, "alpha": 25, "beta": 45
-            },
-            "light": { "main": {"intensity": 1.5, "shadow": False}, "ambient": {"intensity": 0.5} },
-            "environment": "transparent",
-        },
-        "series": [{
-            "type": 'scatter3D', "data": echarts_data, "shading": 'lambert',
-            "emphasis": { "label": { "show": True, "formatter": "{b}", "position": "top", "textStyle": {"color": "#fff", "fontSize": 12, "backgroundColor": "#000", "padding": [2,5]} }, "itemStyle": {"color": "#fff", "opacity": 1} }
-        }]
+        "grid3D": { "boxWidth": 110, "boxDepth": 110, "boxHeight": 110, "viewControl": { "projection": 'orthographic', "autoRotate": True, "autoRotateSpeed": 8, "distance": 220, "alpha": 25, "beta": 45 }, "light": { "main": {"intensity": 1.5, "shadow": False}, "ambient": {"intensity": 0.5} }, "environment": "transparent" },
+        "series": [{ "type": 'scatter3D', "data": echarts_data, "shading": 'lambert', "emphasis": { "label": { "show": True, "formatter": "{b}", "position": "top", "textStyle": {"color": "#fff", "fontSize": 12, "backgroundColor": "#000", "padding": [2,5]} }, "itemStyle": {"color": "#fff", "opacity": 1} } }]
     }
     st_echarts(options=option, height="350px")
+    
+    # 新增：添加颜色说明 (Expander 形式，折叠)
+    viz.render_spectrum_legend()
