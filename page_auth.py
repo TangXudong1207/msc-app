@@ -7,10 +7,10 @@ import time
 import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (Fixed: 100% Width Button)
+# 🔐 登录页 (Fixed: 100% Width & Centered Text)
 # ==========================================
 def render_login_page():
-     st.markdown("""
+    st.markdown("""
     <style>
         .login-title { 
             font-family: 'JetBrains Mono', monospace; 
@@ -62,6 +62,18 @@ def render_login_page():
     </style>
     """, unsafe_allow_html=True)
 
+    # 1. 语言记忆逻辑
+    qp = st.query_params
+    url_lang = qp.get("lang", "en")
+    
+    if "language" not in st.session_state:
+        st.session_state.language = url_lang
+
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    with c2:
+        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+        
         
         # 语言切换
         lang_options = ['English', '中文']
