@@ -1,18 +1,20 @@
 ### msc_viz_graph.py ###import streamlit as st
+import streamlit as st
 from streamlit_echarts import st_echarts
 import json
 import numpy as np
 import msc_viz_core as core
 import msc_lib as msc 
+# 注意：这里需要延迟导入 viz 以避免循环引用，或者直接在函数内导入
+# 为了安全，我们不在这里 import msc_viz，而是手动实现或重构
+# 最佳实践：把 render_spectrum_legend 放在 main 或者独立的 UI 库里。
+# 但为了简单，我们在函数内部 import。
 
 # ==========================================
-# 🕸️ 1. 雷达图 (Radar) - 7 Axis v2.0
+# 🕸️ 1. 雷达图 (Radar)
 # ==========================================
 def render_radar_chart(radar_dict, height="200px"):
-    # 新的 7 大轴
     keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
-    
-    # 兼容性处理：如果旧数据没有 Transcendence，补 3.0
     safe_scores = []
     for k in keys:
         safe_scores.append(radar_dict.get(k, 3.0))
@@ -53,9 +55,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix=
     
     for i, node in enumerate(nodes):
         logic = node.get('logic_score') or 0.5
-        keywords = []
-        try: keywords = json.loads(node.get('keywords', '[]'))
-        except: keywords = []
         nid = str(node['id'])
         node_color = id_to_color.get(nid, default_color)
         label_text = node['care_point']
@@ -72,7 +71,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix=
             "itemStyle": {"color": node_color}
         })
 
-    # 连线逻辑
     node_count = len(graph_nodes)
     start_idx = max(0, node_count - 50)
     for i in range(start_idx, node_count):
@@ -104,10 +102,17 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix=
 # ==========================================
 # 🔭 3. 弹窗组件 (Dialogs)
 # ==========================================
-@st.dialog("🔭 浩荡宇宙", width="large")
+@st.dialog("🔭 小宇宙 (Microcosm)", width="large")
 def view_fullscreen_map(nodes, user_name):
-    st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
+    # 延迟导入以避免循环引用
+    import msc_viz as viz_facade
+    
+    lang = st.session_state.get('language', 'en')
+    title = f"{user_name}'s Microcosm" if lang == 'en' else f"{user_name} 的小宇宙"
+    st.markdown(f"### 🌌 {title}")
+    
     clicked_data = render_cyberpunk_map(nodes, height="500px", is_fullscreen=True, key_suffix="fullscreen_dlg")
+    
     if clicked_data:
         st.divider()
         st.markdown(f"#### ✨ {clicked_data.get('layer', 'Selected Node')}")
@@ -116,7 +121,11 @@ def view_fullscreen_map(nodes, user_name):
             st.info(f"**Insight:** {clicked_data['insight']}")
             st.caption(f"> \"{clicked_data['content']}\"")
         with c2:
-            if st.button("📍 定位上下文", use_container_width=True): st.toast("Time travel initiated...", icon="⏳")
+            if st.button("📍 Locate", use_container_width=True): st.toast("Time travel initiated...", icon="⏳")
+    
+    st.divider()
+    # 添加图例
+    viz_facade.render_spectrum_legend()
 
 @st.dialog("🧬 MSC 深度基因解码", width="large")
 def view_radar_details(radar_dict, username):
@@ -124,7 +133,6 @@ def view_radar_details(radar_dict, username):
     with c1: render_radar_chart(radar_dict, height="350px")
     with c2:
         st.markdown(f"### {username} 的核心参数")
-        # 兼容性处理
         required_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
         for key in required_keys:
             val = radar_dict.get(key, 3.0)
