@@ -9,6 +9,7 @@ import msc_forest as forest
 import msc_i18n as i18n 
 import time
 import random
+import msc_config as config # 引入 config 以获取轴定义
 
 # ==========================================
 # 🎨 CSS：Cyber-Zen 极简主义设计系统
@@ -34,7 +35,6 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
-        /* 聊天气泡 */
         .chat-bubble-me {
             background-color: #2D2D2D; 
             color: #FFFFFF; 
@@ -84,7 +84,7 @@ def inject_custom_css():
         }
         .meaning-dot-btn:hover { opacity: 1.0; }
         
-        /* 每日洞察卡片样式 */
+        /* 每日洞察卡片 */
         .daily-card {
             border: 1px solid #DDD; 
             background: #F0F2F6; 
@@ -126,8 +126,7 @@ if "current_chat_partner" not in st.session_state: st.session_state.current_chat
 if "language" not in st.session_state: st.session_state.language = "en" 
 
 # ==========================================
-# 📚 本地备用语录 (Local Fallback)
-# 确保在 API 失败时，用户依然能看到有深度的内容
+# 📚 本地备选语录库 (Fallback Library)
 # ==========================================
 LOCAL_INSIGHTS = {
     "en": [
@@ -150,7 +149,6 @@ LOCAL_INSIGHTS = {
 
 def get_fallback_insight():
     lang = st.session_state.language
-    # 默认为英文，如果是中文则切换
     pool = LOCAL_INSIGHTS.get(lang, LOCAL_INSIGHTS['en'])
     return random.choice(pool)
 
@@ -159,7 +157,7 @@ def get_fallback_insight():
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 1. 状态管理：如果还没生成过，初始化为 None
+    # 1. 状态管理
     if "daily_content" not in st.session_state:
         st.session_state.daily_content = None
 
@@ -167,20 +165,19 @@ def daily_insight_dialog(username, radar):
     if st.session_state.daily_content is None:
         # 显示加载动画
         with st.container():
-            st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Collective Mind...</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
             with st.spinner(""):
                 try:
                     # 尝试调用 AI
-                    # 设定一个较短的超时逻辑模拟 (实际 API 调用在 lib 中)
                     insight = msc.generate_daily_question(username, radar)
                     
-                    # 核心检查：如果返回空，或者包含 Error，强制使用本地库
+                    # 核心检查：如果返回空，强制使用本地库
                     if not insight or "error" in str(insight).lower() or len(str(insight)) < 5:
                         raise ValueError("Invalid AI Response")
                     
                     st.session_state.daily_content = insight
                     
-                except Exception as e:
+                except:
                     # 兜底：使用本地语录
                     st.session_state.daily_content = get_fallback_insight()
             
@@ -243,7 +240,9 @@ else:
     user_profile = msc.get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
-    else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]}
+    else: 
+        # 核心修正：使用新的 7 轴默认值
+        radar_dict = raw_radar if raw_radar else {k:3.0 for k in config.RADAR_AXES}
     
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
@@ -276,12 +275,11 @@ else:
         st.divider()
 
         # 每日一问触发器 (sac.buttons)
-        # index=None 保证点击后不保持选中状态
         daily_btn = sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_main_btn")
         
-        # 触发逻辑
+        # 触发弹窗
         if daily_btn == T['Ins']:
             daily_insight_dialog(st.session_state.username, radar_dict)
 
