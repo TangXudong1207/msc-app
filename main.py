@@ -118,11 +118,21 @@ def inject_custom_css():
 st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
-# === 全局状态初始化 ===
+# ==========================================
+# 🛠️ 核心：状态管理器 (中间人模式)
+# ==========================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
+# 这里是关键：我们只修改这个变量，不碰组件的 key
+if "dialog_request" not in st.session_state: st.session_state.dialog_request = None
+
+# 回调函数：只负责把点击动作“转录”到 dialog_request
+def on_btn_click(key):
+    clicked_val = st.session_state.get(key)
+    if clicked_val:
+        st.session_state.dialog_request = clicked_val
 
 # ==========================================
 # 📚 本地备选语录库 (Fallback Library)
@@ -152,15 +162,13 @@ def get_fallback_insight():
     return random.choice(pool)
 
 # ==========================================
-# 🔭 每日洞察弹窗 (Robust Version)
+# 🔭 每日洞察弹窗
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 1. 状态管理
     if "daily_content" not in st.session_state:
         st.session_state.daily_content = None
 
-    # 2. 生成逻辑
     if st.session_state.daily_content is None:
         with st.container():
             st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
@@ -174,7 +182,6 @@ def daily_insight_dialog(username, radar):
                     st.session_state.daily_content = get_fallback_insight()
             st.rerun()
 
-    # 3. 显示内容
     content = st.session_state.daily_content
     st.markdown(
         f"""
@@ -261,22 +268,22 @@ else:
         st.divider()
 
         # 1. 每日一问按钮
-        # ⚠️ 关键：指定 key="daily_btn_key"，并且不使用回调
-        daily_btn_val = sac.buttons([
+        # ⚠️ 关键：绑定回调函数，args传入自己的key
+        sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
-           key="daily_btn_key")
+           key="daily_btn_key", on_change=on_btn_click, args=("daily_btn_key",))
         
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
         # 2. 可视化工具栏
-        # ⚠️ 关键：指定 key="viz_btn_key"
-        viz_btn_val = sac.buttons([
+        # ⚠️ 关键：绑定回调函数，args传入自己的key
+        sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
-           key="viz_btn_key")
+           key="viz_btn_key", on_change=on_btn_click, args=("viz_btn_key",))
 
         st.divider()
         
@@ -307,25 +314,25 @@ else:
             st.rerun()
 
     # ==========================================
-    # 🚀 弹窗逻辑 (修复版)
+    # 🚀 弹窗逻辑 (中间人模式)
     # ==========================================
-    # 原理：检测到按钮值存在 -> 打开弹窗 -> 强制重置按钮状态为 None -> 下次运行就不弹了
+    # 1. 检查中间人变量
+    request = st.session_state.dialog_request
 
-    if daily_btn_val == T['Ins']:
+    if request == T['Ins']:
         daily_insight_dialog(st.session_state.username, radar_dict)
-        # 💥 强制清理状态，防止刷新页面重复弹出
-        st.session_state["daily_btn_key"] = None
+        # 💥 这里的关键：我们重置“中间人”，而不是“组件 key”
+        # 这样就完全避开了 Streamlit 的 API 报错
+        st.session_state.dialog_request = None 
 
-    elif viz_btn_val == T['DNA']:
+    elif request == T['DNA']:
         viz.view_radar_details(radar_dict, st.session_state.username)
-        # 💥 强制清理状态
-        st.session_state["viz_btn_key"] = None
+        st.session_state.dialog_request = None 
              
-    elif viz_btn_val == T['Map']: 
+    elif request == T['Map']: 
         all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
         viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
-        # 💥 强制清理状态
-        st.session_state["viz_btn_key"] = None
+        st.session_state.dialog_request = None 
 
     # === 页面路由 ===
     if selected_menu == T['Logout']: 
