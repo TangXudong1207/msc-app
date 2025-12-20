@@ -1,21 +1,36 @@
-### msc_viz_graph.py ###
-import streamlit as st
+### msc_viz_graph.py ###import streamlit as st
 from streamlit_echarts import st_echarts
 import json
 import numpy as np
 import msc_viz_core as core
-import msc_lib as msc # 用于报告分析
+import msc_lib as msc 
 
 # ==========================================
-# 🕸️ 1. 雷达图 (Radar)
+# 🕸️ 1. 雷达图 (Radar) - 7 Axis v2.0
 # ==========================================
 def render_radar_chart(radar_dict, height="200px"):
-    keys = ["Care", "Curiosity", "Reflection", "Coherence", "Empathy", "Agency", "Aesthetic"]
-    scores = [radar_dict.get(k, 3.0) for k in keys]
+    # 新的 7 大轴
+    keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
+    
+    # 兼容性处理：如果旧数据没有 Transcendence，补 3.0
+    safe_scores = []
+    for k in keys:
+        safe_scores.append(radar_dict.get(k, 3.0))
+
     option = {
         "backgroundColor": "transparent", 
-        "radar": {"indicator": [{"name": k, "max": 10} for k in keys], "splitArea": {"show": False}}, 
-        "series": [{"type": "radar", "data": [{"value": scores, "areaStyle": {"color": "rgba(255, 75, 75, 0.4)"}, "lineStyle": {"color": "#FF4B4B"}}]}]
+        "radar": {
+            "indicator": [{"name": k, "max": 10} for k in keys], 
+            "splitArea": {"show": False}
+        }, 
+        "series": [{
+            "type": "radar", 
+            "data": [{
+                "value": safe_scores, 
+                "areaStyle": {"color": "rgba(255, 75, 75, 0.4)"}, 
+                "lineStyle": {"color": "#FF4B4B"}
+            }]
+        }]
     }
     st_echarts(options=option, height=height)
 
@@ -79,7 +94,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix=
     }
     
     events = {"click": "function(params) { return params.name }"}
-    # 修复：显式使用 key 参数，避免 ID 冲突
     clicked_id = st_echarts(options=option, height=height, events=events, key=f"echart_{key_suffix}")
     
     if clicked_id:
@@ -93,7 +107,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix=
 @st.dialog("🔭 浩荡宇宙", width="large")
 def view_fullscreen_map(nodes, user_name):
     st.markdown(f"### 🌌 {user_name} 的浩荡宇宙")
-    # 传递唯一的 key
     clicked_data = render_cyberpunk_map(nodes, height="500px", is_fullscreen=True, key_suffix="fullscreen_dlg")
     if clicked_data:
         st.divider()
@@ -111,8 +124,12 @@ def view_radar_details(radar_dict, username):
     with c1: render_radar_chart(radar_dict, height="350px")
     with c2:
         st.markdown(f"### {username} 的核心参数")
-        for key, val in radar_dict.items():
+        # 兼容性处理
+        required_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
+        for key in required_keys:
+            val = radar_dict.get(key, 3.0)
             st.progress(val / 10, text=f"**{key}**: {val}")
+            
     st.divider()
     report_key = f"report_{username}_{sum(radar_dict.values())}"
     if report_key not in st.session_state:
