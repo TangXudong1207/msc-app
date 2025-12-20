@@ -13,10 +13,9 @@ import msc_config as config
 import msc_db as db
 
 # ==========================================
-# 🛑 1. 初始化系统 (带容错日志)
+# 🛑 1. 初始化系统
 # ==========================================
 def init_system():
-    # A. OpenAI/DeepSeek 客户端
     client_openai = None
     model_openai = "gpt-3.5-turbo"
     
@@ -32,7 +31,6 @@ def init_system():
     except Exception as e:
         db.log_system_event("ERROR", "Init_OpenAI", str(e))
 
-    # B. Google Vertex AI (Embedding)
     vertex_embed = None
     try:
         if "gcp_service_account" in st.secrets:
@@ -41,7 +39,6 @@ def init_system():
             vertexai.init(project=creds_dict['project_id'], location='us-central1', credentials=creds)
             vertex_embed = TextEmbeddingModel.from_pretrained("text-embedding-004")
     except Exception as e:
-         # 这不是致命错误，降级处理即可，但需要记录
          db.log_system_event("WARN", "Init_Vertex", f"Vertex AI failed: {str(e)}")
     
     return client_openai, model_openai, vertex_embed
@@ -49,7 +46,7 @@ def init_system():
 client_ai, TARGET_MODEL, vertex_embed_model = init_system()
 
 # ==========================================
-# 🌉 2. 数据库桥梁 (透传 DB 函数)
+# 🌉 2. 数据库桥梁
 # ==========================================
 def login_user(u, p): return db.login_user(u, p)
 def add_user(u, p, n, c): return db.add_user(u, p, n, c)
@@ -116,7 +113,7 @@ def cosine_similarity(v1, v2):
     except: return 0
 
 # ==========================================
-# 🧠 4. AI 智能核心 (流式升级版)
+# 🧠 4. AI 智能核心 (适配 v2.0 协议)
 # ==========================================
 def call_ai_api(prompt, use_google=False):
     if not client_ai: return {"error": "AI未连接"}
@@ -141,10 +138,8 @@ def get_stream_response(history_messages):
         yield "⚠️ AI Client Init Failed."
         return
     try:
-        # 获取当前语言设置
         lang = st.session_state.get('language', 'en')
         lang_instruction = "Reply in Chinese." if lang == 'zh' else "Reply in English."
-        
         system_prompt = config.PROMPT_CHATBOT + f"\n[CURRENT LANGUAGE INSTRUCTION]: {lang_instruction}"
 
         api_messages = [{"role": "system", "content": system_prompt}]
@@ -167,7 +162,6 @@ def get_stream_response(history_messages):
         yield f"❌ API Error: {str(e)}"
 
 def analyze_meaning_background(text):
-    # 同样注入语言指令
     lang = st.session_state.get('language', 'en')
     lang_instruction = "Output 'care_point' and 'insight' in Simplified Chinese." if lang == 'zh' else "Output 'care_point' and 'insight' in English."
     
@@ -177,12 +171,32 @@ def analyze_meaning_background(text):
     if not isinstance(res, dict):
         return {"valid": False, "m_score": 0, "insight": "Analysis Failed"}
 
+    # 逻辑门槛检查
     if res.get("valid", False) or res.get("c_score", 0) > 0:
         c = res.get('c_score', 0)
         n = res.get('n_score', 0)
         if n == 0: n = 0.5 
         m = c * n * 2 
         res['m_score'] = m
+        
+        # 关键词校验 (防止 AI 乱造词)
+        keywords = res.get('keywords', [])
+        clean_keywords = []
+        for k in keywords:
+            if k in config.SPECTRUM: # 必须在 16 维度内
+                clean_keywords.append(k)
+        
+        # 如果没有合法关键词，视为 Noise
+        if not clean_keywords and m < 0.8: # 除非分数极高，否则必须有维度
+            res['valid'] = False
+        else:
+            res['keywords'] = clean_keywords
+            # 自动计算要加分的雷达轴
+            if clean_keywords:
+                main_dim = clean_keywords[0]
+                target_axis = config.DIMENSION_MAP.get(main_dim, "Coherence")
+                res['radar_scores'] = {target_axis: 1.0}
+
         if m < config.LEVELS["Signal"]: res["valid"] = False
         else: res["valid"] = True
     else:
@@ -191,29 +205,50 @@ def analyze_meaning_background(text):
     return res
 
 def generate_daily_question(username, radar_data):
-    # 强制语言适配
     lang = st.session_state.get('language', 'en')
     radar_str = json.dumps(radar_data, ensure_ascii=False)
-    
     lang_instruction = "Output the question strictly in Simplified Chinese." if lang == 'zh' else "Output the question strictly in English."
     
     prompt = f"{config.PROMPT_DAILY}\nUser Data: {radar_str}\n[CRITICAL]: {lang_instruction}"
     res = call_ai_api(prompt, use_google=False)
-    return res.get("question", "What constitutes the boundary of your self?")
+    return res.get("question", "")
 
 def update_radar_score(username, input_scores):
     try:
         user_data = db.get_user_profile(username)
         current = user_data.get('radar_profile')
-        if not current: current = {k: 3.0 for k in input_scores.keys()}
-        elif isinstance(current, str): current = json.loads(current)
+        
+        # 初始化 7 轴
+        default_radar = {k: 3.0 for k in config.RADAR_AXES}
+        
+        if not current: 
+            current = default_radar
+        elif isinstance(current, str): 
+            try:
+                current_dict = json.loads(current)
+                # 补全缺失的轴
+                for k in config.RADAR_AXES:
+                    if k not in current_dict: current_dict[k] = 3.0
+                current = current_dict
+            except:
+                current = default_radar
+        
         updated = {}
         alpha = config.RADAR_ALPHA
-        for k, v in input_scores.items():
-            old = float(current.get(k, 3.0)); val = float(v)
-            updated[k] = round(old * (1-alpha) + val * alpha, 2)
+        
+        # 计算新分数 (加权平均)
+        for k in config.RADAR_AXES:
+            old_val = float(current.get(k, 3.0))
+            # 如果 input 里有这个轴，就加分，否则衰减或保持
+            if k in input_scores:
+                new_val = old_val * (1 - alpha) + float(input_scores[k]) * alpha + 0.5 # 稍微奖励
+            else:
+                new_val = old_val # 不衰减，保持稳定
+            updated[k] = round(min(10.0, new_val), 2)
+            
         db.update_radar_score(username, json.dumps(updated))
-    except: pass
+    except Exception as e: 
+        print(f"Radar Update Error: {e}")
     
 def find_resonance(current_vector, current_user, current_data):
     if not current_vector: return None
