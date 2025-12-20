@@ -17,6 +17,7 @@ def render_login_page():
             font-weight: 700; 
             font-size: 3em; 
             color: #333; 
+            text-align: center;
         }
         .login-subtitle { 
             color: #888; 
@@ -24,23 +25,27 @@ def render_login_page():
             font-size: 0.8em; 
             margin-top: -10px; 
             font-weight: 300; 
+            text-align: center;
         }
         
-        /* 🛠️ 修复核心：让按钮填满宽度 (100%)，文字居中 */
+        /* 🛠️ 布局核心：强制对齐 */
         
-        /* 1. 确保按钮容器占满 */
+        /* 1. 提交按钮的外层容器：强制 Flex 居中，消除默认边距干扰 */
         [data-testid="stFormSubmitButton"] {
-            width: 100% !important;
-            border: none !important;
-        }
-        
-        /* 2. 按钮样式：红色、填满、居中 */
-        [data-testid="stFormSubmitButton"] button { 
-            width: 100% !important; /* 填满整行 */
             display: flex !important;
             justify-content: center !important; /* 水平居中 */
-            align-items: center !important; /* 垂直居中 */
-            text-align: center !important;
+            align-items: center !important;
+            width: 100% !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* 2. 按钮本体：填满容器，文字居中 */
+        [data-testid="stFormSubmitButton"] button { 
+            width: 100% !important; /* 填满 */
+            display: block !important;
+            margin: 15px 0 0 0 !important; /* 仅保留顶部间距 */
             
             border-radius: 4px !important;
             font-family: 'JetBrains Mono', monospace !important;
@@ -48,9 +53,14 @@ def render_login_page():
             color: white !important;
             border: none !important;
             height: 45px !important; 
-            margin-top: 10px !important;
+            
+            /* 文字排版 */
+            text-align: center !important;
             font-weight: 600 !important;
             letter-spacing: 1px !important;
+            font-size: 14px !important;
+            line-height: 45px !important; /* 垂直居中文字 */
+            padding: 0 !important;
         }
         
         /* 3. 悬停效果 */
@@ -61,7 +71,6 @@ def render_login_page():
         }
     </style>
     """, unsafe_allow_html=True)
-
     # 1. 语言记忆逻辑
     qp = st.query_params
     url_lang = qp.get("lang", "en")
