@@ -36,7 +36,7 @@ RADAR_AXES = [
     "Agency", "Aesthetic", "Transcendence"
 ]
 
-# 维度映射关系
+# 维度映射关系 (用于 AI 分析时加分)
 DIMENSION_MAP = {
     "Conflict": "Agency", "Hubris": "Agency", "Vitality": "Agency",
     "Rationality": "Coherence", "Structure": "Coherence", "Truth": "Coherence",
@@ -48,7 +48,7 @@ DIMENSION_MAP = {
 }
 
 # ==========================================
-# ⚙️ 2. 系统参数 (降低门槛)
+# ⚙️ 2. 系统参数 (结构主义校准版)
 # ==========================================
 
 W_MEANING = { 
@@ -58,10 +58,10 @@ W_MEANING = {
     "Abstract_Linkage": 0.15    
 }
 
-# ⚡ 关键修改：降低 Signal 门槛，让更多思考被捕获
+# 放宽后的阈值
 LEVELS = {
-    "Noise": 0.25,   # 原 0.30
-    "Signal": 0.40,  # 原 0.45 (更容易触发)
+    "Noise": 0.25,   
+    "Signal": 0.40,  
     "Structure": 0.75, 
     "Core": 0.92
 }
@@ -74,9 +74,10 @@ TTL_ACTIVE = 24
 TTL_SEDIMENT = 720 
 
 # ==========================================
-# 🧠 3. AI 指令集
+# 🧠 3. AI 指令集 (多语言强化版)
 # ==========================================
 
+# 聊天机器人
 PROMPT_CHATBOT = """
 [System Context: MSC Intelligent Partner]
 You are a mirrored surface of the user's mind. 
@@ -94,7 +95,7 @@ Core Principles:
 3. Tone: Calm, analytical, slightly sci-fi, precise.
 """
 
-# 分析师：放宽限制，鼓励归类
+# 分析师：生成意义卡 (核心升级：16维度筛选)
 PROMPT_ANALYST = """
 [Task: Cognitive Topology Analysis v5.1]
 Analyze the input text. Extract the underlying 'Meaning Structure'.
@@ -109,12 +110,17 @@ Do NOT simply reject it as Noise unless it is absolute gibberish or a pure funct
 If it's a mundane observation, try to interpret its underlying sentiment (e.g., "Tired" -> Melancholy/Entropy).
 
 Dimensions:
-1. Tension: Conflict, Hubris, Vitality.
-2. Logos: Rationality, Structure, Truth.
-3. Exploration: Curiosity, Mystery.
-4. Ontology: Nihilism, Mortality, Consciousness.
-5. Connection: Empathy, Heritage.
-6. Aesthetic: Aesthetic, Entropy, Melancholy.
+1. Tension: Conflict (anger/oppose), Hubris (ambition/pride), Vitality (energy/impulse).
+2. Logos: Rationality (logic), Structure (rules/systems), Truth (universal laws).
+3. Exploration: Curiosity (questioning), Mystery (spiritual/unknown).
+4. Ontology: Nihilism (meaningless), Mortality (death/time), Consciousness (awareness).
+5. Connection: Empathy (love/compassion), Heritage (roots/family).
+6. Aesthetic: Aesthetic (poetic/metaphor), Entropy (decay/chaos), Melancholy (sadness).
+
+Evaluation Criteria:
+- "I ate a burger." -> NOISE (Score < 0.25).
+- "The burger tasted like childhood." -> SIGNAL (Heritage, Score > 0.45).
+- "I hate my boss." -> SIGNAL (Conflict, Score > 0.5).
 
 Output JSON format: 
 { 
@@ -128,18 +134,26 @@ Output JSON format:
 }
 """
 
+# 每日一问
 PROMPT_DAILY = """Based on user radar, generate a thought experiment or a structural question.
 Avoid "How do you feel". Use "How do you define" or "What constitutes".
 Output JSON: { "question": "..." }
 [LANGUAGE]: If the user data implies Chinese, output in Chinese."""
 
+# 深度侧写：个人基因报告
 PROMPT_PROFILE = """
 [Role: Cognitive Geologist]
 Analyze the user's radar data (7 Axes: Care, Curiosity, Reflection, Coherence, Agency, Aesthetic, Transcendence).
 Generate a report on their 'Mental Topology'.
+
 [CRITICAL: LANGUAGE OUTPUT RULE]
 - FOR THIS TASK: Output strictly in the language requested in the instruction.
-Style: No emotion. No praise. No criticism. Use metaphors from Physics, Geometry, and Geology.
+
+Style: 
+- No emotion. No praise. No criticism.
+- Use metaphors from Physics, Geometry, and Geology.
+- Describe the 'Shape', 'Texture', and 'Velocity' of their thoughts.
+
 Output JSON:
 {
   "status_quo": "Describe the current topology.",
