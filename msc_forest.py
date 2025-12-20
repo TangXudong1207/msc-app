@@ -54,65 +54,55 @@ def gen_ethereal_cloud(center, n_points, radius_x, radius_y, radius_z, core_dens
 
 def gen_spirit_cat(n):
     """灵猫：由能量流和迷雾构成的灵体"""
-    # 1. 身体迷雾 (Ethereal Body Cloud)
-    # 不再是实体椭球，而是一团拉长的能量云
-    body_pts = gen_ethereal_cloud(center=(0, 0, 0), n_points=int(n*0.4), 
-                                  radius_x=8, radius_y=4, radius_z=4, core_density=0.5)
+    # 1. 身体迷雾 (范围稍微调大一点点，配合新的坐标系)
+    body_pts = gen_ethereal_cloud(center=(0, 0, -2), n_points=int(n*0.4), 
+                                  radius_x=9, radius_y=5, radius_z=5, core_density=0.5)
     
-    # 2. 头部能量团 (Head Energy Orb)
-    head_pts = gen_ethereal_cloud(center=(8, 0, 2), n_points=int(n*0.15),
-                                  radius_x=3, radius_y=3, radius_z=3, core_density=0.4)
+    # 2. 头部能量团
+    head_pts = gen_ethereal_cloud(center=(9, 0, 3), n_points=int(n*0.15),
+                                  radius_x=3.5, radius_y=3.5, radius_z=3.5, core_density=0.4)
     
-    # 3. 灵动双尾 (Flowing Twin Tails)
-    # 使用贝塞尔曲线生成流动的粒子束，而非管道
-    tail_start = np.array([-6, 0, 1])
+    # 3. 灵动双尾
+    tail_start = np.array([-7, 0, 0])
+    # 尾巴1
+    t1_end = np.array([-22, 10, 6])
+    t1_ctrl = np.array([-14, 18, 12])
+    tail1_pts = gen_flow_curve(tail_start, t1_end, t1_ctrl, n_points=int(n*0.15), jitter=1.8)
+    # 尾巴2
+    t2_end = np.array([-22, -10, 3])
+    t2_ctrl = np.array([-14, -18, -6])
+    tail2_pts = gen_flow_curve(tail_start, t2_end, t2_ctrl, n_points=int(n*0.15), jitter=1.8)
     
-    # 尾巴1：向左后方飘动
-    t1_end = np.array([-20, 8, 5])
-    t1_ctrl = np.array([-12, 15, 10])
-    tail1_pts = gen_flow_curve(tail_start, t1_end, t1_ctrl, n_points=int(n*0.15), jitter=1.5)
-
-    # 尾巴2：向右后方飘动
-    t2_end = np.array([-20, -8, 2])
-    t2_ctrl = np.array([-12, -15, -5])
-    tail2_pts = gen_flow_curve(tail_start, t2_end, t2_ctrl, n_points=int(n*0.15), jitter=1.5)
-    
-    # 4. 基础环绕场 (Base Aura Field)
-    # 在整体周围生成非常稀疏的大范围粒子
+    # 4. 基础环绕场
     aura_pts = []
     for _ in range(int(n*0.15)):
-        pt = get_random_point_in_sphere(radius=25)
-        # 将其压扁一点，使其更有环绕感
-        pt[2] *= 0.6
+        pt = get_random_point_in_sphere(radius=28)
+        pt[2] *= 0.7
         aura_pts.append(pt)
         
     return np.vstack([body_pts, head_pts, tail1_pts, tail2_pts, np.array(aura_pts)])
 
 # (其他生物的生成函数占位，逻辑类似，重点是"虚无感")
-def gen_dragon_form(n): return gen_ethereal_cloud((0,0,0), n, 20, 5, 5) # 占位
-def gen_mountain_forest_form(n): return gen_ethereal_cloud((0,0,0), n, 15, 15, 20) # 占位
-def gen_whale_form(n): return gen_ethereal_cloud((0,0,0), n, 25, 8, 10) # 占位
-def gen_book_form(n): return gen_ethereal_cloud((0,0,0), n, 10, 2, 8) # 占位
-def gen_gateway_form(n): return gen_ethereal_cloud((0,0,0), n, 5, 15, 20) # 占位
-def gen_tree_form(n): return gen_ethereal_cloud((0,0,0), n, 8, 8, 25) # 占位
+def gen_dragon_form(n): return gen_ethereal_cloud((0,0,0), n, 22, 6, 6)
+def gen_mountain_forest_form(n): return gen_ethereal_cloud((0,0,-5), n, 18, 18, 22)
+def gen_whale_form(n): return gen_ethereal_cloud((0,0,0), n, 28, 9, 12)
+def gen_book_form(n): return gen_ethereal_cloud((0,0,0), n, 12, 3, 10)
+def gen_gateway_form(n): return gen_ethereal_cloud((0,0,0), n, 6, 18, 24)
+def gen_tree_form(n): return gen_ethereal_cloud((0,0,-5), n, 10, 10, 28)
 
 # ==========================================
 # 🌪️ 2. 氛围特效应用器 (Aspect Applicators)
 # ==========================================
-# (特效函数保持不变，它们在这个新的粒子基础上效果会更好)
 def apply_thunder_aspect(points): return jitter_vec(points, intensity=1.5)
-def apply_foundation_aspect(points): 
-    # ... (保持原有逻辑，篇幅原因省略，下同)
-    return points 
+def apply_foundation_aspect(points): return points 
 def apply_warmth_aspect(points): return points
 def apply_stardust_aspect(points): 
-    # 星尘特效在稀疏粒子上会更明显
     stardust = []
     n_star = int(len(points) * 0.3)
     for _ in range(n_star):
         theta = random.uniform(0, 2*math.pi)
         phi = random.uniform(0, math.pi)
-        r = random.uniform(25, 40) # 更远的轨道
+        r = random.uniform(28, 42) # 轨道范围匹配新坐标系
         x = r * math.sin(phi) * math.cos(theta)
         y = r * math.sin(phi) * math.sin(theta)
         z = r * math.cos(phi)
@@ -136,20 +126,18 @@ def synthesize_creature_data(radar, user_nodes):
     primary_attr = sorted_attr[0][0] if sorted_attr else "Care"
     secondary_attr = sorted_attr[1][0] if len(sorted_attr) > 1 else primary_attr
 
-    # 粒子数量稍微减少，以增加稀疏感
     base_count = max(500, len(user_nodes) * 4)
 
-    # 映射表
     generator_map = {
         "Agency": gen_dragon_form,
         "Coherence": gen_mountain_forest_form,
         "Care": gen_whale_form,
-        "Curiosity": gen_spirit_cat, # 使用新的灵猫生成器
+        "Curiosity": gen_spirit_cat,
         "Reflection": gen_book_form,
         "Transcendence": gen_gateway_form,
         "Aesthetic": gen_tree_form
     }
-    # 暂时全部导向灵猫进行测试
+    # 暂时全部导向灵猫进行测试，验证效果后可以改回下一行
     generator = gen_spirit_cat 
     # generator = generator_map.get(primary_attr, gen_whale_form)
 
@@ -169,7 +157,7 @@ def synthesize_creature_data(radar, user_nodes):
     final_points = processed_points_np.tolist()
     random.shuffle(final_points)
 
-    # 5. 颜色与透明度处理 (关键!)
+    # 5. 颜色与透明度处理
     echarts_series_data = []
     c_map = {
         "Care": "#FF4081", "Agency": "#FFD700", "Reflection": "#536DFE",
@@ -180,33 +168,30 @@ def synthesize_creature_data(radar, user_nodes):
     is_prismatic = (secondary_attr == "Aesthetic")
 
     for i, pt in enumerate(final_points):
-        # 计算点到中心的距离，用于控制透明度
         dist_to_center = np.linalg.norm(pt)
-        # 核心粒子更不透明，边缘粒子非常透明
-        base_opacity = max(0.1, 1.0 - (dist_to_center / 25.0))
+        # 调整透明度衰减，配合新的深色背景
+        base_opacity = max(0.15, 1.0 - (dist_to_center / 28.0))
 
         if is_prismatic:
             hue = (pt[0]*2 + pt[1]*3 + pt[2]*4) % 360
             prism_colors = ["#FF0000", "#FF7F00", "#FFFF00", "#00FF00", "#0000FF", "#4B0082"]
             point_color = prism_colors[int(hue) % len(prism_colors)]
-            opacity = base_opacity * 0.8
+            opacity = base_opacity * 0.9
         else:
             point_color = spirit_color
-            opacity = base_opacity * 0.5 # 整体更透明，制造迷雾感
+            opacity = base_opacity * 0.6
 
-        # 随机大小，增加层次感
-        symbol_size = random.uniform(1.5, 4.0)
+        symbol_size = random.uniform(1.5, 4.5)
 
         if i < len(user_nodes):
-            # 用户的意义节点：更大、更亮、不透明
             node = user_nodes[i]
             echarts_series_data.append({
                 "name": node.get('care_point', 'Thought'), "value": pt,
-                "itemStyle": {"color": point_color, "opacity": 1.0, "borderColor": "#FFF", "borderWidth": 0.5},
-                "symbolSize": symbol_size * 2.0, "raw_content": node.get('content', '')
+                # 增加节点粒子的亮度
+                "itemStyle": {"color": point_color, "opacity": 1.0, "borderColor": "#FFF", "borderWidth": 0.8, "shadowBlur": 10, "shadowColor": point_color},
+                "symbolSize": symbol_size * 2.2, "raw_content": node.get('content', '')
             })
         else:
-            # 结构/迷雾粒子
             echarts_series_data.append({
                 "name": "Spirit Mist", "value": pt,
                 "itemStyle": {"color": point_color, "opacity": opacity},
@@ -219,11 +204,10 @@ def synthesize_creature_data(radar, user_nodes):
 # 🌲 4. 渲染主程序 (Renderer)
 # ==========================================
 def render_forest_scene(radar_dict, user_nodes=None):
-    # ... (保持原有标题和翻译逻辑)
     if user_nodes is None: user_nodes = []
     echarts_data, p_attr, s_attr = synthesize_creature_data(radar_dict, user_nodes)
     lang = st.session_state.get('language', 'en')
-    # ... (省略翻译字典)
+    
     ARCHETYPE_NAMES = {
         "Agency": {"en": "Ascending Dragon", "zh": "腾空之龙"},
         "Coherence": {"en": "Mountain & Forest", "zh": "高山森林"},
@@ -255,51 +239,68 @@ def render_forest_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
-    # ECharts 3D 配置 (关键调整：视角和光照)
+    # ==========================================
+    # 🎯 核心修改：学术感坐标系 & 放大构图
+    # ==========================================
+    
+    # 定义学术风格颜色
+    axis_line_color = "#888888" # 轴线颜色（浅灰）
+    split_line_color = "#444444" # 网格线颜色（深灰）
+    background_color = "#0E1117" # 深蓝灰背景（学术蓝图感）
+
+    # 通用的轴配置
+    axis_config = {
+        "show": True, 
+        "min": -30, "max": 30, # 缩小范围，让图形显得更大
+        "axisLine": {"lineStyle": {"color": axis_line_color, "width": 2}}, # 清晰的轴线
+        "axisLabel": {"show": False}, # 隐藏数字标签，保持简洁
+        "splitLine": {"show": True, "lineStyle": {"color": split_line_color, "width": 0.5, "type": "dashed"}} # 虚线网格
+    }
+
     option = {
         "backgroundColor": "transparent",
         "tooltip": { "show": True, "formatter": "{b}" },
-        # 隐藏坐标轴网格线，只保留底板提示
-        "xAxis3D": { "show": False, "min": -30, "max": 30, "splitLine": {"show": False}},
-        "yAxis3D": { "show": False, "min": -30, "max": 30, "splitLine": {"show": False}},
-        "zAxis3D": { "show": False, "min": -20, "max": 40, "splitLine": {"show": False}},
+        
+        # 应用学术轴配置，并添加名称
+        "xAxis3D": { **axis_config, "name": "X" },
+        "yAxis3D": { **axis_config, "name": "Y" },
+        "zAxis3D": { **axis_config, "name": "Z" },
+
         "grid3D": { 
-            "boxWidth": 100, "boxDepth": 100, "boxHeight": 100, 
+            # 缩小盒子尺寸，让内部内容看起来更大
+            "boxWidth": 60, "boxDepth": 60, "boxHeight": 60, 
             "viewControl": { 
                 "projection": 'perspective',
-                "autoRotate": True, "autoRotateSpeed": 5, # 转慢点，更优雅
-                "distance": 140, # 拉近镜头，放大主体
-                "alpha": 20, # 更平视的视角
-                "beta": 30,
-                "minDistance": 100, "maxDistance": 250,
-                "panMouseButton": 'left',
-                "rotateMouseButton": 'right'
+                "autoRotate": True, "autoRotateSpeed": 6,
+                "distance": 110, # 拉近镜头，进一步放大
+                "alpha": 25, "beta": 35,
+                "minDistance": 80, "maxDistance": 200,
+                "panMouseButton": 'left', "rotateMouseButton": 'right'
             }, 
-            # 柔和的光照
             "light": { 
-                "main": {"intensity": 0.8, "alpha": 30, "beta": 30}, 
-                "ambient": {"intensity": 0.6} 
+                "main": {"intensity": 1.0, "alpha": 30, "beta": 30}, 
+                "ambient": {"intensity": 0.5} 
             }, 
-            # 极简环境
-            "environment": "#000000",
-            "splitLine": {"show": False}, # 再次确保隐藏网格
-            "axisPointer": {"show": False}
+            # 设置学术背景色
+            "environment": background_color,
+            # 确保盒子壁上的网格线显示
+            "splitLine": {"show": True, "lineStyle": {"color": split_line_color, "width": 0.5}}
         },
         "series": [{ 
             "type": 'scatter3D', "data": echarts_data, 
-            # 使用 'lambert' 着色，配合半透明粒子，更有体积感
             "shading": 'lambert',
-            # 让粒子有一种发光的感觉
             "itemStyle": {
-                "borderColor": "rgba(255,255,255,0.1)",
-                "borderWidth": 0.5
+                # 增强发光感，适应深色背景
+                "borderColor": "rgba(255,255,255,0.2)",
+                "borderWidth": 0.5,
+                "shadowBlur": 5
             },
             "emphasis": { 
-                "itemStyle": {"color": "#fff", "opacity": 1, "borderColor": "#fff", "borderWidth": 2},
+                "itemStyle": {"color": "#fff", "opacity": 1, "borderColor": "#fff", "borderWidth": 2, "shadowBlur": 15},
                 "label": {"show": True, "formatter": "{b}", "position": "top", "textStyle": {"color": "#000", "backgroundColor": "#fff", "padding": [2,4], "borderRadius": 2}}
             } 
         }]
     }
-    # 增加高度，让画面更舒展
-    st_echarts(options=option, height="450px")
+    # 增加组件高度，让视野更开阔
+    st_echarts(options=option, height="500px")
     viz.render_spectrum_legend()
