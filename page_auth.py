@@ -1,31 +1,55 @@
-### page__auth.py ###
-
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
 import time
-import msc_i18n as i18n # 引用语言包
+import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (保持原样，仅微调)
+# 🔐 登录页 (Browser-Friendly Edition)
 # ==========================================
 def render_login_page():
+    # 注入登录页专用 CSS
     st.markdown("""
     <style>
-        .login-title { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 3em; color: #333; }
-        .login-subtitle { color: #888; letter-spacing: 4px; font-size: 0.8em; margin-top: -10px; font-weight: 300; }
-        .stButton button { font-family: 'Inter', sans-serif; }
+        .login-title { 
+            font-family: 'JetBrains Mono', monospace; 
+            font-weight: 700; 
+            font-size: 3em; 
+            color: #333; 
+        }
+        .login-subtitle { 
+            color: #888; 
+            letter-spacing: 4px; 
+            font-size: 0.8em; 
+            margin-top: -10px; 
+            font-weight: 300; 
+        }
+        /* 调整表单按钮宽度，使其填满容器 */
+        [data-testid="stForm"] button { 
+            width: 100%; 
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
     </style>
     """, unsafe_allow_html=True)
+
+    # 1. 语言记忆逻辑 (基于 URL 参数)
+    # 检查 URL 是否有 lang 参数
+    qp = st.query_params
+    url_lang = qp.get("lang", "en")
+    
+    # 如果 session 中还没有设置，就用 URL 的
+    if "language" not in st.session_state:
+        st.session_state.language = url_lang
 
     c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
         
-        # 语言切换
-        if "language" not in st.session_state: st.session_state.language = "en"
+        # 语言切换器
         lang_options = ['English', '中文']
+        # 根据当前 session 状态决定 index
         current_idx = 0 if st.session_state.language == 'en' else 1
         
         selected_lang_label = sac.segmented(
@@ -33,11 +57,14 @@ def render_login_page():
             align='center', size='xs', index=current_idx, key="login_lang_selector"
         )
         
+        # 状态更新逻辑：同步到 URL，实现刷新不丢失
         new_lang_code = 'en' if selected_lang_label == 'English' else 'zh'
         if new_lang_code != st.session_state.language:
             st.session_state.language = new_lang_code
+            st.query_params["lang"] = new_lang_code
             st.rerun()
 
+        # 标题区域
         st.markdown("""
         <div style='text-align: center;'>
             <div class='login-title'>MSC</div>
@@ -46,15 +73,23 @@ def render_login_page():
         <div style='height: 40px;'></div>
         """, unsafe_allow_html=True)
         
+        # 登录/注册 Tab
         with st.container(border=True):
             tab = sac.tabs([i18n.get_text('login_tab'), i18n.get_text('signup_tab')], align='center', size='md', variant='outline')
             st.write("") 
 
             if tab == i18n.get_text('login_tab'):
-                u = st.text_input(i18n.get_text('identity'), placeholder="Username", label_visibility="collapsed")
-                p = st.text_input(i18n.get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
-                st.write("")
-                if st.button(i18n.get_text('connect'), use_container_width=True, type="primary"):
+                # ✨ 核心修改：使用 st.form 包裹登录框
+                # 这会让浏览器识别出这是一个登录表单，从而触发 "保存密码"
+                with st.form(key="login_form", clear_on_submit=False):
+                    u = st.text_input(i18n.get_text('identity'), placeholder="Username", label_visibility="collapsed")
+                    p = st.text_input(i18n.get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
+                    st.write("")
+                    
+                    # Form 内的提交按钮
+                    submit_clicked = st.form_submit_button(i18n.get_text('connect'), type="primary")
+                
+                if submit_clicked:
                     if u == "admin" and p == "msc": 
                         st.session_state.logged_in = True
                         st.session_state.username = "admin"
@@ -69,16 +104,23 @@ def render_login_page():
                         st.session_state.nickname = msc.get_nickname(u)
                         st.session_state.is_admin = False 
                         st.rerun()
-                    else: st.error(i18n.get_text('signal_lost'))
+                    else: 
+                        st.error(i18n.get_text('signal_lost'))
             else:
-                nu = st.text_input(i18n.get_text('new_id'), label_visibility="collapsed", placeholder="Username")
-                np = st.text_input(i18n.get_text('new_pw'), type='password', label_visibility="collapsed", placeholder="Password")
-                nn = st.text_input(i18n.get_text('nick'), label_visibility="collapsed", placeholder="Display Name")
-                nc = st.selectbox(i18n.get_text('region'), ["China", "USA", "UK", "Other"], label_visibility="collapsed")
-                st.write("")
-                if st.button(i18n.get_text('init'), use_container_width=True):
-                    if msc.add_user(nu, np, nn, nc): st.success(i18n.get_text('created'))
-                    else: st.error("Initialization Failed")
+                # 注册表单也用 st.form，提升体验
+                with st.form(key="signup_form"):
+                    nu = st.text_input(i18n.get_text('new_id'), label_visibility="collapsed", placeholder="Username")
+                    np = st.text_input(i18n.get_text('new_pw'), type='password', label_visibility="collapsed", placeholder="Password")
+                    nn = st.text_input(i18n.get_text('nick'), label_visibility="collapsed", placeholder="Display Name")
+                    nc = st.selectbox(i18n.get_text('region'), ["China", "USA", "UK", "Other"], label_visibility="collapsed")
+                    st.write("")
+                    signup_clicked = st.form_submit_button(i18n.get_text('init'))
+                
+                if signup_clicked:
+                    if msc.add_user(nu, np, nn, nc): 
+                        st.success(i18n.get_text('created'))
+                    else: 
+                        st.error("Initialization Failed: User already exists.")
 
 # ==========================================
 # 🚀 新手引导：降临风格 (Arrival Aesthetic)
@@ -159,12 +201,6 @@ def render_onboarding(username):
             padding-left: 30px !important; /* 悬停右移效果 */
         }
         
-        /* 选项按钮的布局 */
-        .choice-box {
-            margin-top: 10px;
-            margin-bottom: 20px;
-        }
-
     </style>
     """, unsafe_allow_html=True)
     
@@ -288,7 +324,7 @@ def render_onboarding(username):
                 st.session_state.onboarding_step = 7
                 st.rerun()
 
-        # 🟢 Log 07: 结束
+        # 🟢 Log 07: 结束 (触发初始化)
         elif step == 7:
             st.markdown(f"""
             <div class='log-container'>
@@ -307,5 +343,6 @@ def render_onboarding(username):
                     "Reflection": 5.0, "Rationality": 5.0, "Curiosity": 5.0,
                     "Agency": 5.0, "Empathy": 5.0, "Care": 5.0
                 })
+                # 标记引导完成
                 st.session_state.onboarding_complete = True
                 st.rerun()
