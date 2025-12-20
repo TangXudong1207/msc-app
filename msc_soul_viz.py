@@ -2,114 +2,126 @@ import streamlit as st
 from streamlit_echarts import st_echarts
 import streamlit_antd_components as sac
 import msc_viz as viz
-# 导入新的生成器模块
 import msc_soul_gen as gen
 
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 调用生成器获取数据
-    echarts_data, p_attr, s_attr = gen.synthesize_creature_data(radar_dict, user_nodes)
+    # 1. 调用生成器获取网络数据和物理配置
+    nodes, edges, physics_config, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
     
     lang = st.session_state.get('language', 'en')
     
-    # 翻译字典 (保持不变)
+    # --- 标题和描述的翻译映射 (基于新的物理隐喻) ---
     ARCHETYPE_NAMES = {
-        "Agency": {"en": "Ascending Dragon", "zh": "腾空之龙"},
-        "Coherence": {"en": "Mountain & Forest", "zh": "高山森林"},
-        "Care": {"en": "Celestial Whale", "zh": "天海之鲸"},
-        "Curiosity": {"en": "Spirit Cat", "zh": "灵猫"},
-        "Reflection": {"en": "Ancient Book", "zh": "智慧古书"},
-        "Transcendence": {"en": "Gateway of Light", "zh": "光之门扉"},
-        "Aesthetic": {"en": "Crystalline Tree", "zh": "结晶生命树"}
+        "Agency":        {"en": "Starburst Structure", "zh": "爆发结构"},
+        "Care":          {"en": "Dense Cluster",      "zh": "凝聚结构"},
+        "Curiosity":     {"en": "Wide Web",           "zh": "发散网络"},
+        "Coherence":     {"en": "Crystalline Grid",   "zh": "晶格结构"},
+        "Reflection":    {"en": "Deep Swirl",         "zh": "深旋结构"},
+        "Transcendence": {"en": "Ascending Cloud",    "zh": "升腾云结构"},
+        "Aesthetic":     {"en": "Harmonic Sphere",    "zh": "和谐球体"}
     }
     ASPECT_NAMES = {
-        "Agency": {"en": "Thunder Aspect", "zh": "雷霆氛围"},
-        "Coherence": {"en": "Foundation Aspect", "zh": "基石氛围"},
-        "Care": {"en": "Warmth Aspect", "zh": "暖流氛围"},
-        "Curiosity": {"en": "Stardust Aspect", "zh": "星尘氛围"},
-        "Reflection": {"en": "Abyss Aspect", "zh": "深渊氛围"},
-        "Transcendence": {"en": "Ascension Aspect", "zh": "升腾氛围"},
-        "Aesthetic": {"en": "Prismatic Aspect", "zh": "幻彩氛围"}
+        "Agency":        {"en": "Volatile Mode",   "zh": "躁动模式"},
+        "Care":          {"en": "Gentle Mode",     "zh": "柔缓模式"},
+        "Curiosity":     {"en": "Flowing Mode",    "zh": "流转模式"},
+        "Coherence":     {"en": "Stable Mode",     "zh": "稳定模式"},
+        "Reflection":    {"en": "Breathing Mode",  "zh": "呼吸模式"},
+        "Transcendence": {"en": "Drifting Mode",   "zh": "漂浮模式"},
+        "Aesthetic":     {"en": "Elegant Mode",    "zh": "优雅模式"}
     }
 
     p_name = ARCHETYPE_NAMES.get(p_attr, {}).get(lang, p_attr)
     s_name = ASPECT_NAMES.get(s_attr, {}).get(lang, s_attr)
     
-    if len(user_nodes) < 3:
-        creature_title = "Proto-Form" if lang=='en' else "初生形态"
-        creature_desc = "Gathering energy..." if lang=='en' else "能量汇聚中..."
+    if len(user_nodes) == 0:
+        creature_title = "Proto-Field" if lang=='en' else "初生场域"
+        creature_desc = "Awaiting thought injection..." if lang=='en' else "等待思想注入..."
     else:
         creature_title = p_name
-        creature_desc = f"with {s_name}" if lang=='en' else f"伴随 {s_name}"
+        creature_desc = f"operating in {s_name}" if lang=='en' else f"运行于 {s_name}"
 
     label_title = "SOUL FORM" if lang=='en' else "灵魂形态"
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
     # ==========================================
-    # 🎯 核心修改：白色背景 & 中灰色坐标系
+    # 🎯 ECharts GraphGL 配置
     # ==========================================
     
-    # 定义新的颜色风格
-    axis_line_color = "#AAAAAA" # 中灰色轴线
-    split_line_color = "#DDDDDD" # 浅灰色网格
     background_color = "#FFFFFF" # 纯白背景
-    axis_label_color = "#666666" # 深灰色标签文字
 
-    # 通用的轴配置
-    # 扩大坐标轴范围以容纳更大的图形
-    axis_range = 80 
-    axis_config = {
-        "show": True, 
-        "min": -axis_range, "max": axis_range, 
-        "axisLine": {"lineStyle": {"color": axis_line_color, "width": 1.5}}, 
-        "axisLabel": {"show": True, "textStyle": {"color": axis_label_color, "fontSize": 10, "fontFamily": "JetBrains Mono"}},
-        "splitLine": {"show": True, "lineStyle": {"color": split_line_color, "width": 1, "type": "solid"}},
-        "nameTextStyle": {"color": axis_label_color, "fontSize": 12, "fontWeight": "bold"}
+    # 2. 坐标轴配置 (调整大小)
+    # 对于 graphGL，坐标轴更多是参考背景。
+    # 我们设置一个适中的范围，让网络在其中自然生长。
+    axis_range = 150 
+    axis_common = {
+        "show": True,
+        "min": -axis_range, "max": axis_range,
+        "axisLine": {"lineStyle": {"color": "#EEEEEE", "width": 1}}, # 非常淡的轴线
+        "axisLabel": {"show": False}, # 不显示标签，保持干净
+        "splitLine": {"show": True, "lineStyle": {"color": "#F5F5F5", "width": 1}} # 非常淡的网格
     }
 
     option = {
-        "backgroundColor": background_color, # 设置背景为白色
-        "tooltip": { "show": True, "formatter": "{b}", "backgroundColor": "rgba(255,255,255,0.9)", "textStyle": {"color": "#333"}, "borderColor": "#EEE", "borderWidth": 1 },
-        
-        "xAxis3D": { **axis_config, "name": "X" },
-        "yAxis3D": { **axis_config, "name": "Y" },
-        "zAxis3D": { **axis_config, "name": "Z" },
-
-        "grid3D": { 
-            "boxWidth": 100, "boxDepth": 100, "boxHeight": 100, 
-            "viewControl": { 
-                "projection": 'perspective',
-                "autoRotate": True, "autoRotateSpeed": 4,
-                "distance": 150, # 调整视角
-                "alpha": 25, "beta": 45,
-                "minDistance": 100, "maxDistance": 250,
-                "panMouseButton": 'left', "rotateMouseButton": 'right'
-            }, 
-            # 调整光照以适应白色背景，更明亮
-            "light": { 
-                "main": {"intensity": 1.5, "alpha": 40, "beta": 40}, 
-                "ambient": {"intensity": 1.0} 
-            }, 
-            "environment": background_color,
-            "splitLine": {"show": True, "lineStyle": {"color": split_line_color, "width": 1}}
+        "backgroundColor": background_color,
+        # 提示框组件
+        "tooltip": {
+            "show": True,
+            "formatter": lambda params: f"<b>{params.name}</b><br>{params.value}" if params.value else params.name,
+            "backgroundColor": "rgba(50,50,50,0.8)",
+            "textStyle": {"color": "#fff"},
+            "borderColor": "#333"
         },
-        "series": [{ 
-            "type": 'scatter3D', "data": echarts_data, 
-            "shading": 'lambert',
-            # 调整粒子样式以适应白背景
-            "itemStyle": {
-                # 去掉发光效果，改为更实体的质感
-                # "borderColor": "rgba(255,255,255,0.3)", 
-                # "borderWidth": 0.5,
-                # "shadowBlur": 8
+        
+        "xAxis3D": axis_common,
+        "yAxis3D": axis_common,
+        "zAxis3D": axis_common,
+
+        "grid3D": {
+            # 调整视野深度，让巨大的节点看起来更震撼
+            "viewControl": {
+                "projection": 'perspective',
+                "autoRotate": True,
+                "autoRotateSpeed": 5, # 缓慢旋转展示动态
+                "distance": 250,
+                "minDistance": 150, "maxDistance": 400,
+                "alpha": 20, "beta": 40
             },
-            "emphasis": { 
-                "itemStyle": {"color": "#333", "opacity": 1, "borderColor": "#000", "borderWidth": 1},
-                "label": {"show": True, "formatter": "{b}", "position": "top", "textStyle": {"color": "#fff", "backgroundColor": "#333", "padding": [2,4], "borderRadius": 2}}
-            } 
+            # 明亮、干净的光照
+            "light": {
+                "main": {"intensity": 1.2, "alpha": 30, "beta": 30},
+                "ambient": {"intensity": 0.8}
+            },
+            "environment": background_color
+        },
+
+        "series": [{
+            "type": 'graphGL', # 核心：使用 WebGL 加速的关系图
+            "layout": 'force', # 核心：使用力引导布局
+            "force": {
+                # 3. 注入物理引擎参数
+                "repulsion": physics_config["repulsion"],
+                "gravity": physics_config["gravity"],
+                "friction": physics_config["friction"],
+                "edgeLength": physics_config["edgeLength"],
+                "initLayout": 'spherical' # 初始呈球状分布，然后炸开
+            },
+            "data": nodes,
+            "links": edges,
+            # 节点和边的通用样式已在数据生成时定义，这里设置全局默认
+            "itemStyle": {"opacity": 1},
+            "lineStyle": {"width": 0.5, "opacity": 0.1},
+            # 高亮样式
+            "emphasis": {
+                "itemStyle": {"borderColor": "#000", "borderWidth": 1},
+                "lineStyle": {"width": 2, "opacity": 0.8},
+                "label": {"show": True}
+            }
         }]
     }
-    st_echarts(options=option, height="550px")
+    
+    # 增加组件高度，提供更有沉浸感的视野
+    st_echarts(options=option, height="600px")
     viz.render_spectrum_legend()
