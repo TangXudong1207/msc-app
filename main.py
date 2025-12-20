@@ -15,7 +15,7 @@ import msc_config as config
 # ==========================================
 def inject_custom_css():
     # 🔴🔴🔴 【重要】请将下方的链接替换为你上传到 GitHub 后的图标 Raw 链接！ 🔴🔴🔴
-    APP_ICON_URL = "YOUR_GITHUB_RAW_LINK_HERE"
+    APP_ICON_URL = "https://github.com/TangXudong1207/msc-app/blob/main/app%E5%9B%BE%E6%A0%87.png"
     # 例如: "https://raw.githubusercontent.com/username/repo/main/msc_icon.png"
     
     # 如果你还没上传图标，可以使用下面这个临时链接占位，体验一下效果：
