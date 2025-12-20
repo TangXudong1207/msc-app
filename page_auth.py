@@ -1,5 +1,3 @@
-### msc_page_auth.py ###
-
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -7,7 +5,7 @@ import time
 import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (Fixed: 100% Width & Centered Text)
+# 🔐 登录页 (Fixed: Centered Buttons)
 # ==========================================
 def render_login_page():
     st.markdown("""
@@ -25,32 +23,20 @@ def render_login_page():
             margin-top: -10px; 
             font-weight: 300; 
         }
-        
-        /* 🛠️ 修复核心：让按钮填满宽度，自动解决居中问题 */
-        /* 1. 针对提交按钮容器 */
-        [data-testid="stFormSubmitButton"] {
-            border: none !important;
-            padding: 0 !important;
-            width: 100% !important;
-        }
-        
-        /* 2. 针对按钮本体 */
+        /* 移除之前强制 100% 宽度的 CSS，改用布局控制 */
         [data-testid="stFormSubmitButton"] button { 
-            width: 100% !important; /* 填满整行 */
-            margin: 10px 0 0 0 !important; /* 上方留一点空隙 */
-            display: block !important;
             border-radius: 4px !important;
             font-family: 'JetBrains Mono', monospace !important;
             background-color: #FF4B4B !important; /* 红色 */
             color: white !important;
             border: none !important;
-            height: 45px !important; /* 增加高度，与输入框匹配 */
+            height: 45px !important;
             font-size: 14px !important;
             letter-spacing: 1px !important;
             font-weight: 600 !important;
+            padding-left: 30px !important;
+            padding-right: 30px !important;
         }
-        
-        /* 3. 悬停效果 */
         [data-testid="stFormSubmitButton"] button:hover {
             background-color: #FF2B2B !important;
             transform: translateY(-1px);
@@ -70,19 +56,6 @@ def render_login_page():
     
     with c2:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-        
-    # 1. 语言记忆逻辑
-    qp = st.query_params
-    url_lang = qp.get("lang", "en")
-    
-    if "language" not in st.session_state:
-        st.session_state.language = url_lang
-
-    c1, c2, c3 = st.columns([1, 2, 1])
-    
-    with c2:
-        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-        
         
         # 语言切换
         lang_options = ['English', '中文']
@@ -116,7 +89,11 @@ def render_login_page():
                     u = st.text_input(i18n.get_text('identity'), placeholder="Username", label_visibility="collapsed")
                     p = st.text_input(i18n.get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
                     st.write("")
-                    submit_clicked = st.form_submit_button(i18n.get_text('connect')) 
+                    # 🔴 核心修复：使用列布局使按钮居中
+                    fc1, fc2, fc3 = st.columns([1, 2, 1])
+                    with fc2:
+                        # use_container_width=True 让按钮填满中间这一列
+                        submit_clicked = st.form_submit_button(i18n.get_text('connect'), use_container_width=True)
                 
                 if submit_clicked:
                     if u == "admin" and p == "msc": 
@@ -142,7 +119,10 @@ def render_login_page():
                     nn = st.text_input(i18n.get_text('nick'), label_visibility="collapsed", placeholder="Display Name")
                     nc = st.selectbox(i18n.get_text('region'), ["China", "USA", "UK", "Other"], label_visibility="collapsed")
                     st.write("")
-                    signup_clicked = st.form_submit_button(i18n.get_text('init'))
+                    # 🔴 核心修复：同样应用于注册按钮
+                    fc1, fc2, fc3 = st.columns([1, 2, 1])
+                    with fc2:
+                        signup_clicked = st.form_submit_button(i18n.get_text('init'), use_container_width=True)
                 
                 if signup_clicked:
                     if msc.add_user(nu, np, nn, nc): st.success(i18n.get_text('created'))
