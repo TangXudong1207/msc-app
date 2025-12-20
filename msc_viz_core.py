@@ -7,15 +7,20 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
 # ==========================================
-# 🎨 颜色与辅助工具
+# 🎨 颜色与辅助工具 (v2.0)
 # ==========================================
 def get_spectrum_color(keywords_str):
-    if not keywords_str: return "#00CCFF"
+    if not keywords_str: return "#607D8B" # Default: Nihilism (灰蓝)
+    
+    # 优先精确匹配
     for dim, color in config.SPECTRUM.items():
         if dim in keywords_str: return color
+    
+    # 模糊匹配
     for color in config.SPECTRUM.values():
         if color in keywords_str: return color
-    return "#00CCFF"
+        
+    return "#607D8B" # Fallback
 
 def get_cluster_color(cluster_id):
     CLUSTER_COLORS = list(config.SPECTRUM.values())
@@ -24,22 +29,16 @@ def get_cluster_color(cluster_id):
 def get_random_coordinate():
     """
     随机海洋坐标生成器 (Pacific / Atlantic / Indian Ocean)
-    避免落在陆地上，模拟漂流感。
     """
     zones = [
-        # 太平洋 (Pacific) - 分两块处理跨越 180 度经线的情况
         {"lat_min": -40, "lat_max": 40, "lon_min": 160, "lon_max": 180},
         {"lat_min": -40, "lat_max": 40, "lon_min": -180, "lon_max": -130},
-        # 大西洋 (Atlantic)
         {"lat_min": -30, "lat_max": 40, "lon_min": -60, "lon_max": -20},
-        # 印度洋 (Indian)
         {"lat_min": -30, "lat_max": 20, "lon_min": 60, "lon_max": 90}
     ]
-    
     zone = random.choice(zones)
     lat = random.uniform(zone["lat_min"], zone["lat_max"])
     lon = random.uniform(zone["lon_min"], zone["lon_max"])
-    
     return lat, lon
 
 # ==========================================
@@ -64,7 +63,6 @@ def compute_clusters(nodes, n_clusters=5):
     
     if not raw_vectors or len(raw_vectors) < 2: return pd.DataFrame()
 
-    # 简单对齐向量长度
     target_len = len(raw_vectors[0])
     clean_vectors = [v for v in raw_vectors if len(v) == target_len]
     clean_meta = [m for i, m in enumerate(raw_meta) if len(raw_vectors[i]) == target_len]
