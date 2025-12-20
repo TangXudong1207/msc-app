@@ -8,7 +8,7 @@ import msc_forest as forest
 import msc_i18n as i18n 
 import time
 import random
-import msc_config as config # 引入 config 以获取轴定义
+import msc_config as config 
 
 # ==========================================
 # 🎨 CSS：Cyber-Zen 极简主义设计系统
@@ -118,47 +118,87 @@ def inject_custom_css():
 st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
-# === 全局状态初始化 ===
+# ==========================================
+# 🛠️ 核心：状态管理器
+# ==========================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
+# 弹窗一次性触发器
+if "dialog_trigger" not in st.session_state: st.session_state.dialog_trigger = None
+
+# 回调函数：处理按钮点击
+def handle_daily_click():
+    # 1. 设置触发器
+    st.session_state.dialog_trigger = "daily"
+    # 2. 强制重置按钮状态为 None (解决重复弹出问题)
+    st.session_state.btn_daily_key = None 
+
+def handle_viz_click():
+    # 1. 获取当前点击的值
+    val = st.session_state.btn_viz_key
+    if val:
+        # 2. 设置触发器
+        st.session_state.dialog_trigger = val
+    # 3. 强制重置按钮状态
+    st.session_state.btn_viz_key = None
 
 # ==========================================
-# 🔭 每日洞察弹窗 (Robust Version)
+# 📚 本地备选语录库 (Fallback Library)
+# ==========================================
+LOCAL_INSIGHTS = {
+    "en": [
+        "What constitutes the boundary of your self?",
+        "Is your current silence a form of speech?",
+        "If memory is a vector, where is it pointing now?",
+        "Are you observing the world, or is the world observing you?",
+        "Structure is the solidified form of meaning.",
+        "Chaos is just a pattern we haven't recognized yet."
+    ],
+    "zh": [
+        "构成你“自我”边界的究竟是什么？",
+        "你此刻的沉默，是否也是一种表达？",
+        "如果记忆是一个向量，它现在指向哪里？",
+        "是你正在观察世界，还是世界正在观察你？",
+        "结构，是意义凝固后的形态。",
+        "混乱，只是我们尚未识别出的模式。"
+    ]
+}
+
+def get_fallback_insight():
+    lang = st.session_state.language
+    pool = LOCAL_INSIGHTS.get(lang, LOCAL_INSIGHTS['en'])
+    return random.choice(pool)
+
+# ==========================================
+# 🔭 每日洞察弹窗
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 1. 状态管理
     if "daily_content" not in st.session_state:
         st.session_state.daily_content = None
 
-    # 2. 生成逻辑
     if st.session_state.daily_content is None:
         with st.container():
             st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
             with st.spinner(""):
                 try:
                     insight = msc.generate_daily_question(username, radar)
-                    # 兜底语录
-                    if not insight or len(str(insight)) < 5:
-                        insight = random.choice([
-                            "What constitutes the boundary of your self?",
-                            "Is your current silence a form of speech?",
-                            "Structure is the solidified form of meaning."
-                        ])
+                    if not insight or "error" in str(insight).lower() or len(str(insight)) < 5:
+                        raise ValueError("Invalid AI Response")
                     st.session_state.daily_content = insight
                 except:
-                    st.session_state.daily_content = "The void is silent today."
+                    st.session_state.daily_content = get_fallback_insight()
             st.rerun()
 
-    # 3. 显示内容
+    content = st.session_state.daily_content
     st.markdown(
         f"""
         <div class='daily-card'>
             <div class='daily-label'>REFLECTION PROTOCOL</div>
             <div style='font-size: 1.2em; line-height: 1.6; font-weight: 600; color: #222;'>
-                {st.session_state.daily_content}
+                {content}
             </div>
         </div>
         """, 
@@ -170,37 +210,62 @@ def daily_insight_dialog(username, radar):
         st.session_state.daily_content = None
         st.rerun()
 
-# --- 1. 登录逻辑 ---
+# ==========================================
+# 🆕 首次接触逻辑
+# ==========================================
+def check_and_send_first_contact(username):
+    history = msc.get_active_chats(username)
+    if not history:
+        lang = st.session_state.language
+        if lang == 'zh':
+            first_msg = """先说清楚一件事：\n这里就是一个和 AI 聊天的对话框，\n和你用过的那些差不多。\n\n如果你现在不知道该从哪开始，\n那也正常。\n\n那就从最简单的开始吧——\n吃了吗？"""
+        else:
+            first_msg = """Let's get one thing clear:\nThis is just a chat box where you talk to an AI.\n\nLet's start with something simple—\nHow is your day going?"""
+        msc.save_chat(username, "assistant", first_msg)
+
+# --- 1. 登录注册 ---
 if not st.session_state.logged_in:
     pages.render_login_page()
 
-# --- 2. 主界面逻辑 ---
+# --- 2. 主界面 ---
 else:
     msc.update_heartbeat(st.session_state.username)
+
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
-    # 引导检查
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
         st.stop()
+    
+    if node_count == 0 and not st.session_state.is_admin:
+        check_and_send_first_contact(st.session_state.username)
 
-    # 获取雷达
     user_profile = msc.get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
-    else: radar_dict = raw_radar if raw_radar else {k:3.0 for k in config.RADAR_AXES}
+    else: 
+        radar_dict = raw_radar if raw_radar else {k:3.0 for k in config.RADAR_AXES}
     
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
 
     # 翻译字典
-    T = {
-        "en": {"AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", "God": "OVERSEER", "Logout": "DISCONNECT", "Map": "STAR_MAP", "DNA": "DNA_SEQ", "Ins": "INSIGHT"},
-        "zh": {"AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", "God": "上帝视角", "Logout": "断开连接", "Map": "星图投影", "DNA": "基因序列", "Ins": "每日洞察"}
-    }[lang]
+    MENU_TEXT = {
+        "en": {
+            "AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", 
+            "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", 
+            "Map": "STAR_MAP", "DNA": "DNA_SEQ", "Ins": "INSIGHT", "Ref": "REFRESH"
+        },
+        "zh": {
+            "AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", 
+            "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", 
+            "Map": "星图投影", "DNA": "基因序列", "Ins": "每日洞察", "Ref": "刷新"
+        }
+    }
+    T = MENU_TEXT[lang]
 
-    # === 侧边栏布局 ===
+    # === 侧边栏导航 ===
     with st.sidebar:
         c_av, c_info = st.columns([0.25, 0.75])
         with c_av:
@@ -212,65 +277,81 @@ else:
 
         st.divider()
 
-        # 每日一问按钮：直接捕获返回值
-        # 使用 index=None 确保只有在点击那一刻才会有值
-        trigger_daily = sac.buttons([
+        # 1. 每日一问按钮
+        # 关键修改：绑定回调函数 on_change=handle_daily_click
+        sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="side_daily_btn")
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
+           key="btn_daily_key", on_change=handle_daily_click)
         
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
-        # 可视化按钮：直接捕获返回值
-        trigger_viz = sac.buttons([
+        # 2. 可视化工具栏
+        # 关键修改：绑定回调函数 on_change=handle_viz_click
+        sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="side_viz_btn")
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
+           key="btn_viz_key", on_change=handle_viz_click)
 
         st.divider()
         
-        # 核心导航菜单
+        # 核心菜单
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
             sac.MenuItem(T['World'], icon='globe-americas'), 
         ]
+        
         if st.session_state.is_admin:
             menu_items.append(sac.MenuItem(T['God'], icon='eye-fill'))
-        menu_items.append(sac.MenuItem(T['Logout'], icon='box-arrow-right'))
+        
+        menu_items.append(sac.MenuItem(T['Sys'], type='group', children=[sac.MenuItem(T['Logout'], icon='box-arrow-right')]))
 
-        selected_menu = sac.menu(menu_items, index=0, size='sm', variant='light', open_all=True)
+        selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
         st.divider()
-        lang_choice = sac.segmented(items=['EN', '中文'], align='center', size='xs', index=(0 if lang=='en' else 1))
-        if ('en' if lang_choice == 'EN' else 'zh') != st.session_state.language:
-            st.session_state.language = ('en' if lang_choice == 'EN' else 'zh')
+        lang_opts = ['EN', '中文']
+        curr_idx = 0 if st.session_state.language == 'en' else 1
+        lang_choice = sac.segmented(
+            items=lang_opts, 
+            align='center', size='xs', index=curr_idx, key="sidebar_lang_selector"
+        )
+        mapped_lang = 'en' if lang_choice == 'EN' else 'zh'
+        if mapped_lang != st.session_state.language:
+            st.session_state.language = mapped_lang
             st.rerun()
 
     # ==========================================
-    # 🚀 弹窗分发器 (互斥逻辑：解决 Only one dialog 报错)
+    # 🚀 统一分发器 (One-Shot Trigger Logic)
     # ==========================================
-    # 这一块代码必须放在主页面区域，且使用 if-elif
-    
-    if trigger_daily == T['Ins']:
-        daily_insight_dialog(st.session_state.username, radar_dict)
+    # 原理：
+    # 1. 只有点击按钮的瞬间，Callback 会把 dialog_trigger 设置为对应的值。
+    # 2. 这里判断 trigger 的值，打开对应的 Dialog。
+    # 3. 立即把 trigger 设回 None。这样下次刷新时，条件就不再满足，不会重复弹出。
+    # 4. Streamlit 的 st.dialog 只要被调用一次，就会保持打开，直到用户关闭。
 
-    elif trigger_viz == T['DNA']:
+    trigger = st.session_state.dialog_trigger
+
+    if trigger == "daily":
+        daily_insight_dialog(st.session_state.username, radar_dict)
+        st.session_state.dialog_trigger = None # 立即复位
+
+    elif trigger == T['DNA']:
         viz.view_radar_details(radar_dict, st.session_state.username)
+        st.session_state.dialog_trigger = None # 立即复位
              
-    elif trigger_viz == T['Map']: 
+    elif trigger == T['Map']: 
         all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
         viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+        st.session_state.dialog_trigger = None # 立即复位
 
-    # === 页面路由渲染 ===
+    # === 页面路由 ===
     if selected_menu == T['Logout']: 
         st.session_state.clear()
         st.rerun()
-    elif selected_menu == T['AI']: 
-        pages.render_ai_page(st.session_state.username)
-    elif selected_menu == T['Chat']: 
-        pages.render_friends_page(st.session_state.username, unread_counts)
-    elif selected_menu == T['World']: 
-        pages.render_world_page()
-    elif selected_menu == T['God']: 
-        pages.render_admin_dashboard()
+    elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
+    elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
+    elif selected_menu == T['World']: pages.render_world_page()
+    elif selected_menu == T['God']: pages.render_admin_dashboard()
