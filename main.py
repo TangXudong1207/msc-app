@@ -8,6 +8,7 @@ import json
 import msc_forest as forest
 import msc_i18n as i18n 
 import time
+import random
 
 # ==========================================
 # 🎨 CSS：Cyber-Zen 极简主义设计系统
@@ -33,6 +34,7 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
+        /* 聊天气泡 */
         .chat-bubble-me {
             background-color: #2D2D2D; 
             color: #FFFFFF; 
@@ -82,21 +84,23 @@ def inject_custom_css():
         }
         .meaning-dot-btn:hover { opacity: 1.0; }
         
-        /* 每日洞察卡片 */
+        /* 每日洞察卡片样式 */
         .daily-card {
             border: 1px solid #DDD; 
             background: #F0F2F6; 
-            padding: 20px;
+            padding: 24px;
             border-radius: 4px;
             text-align: center;
+            margin-top: 10px;
             margin-bottom: 20px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
+            font-size: 14px;
             color: #333;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
         .daily-label {
-            font-size: 9px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 12px;
-            border-bottom: 1px solid #DDD; padding-bottom: 5px;
+            font-size: 10px; text-transform: uppercase; letter-spacing: 4px; color: #999; margin-bottom: 16px;
+            border-bottom: 1px solid #DDD; padding-bottom: 8px;
         }
         
         header, [data-testid="stHeader"] {
@@ -120,57 +124,89 @@ if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
-# 事件状态初始化
-if "viz_clicked" not in st.session_state: st.session_state.viz_clicked = None
-if "daily_clicked" not in st.session_state: st.session_state.daily_clicked = None
 
 # ==========================================
-# ⚡ 回调函数
+# 📚 本地备用语录 (Local Fallback)
+# 确保在 API 失败时，用户依然能看到有深度的内容
 # ==========================================
-def on_viz_change():
-    st.session_state.viz_clicked = st.session_state.viz_toolbar
-    st.session_state.viz_toolbar = None
+LOCAL_INSIGHTS = {
+    "en": [
+        "What constitutes the boundary of your self?",
+        "Is your current silence a form of speech?",
+        "If memory is a vector, where is it pointing now?",
+        "Are you observing the world, or is the world observing you?",
+        "Structure is the solidified form of meaning.",
+        "Chaos is just a pattern we haven't recognized yet."
+    ],
+    "zh": [
+        "构成你“自我”边界的究竟是什么？",
+        "你此刻的沉默，是否也是一种表达？",
+        "如果记忆是一个向量，它现在指向哪里？",
+        "是你正在观察世界，还是世界正在观察你？",
+        "结构，是意义凝固后的形态。",
+        "混乱，只是我们尚未识别出的模式。"
+    ]
+}
 
-def on_daily_change():
-    st.session_state.daily_clicked = st.session_state.daily_trigger
-    st.session_state.daily_trigger = None
+def get_fallback_insight():
+    lang = st.session_state.language
+    # 默认为英文，如果是中文则切换
+    pool = LOCAL_INSIGHTS.get(lang, LOCAL_INSIGHTS['en'])
+    return random.choice(pool)
 
 # ==========================================
-# 🔭 弹窗定义 (Daily Insight)
+# 🔭 每日洞察弹窗 (Robust Version)
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 使用 session_state 缓存结果
-    if "daily_q_cache" not in st.session_state: 
-        st.session_state.daily_q_cache = None
-    
-    # 核心逻辑：如果缓存为空，生成问题
-    if st.session_state.daily_q_cache is None:
-        try:
-            with st.spinner("Extracting meaning from the void..."):
-                q = msc.generate_daily_question(username, radar)
-                # 容错：如果 API 返回空或 None，使用默认值
-                if not q: q = "What constitutes the boundary of your self?"
-                st.session_state.daily_q_cache = q
-        except:
-             st.session_state.daily_q_cache = "Silence is also an answer."
+    # 1. 状态管理：如果还没生成过，初始化为 None
+    if "daily_content" not in st.session_state:
+        st.session_state.daily_content = None
 
-    # 渲染内容
-    content = st.session_state.daily_q_cache
+    # 2. 生成逻辑
+    if st.session_state.daily_content is None:
+        # 显示加载动画
+        with st.container():
+            st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Collective Mind...</div>", unsafe_allow_html=True)
+            with st.spinner(""):
+                try:
+                    # 尝试调用 AI
+                    # 设定一个较短的超时逻辑模拟 (实际 API 调用在 lib 中)
+                    insight = msc.generate_daily_question(username, radar)
+                    
+                    # 核心检查：如果返回空，或者包含 Error，强制使用本地库
+                    if not insight or "error" in str(insight).lower() or len(str(insight)) < 5:
+                        raise ValueError("Invalid AI Response")
+                    
+                    st.session_state.daily_content = insight
+                    
+                except Exception as e:
+                    # 兜底：使用本地语录
+                    st.session_state.daily_content = get_fallback_insight()
+            
+            # 强制刷新以显示内容
+            st.rerun()
+
+    # 3. 显示内容 (此时 daily_content 一定有值)
+    content = st.session_state.daily_content
+    
     st.markdown(
         f"""
-        <div class='daily-card' style='margin-top: 20px;'>
+        <div class='daily-card'>
             <div class='daily-label'>REFLECTION PROTOCOL</div>
-            <div style='font-size: 1.1em; line-height: 1.6; font-weight: 600;'>{content}</div>
+            <div style='font-size: 1.2em; line-height: 1.6; font-weight: 600; color: #222;'>
+                {content}
+            </div>
         </div>
         """, 
         unsafe_allow_html=True
     )
     
-    st.caption("This question is generated based on your current soul topology.")
+    st.caption("Generated based on your cognitive topology.")
     
-    if st.button("Regenerate", use_container_width=True):
-        st.session_state.daily_q_cache = None
+    # 4. 重新生成按钮
+    if st.button("Regenerate Signal", use_container_width=True):
+        st.session_state.daily_content = None
         st.rerun()
 
 # ==========================================
@@ -239,34 +275,31 @@ else:
 
         st.divider()
 
-        # 每日一问 (触发按钮)
-        sac.buttons([
+        # 每日一问触发器 (sac.buttons)
+        # index=None 保证点击后不保持选中状态
+        daily_btn = sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_trigger", on_change=on_daily_change)
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_main_btn")
         
-        # 触发弹窗
-        if st.session_state.daily_clicked == T['Ins']:
+        # 触发逻辑
+        if daily_btn == T['Ins']:
             daily_insight_dialog(st.session_state.username, radar_dict)
-            st.session_state.daily_clicked = None # 重置
 
         # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
         # 可视化工具栏
-        sac.buttons([
+        viz_btn = sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_toolbar", on_change=on_viz_change)
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_main_btn")
         
-        if st.session_state.viz_clicked == T['DNA']:
+        if viz_btn == T['DNA']:
              viz.view_radar_details(radar_dict, st.session_state.username)
-             st.session_state.viz_clicked = None
-             
-        elif st.session_state.viz_clicked == T['Map']:
+        elif viz_btn == T['Map']:
              all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
              viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
-             st.session_state.viz_clicked = None 
 
         st.divider()
         
