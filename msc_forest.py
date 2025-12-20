@@ -1,6 +1,5 @@
 ### msc_forest.py ###
 import streamlit as st
-import streamlit_antd_components as sac 
 from streamlit_echarts import st_echarts
 import random
 import math
@@ -82,18 +81,50 @@ def gen_pulse(n, r=8, center=(0,0,0)):
         pts.append([x,y,z])
     return pts
 
+# 补全缺失的 gen_antlers 函数
+def gen_antlers(n, spread=15, center=(0,0,0)):
+    pts = []
+    for _ in range(n):
+        t = random.uniform(0, 1)
+        side = random.choice([-1, 1])
+        # 基础向上弯曲的角
+        x = side * (spread * t * (1 + 0.1*random.random()))
+        z = 18 * (t**1.2) + random.gauss(0, 0.5)
+        y = random.gauss(0, 0.8)
+        
+        # 偶尔添加分叉
+        if t > 0.5 and random.random() > 0.7:
+            branch_len = random.uniform(2, 5)
+            angle = random.uniform(math.pi/6, math.pi/3) * side
+            x += branch_len * math.cos(angle)
+            z += branch_len * math.sin(angle)
+
+        pts.append([center[0]+x, center[1]+y, center[2]+z + 5])
+    return pts
+
 # ==========================================
 # 🧬 2. 混合算法 (v2.0)
 # ==========================================
 def synthesize_creature_data(radar, user_nodes):
     if not radar: radar = {"Care": 3.0, "Agency": 3.0}
-    sorted_attr = sorted(radar.items(), key=lambda x: x[1], reverse=True)
-    primary_attr, p_score = sorted_attr[0]
-    secondary_attr, s_score = sorted_attr[1]
+    # 过滤掉非法的键值
+    valid_radar = {k: v for k, v in radar.items() if k in ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]}
+    if not valid_radar: valid_radar = {"Care": 3.0, "Agency": 3.0}
+    
+    sorted_attr = sorted(valid_radar.items(), key=lambda x: x[1], reverse=True)
+    # 确保至少有两个属性，否则兜底
+    if len(sorted_attr) >= 2:
+        primary_attr, p_score = sorted_attr[0]
+        secondary_attr, s_score = sorted_attr[1]
+    else:
+        primary_attr, p_score = "Care", 5.0
+        secondary_attr, s_score = "Agency", 5.0
+
     
     base_count = max(600, len(user_nodes) * 4) 
     raw_points = []
     
+    # 主体结构
     body_pts = []
     if primary_attr == "Coherence": body_pts = gen_sphere(int(base_count*0.6), r=8)
     elif primary_attr == "Agency": body_pts = gen_pillar(int(base_count*0.6), h=25, r=4, taper=0.3)
@@ -104,6 +135,7 @@ def synthesize_creature_data(radar, user_nodes):
     else: p1 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,-4)); p2 = gen_sphere(int(base_count*0.3), r=5, center=(0,0,4)); body_pts = p1 + p2
     raw_points.extend(body_pts)
 
+    # 修饰结构
     mod_pts = []
     if secondary_attr == "Agency": mod_pts = gen_wings(int(base_count*0.4), span=25, center=(0,0,5))
     elif secondary_attr == "Transcendence": mod_pts = gen_pulse(int(base_count*0.4), r=5, center=(0,0,0))
@@ -154,10 +186,9 @@ def synthesize_creature_data(radar, user_nodes):
 def render_forest_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    required_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
-    for k in required_keys:
-        if k not in radar_dict: radar_dict[k] = 3.0
-            
+    # 确保雷达数据存在
+    if not radar_dict: radar_dict = {k:3.0 for k in ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]}
+
     echarts_data, p_attr, s_attr = synthesize_creature_data(radar_dict, user_nodes)
     
     lang = st.session_state.get('language', 'en')
@@ -197,6 +228,4 @@ def render_forest_scene(radar_dict, user_nodes=None):
         "series": [{ "type": 'scatter3D', "data": echarts_data, "shading": 'lambert', "emphasis": { "label": { "show": True, "formatter": "{b}", "position": "top", "textStyle": {"color": "#fff", "fontSize": 12, "backgroundColor": "#000", "padding": [2,5]} }, "itemStyle": {"color": "#fff", "opacity": 1} } }]
     }
     st_echarts(options=option, height="350px")
-    
-    # 新增：添加颜色说明 (Expander 形式，折叠)
     viz.render_spectrum_legend()
