@@ -33,7 +33,32 @@ def get_physics_config(primary_attr, secondary_attr):
     s_conf = aspect_configs.get(secondary_attr, aspect_configs["Aesthetic"])
     physics_config = {**p_conf, **s_conf}
 
+    # 确保物理参数也是原生类型
+    for k, v in physics_config.items():
+        if isinstance(v, list):
+            physics_config[k] = [float(x) if isinstance(x, (int, float, np.number)) else x for x in v]
+        elif isinstance(v, (int, float, np.number)):
+            physics_config[k] = float(v)
+
     return physics_config
+
+# ==========================================
+# 🧹 数据类型清洗工具 (Type Cleaning Helper)
+# ==========================================
+def convert_to_native_types(obj):
+    """递归地将 numpy 类型转换为 Python 原生类型，以便 JSON 序列化"""
+    if isinstance(obj, dict):
+        return {k: convert_to_native_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_native_types(i) for i in obj]
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return convert_to_native_types(obj.tolist())
+    else:
+        return obj
 
 # ==========================================
 # 🕸️ 2. 网络构建器 (Network Builder)
@@ -43,7 +68,6 @@ def get_dimension_color(dim):
     """获取维度的颜色"""
     return config.SPECTRUM.get(config.DIMENSION_MAP_REV.get(dim, "Structure"), "#FFFFFF")
 
-# 建立反向映射以便查色
 config.DIMENSION_MAP_REV = {v: k for k, v in config.DIMENSION_MAP.items()}
 
 def generate_soul_network(radar_dict, user_nodes):
@@ -54,10 +78,8 @@ def generate_soul_network(radar_dict, user_nodes):
     clean_radar = {k: v for k, v in radar_dict.items() if k in valid_keys and v > 0}
     if not clean_radar: clean_radar = {"Care": 3.0, "Reflection": 3.0}
     
-    # 按分数排序
     sorted_dims = sorted(clean_radar.items(), key=lambda x: x[1], reverse=True)
     
-    # 🔴 最终修复点：确保使用 sorted_dims
     primary_attr = sorted_dims[0][0]
     secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr
     
@@ -172,4 +194,9 @@ def generate_soul_network(radar_dict, user_nodes):
 
     physics_config = get_physics_config(primary_attr, secondary_attr)
 
-    return nodes, edges, physics_config, primary_attr, secondary_attr
+    # 🔴 核心修复：在返回前清洗所有数据类型
+    clean_nodes = convert_to_native_types(nodes)
+    clean_edges = convert_to_native_types(edges)
+    clean_physics = convert_to_native_types(physics_config)
+
+    return clean_nodes, clean_edges, clean_physics, primary_attr, secondary_attr
