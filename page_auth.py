@@ -8,7 +8,6 @@ import msc_i18n as i18n
 # 🔐 登录页 (Browser-Friendly Edition)
 # ==========================================
 def render_login_page():
-    # 注入登录页专用 CSS
     st.markdown("""
     <style>
         .login-title { 
@@ -24,14 +23,29 @@ def render_login_page():
             margin-top: -10px; 
             font-weight: 300; 
         }
-        /* 调整表单按钮宽度，使其填满容器 */
+        
+        /* 🛠️ 核心修改：按钮居中 & 样式优化 */
+        [data-testid="stForm"] .stButton {
+            text-align: center; /* 容器居中 */
+        }
         [data-testid="stForm"] button { 
-            width: 100%; 
+            width: 50% !important; /* 宽度减半 */
+            margin: 0 auto !important; /* 水平居中 */
+            display: block !important;
             border-radius: 4px;
             font-family: 'JetBrains Mono', monospace;
+            background-color: #222; /* 稍微深一点的黑，更有质感 */
+            color: white;
+            border: none;
+        }
+        [data-testid="stForm"] button:hover {
+            background-color: #444;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
     </style>
     """, unsafe_allow_html=True)
+
 
     # 1. 语言记忆逻辑 (基于 URL 参数)
     # 检查 URL 是否有 lang 参数
