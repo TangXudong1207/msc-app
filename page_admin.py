@@ -13,44 +13,36 @@ def render_admin_dashboard():
     st.markdown("## 👁️ Overseer Terminal")
     st.caption("v75.5 Arrival / System Status: ONLINE")
     
-    # 获取数据
     all_users = msc.get_all_users("admin")
-    # 获取更多节点以供监控
     global_nodes = msc.get_global_nodes() 
     
     # === 📊 数据预处理 ===
-    # 1. 用户统计
     user_stats = {}
     if all_users:
         for u in all_users:
             user_stats[u['username']] = {'nodes': 0, 'total_score': 0.0}
             
-    # 2. 节点流数据准备
     node_stream_data = []
     
     if global_nodes:
         for n in global_nodes:
-            # 统计用户数据
             un = n['username']
             if un in user_stats:
                 user_stats[un]['nodes'] += 1
                 try: user_stats[un]['total_score'] += float(n.get('logic_score', 0))
                 except: pass
             
-            # 准备监控流表格数据
-            # 解析时间
             created_time = n.get('created_at', '')[:16].replace('T', ' ')
             
             node_stream_data.append({
                 "Time": created_time,
                 "User": un,
                 "Care Point": n.get('care_point', '-'),
-                "Full Content": n.get('content', ''), # 完整思考内容
+                "Full Content": n.get('content', ''), 
                 "Score": round(float(n.get('logic_score', 0)), 2),
                 "Insight": n.get('insight', '-')
             })
 
-    # 3. 用户表格数据准备
     rich_user_data = []
     if all_users:
         for u in all_users:
@@ -146,13 +138,19 @@ def render_admin_dashboard():
                             else:
                                 st.error(f"Failed: {msg}")
 
-    # === Tab 3: 地图 ===
+    # === Tab 3: 地图 (修复点击事件) ===
     with tabs[2]:
-        viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False)
+        st.markdown("#### 🌍 Network Topology")
+        # 传递 key_suffix="admin_map"
+        clicked_data = viz.render_cyberpunk_map(global_nodes, height="600px", is_fullscreen=False, key_suffix="admin_map")
+        
+        if clicked_data:
+            st.divider()
+            st.info(f"**Selected Node**: {clicked_data.get('content', 'Unknown')}")
+            st.caption(f"User: {clicked_data.get('username')} | Insight: {clicked_data.get('insight')}")
 
-    # === Tab 4: 模拟器 (AI 设置增强版) ===
+    # === Tab 4: 模拟器 ===
     with tabs[3]:
-        # 上半部分：批量操作
         c_gen1, c_gen2 = st.columns(2)
         with c_gen1:
             with st.container(border=True):
@@ -161,7 +159,7 @@ def render_admin_dashboard():
                 count_sim = st.slider("Quantity", 1, 5, 2, key="sim_qty")
                 if st.button("👥 Summon Random", use_container_width=True):
                     with st.spinner("Fabricating..."):
-                        sim.create_virtual_citizens(count_sim) # 假设sim库支持数量参数，或自行循环
+                        sim.create_virtual_citizens() 
                         st.success("Batch creation complete.")
                         time.sleep(1)
                         st.rerun()
@@ -176,11 +174,7 @@ def render_admin_dashboard():
                         for log in logs: st.text(log)
         
         st.divider()
-        
-        # 下半部分：自定义设计 (新增功能)
         st.markdown("#### 🔬 Laboratory: Custom Design")
-        st.caption("Manually fabricate a unique Simulacrum with specific traits.")
-        
         with st.expander("🧬 Open Creator Console", expanded=False):
             c_cust1, c_cust2 = st.columns([1, 1])
             with c_cust1:
@@ -196,14 +190,11 @@ def render_admin_dashboard():
             if st.button("🧬 Fabricate Custom Soul", use_container_width=True):
                 if new_name:
                     uname = f"sim_{new_name.lower().replace(' ', '_')}"
-                    # 手动创建用户
                     if msc.add_user(uname, "123456", new_name, new_city):
-                        # 构建自定义雷达数据
                         custom_radar = {
                             "Care": r_care, "Agency": r_agency, "Reflection": r_reflection,
                             "Empathy": r_empathy, "Curiosity": 5, "Coherence": 5, "Aesthetic": 5
                         }
-                        # 更新数据库
                         msc.update_radar_score(uname, json.dumps(custom_radar))
                         st.success(f"Identity {new_name} created successfully.")
                         time.sleep(1)
