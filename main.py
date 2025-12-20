@@ -119,20 +119,14 @@ st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state=
 inject_custom_css()
 
 # ==========================================
-# 🛠️ 核心：状态管理器 (中间人模式)
+# 🛠️ 状态管理：使用单一变量控制弹窗
 # ==========================================
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
-# 这里是关键：我们只修改这个变量，不碰组件的 key
-if "dialog_request" not in st.session_state: st.session_state.dialog_request = None
-
-# 回调函数：只负责把点击动作“转录”到 dialog_request
-def on_btn_click(key):
-    clicked_val = st.session_state.get(key)
-    if clicked_val:
-        st.session_state.dialog_request = clicked_val
+# 🟢 核心修复：用这个变量记录当前应该显示的弹窗
+if "active_modal" not in st.session_state: st.session_state.active_modal = None
 
 # ==========================================
 # 📚 本地备选语录库 (Fallback Library)
@@ -224,10 +218,12 @@ else:
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
+    # 引导检查
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
         st.stop()
     
+    # 首次进入自动发送消息
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
@@ -268,22 +264,28 @@ else:
         st.divider()
 
         # 1. 每日一问按钮
-        # ⚠️ 关键：绑定回调函数，args传入自己的key
-        sac.buttons([
+        # 🟢 修复逻辑：检测返回值，更新 active_modal 状态
+        daily_click = sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
-           key="daily_btn_key", on_change=on_btn_click, args=("daily_btn_key",))
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="side_daily_btn")
         
+        if daily_click == T['Ins']:
+            st.session_state.active_modal = 'daily'
+
+        # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
         # 2. 可视化工具栏
-        # ⚠️ 关键：绑定回调函数，args传入自己的key
-        sac.buttons([
+        viz_click = sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
-           key="viz_btn_key", on_change=on_btn_click, args=("viz_btn_key",))
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="side_viz_btn")
+
+        if viz_click == T['DNA']:
+            st.session_state.active_modal = 'dna'
+        elif viz_click == T['Map']:
+            st.session_state.active_modal = 'map'
 
         st.divider()
         
@@ -314,31 +316,30 @@ else:
             st.rerun()
 
     # ==========================================
-    # 🚀 弹窗逻辑 (中间人模式)
+    # 🚀 统一弹窗渲染区 (互斥且持久)
     # ==========================================
-    # 1. 检查中间人变量
-    request = st.session_state.dialog_request
-
-    if request == T['Ins']:
+    # 只要 active_modal 有值，就一直渲染对应的 Dialog
+    # 使用 if/elif 结构保证同一时间只有一个 Dialog 处于激活状态
+    
+    if st.session_state.active_modal == 'daily':
         daily_insight_dialog(st.session_state.username, radar_dict)
-        # 💥 这里的关键：我们重置“中间人”，而不是“组件 key”
-        # 这样就完全避开了 Streamlit 的 API 报错
-        st.session_state.dialog_request = None 
-
-    elif request == T['DNA']:
+    
+    elif st.session_state.active_modal == 'dna':
         viz.view_radar_details(radar_dict, st.session_state.username)
-        st.session_state.dialog_request = None 
              
-    elif request == T['Map']: 
+    elif st.session_state.active_modal == 'map': 
         all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
         viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
-        st.session_state.dialog_request = None 
 
     # === 页面路由 ===
     if selected_menu == T['Logout']: 
         st.session_state.clear()
         st.rerun()
-    elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
-    elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
-    elif selected_menu == T['World']: pages.render_world_page()
-    elif selected_menu == T['God']: pages.render_admin_dashboard()
+    elif selected_menu == T['AI']: 
+        pages.render_ai_page(st.session_state.username)
+    elif selected_menu == T['Chat']: 
+        pages.render_friends_page(st.session_state.username, unread_counts)
+    elif selected_menu == T['World']: 
+        pages.render_world_page()
+    elif selected_menu == T['God']: 
+        pages.render_admin_dashboard()
