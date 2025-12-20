@@ -32,7 +32,6 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }
         
-        /* 聊天气泡样式 */
         .chat-bubble-me {
             background-color: #2D2D2D; 
             color: #FFFFFF; 
@@ -123,18 +122,11 @@ if "language" not in st.session_state: st.session_state.language = "en"
 # 事件状态初始化 (用于解决死循环)
 if "viz_clicked" not in st.session_state: st.session_state.viz_clicked = None
 if "daily_clicked" not in st.session_state: st.session_state.daily_clicked = None
-if "refresh_clicked" not in st.session_state: st.session_state.refresh_clicked = None
 
 # ==========================================
-# ⚡ 回调函数：解决组件状态残留 (Stale State)
+# ⚡ 回调函数
 # ==========================================
 def on_viz_change():
-    """
-    当点击可视化按钮时触发。
-    1. 捕获点击的值。
-    2. 立即重置组件状态为 None。
-    这样下次 Rerun 时，组件看起来是未选中状态，逻辑上也不会重复触发。
-    """
     st.session_state.viz_clicked = st.session_state.viz_toolbar
     st.session_state.viz_toolbar = None
 
@@ -142,9 +134,32 @@ def on_daily_change():
     st.session_state.daily_clicked = st.session_state.daily_trigger
     st.session_state.daily_trigger = None
 
-def on_refresh_change():
-    st.session_state.refresh_clicked = st.session_state.daily_refresh
-    st.session_state.daily_refresh = None
+# ==========================================
+# 🔭 弹窗定义
+# ==========================================
+@st.dialog("⚡ DAILY INSIGHT", width="small")
+def daily_insight_dialog(username, radar):
+    # 如果还没有生成过，或者强制刷新
+    if "daily_q_cache" not in st.session_state: st.session_state.daily_q_cache = None
+    
+    if st.session_state.daily_q_cache is None:
+        with st.spinner("Analyzing resonance..."):
+            q = msc.generate_daily_question(username, radar)
+            st.session_state.daily_q_cache = q
+    
+    st.markdown(
+        f"""
+        <div class='daily-card' style='margin-top: 20px;'>
+            <div class='daily-label'>REFLECTION PROTOCOL</div>
+            <div style='font-size: 1.1em; line-height: 1.6;'>{st.session_state.daily_q_cache}</div>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    if st.button("Refresh Protocol", use_container_width=True):
+        st.session_state.daily_q_cache = None
+        st.rerun()
 
 # ==========================================
 # 🆕 首次接触逻辑
@@ -212,60 +227,33 @@ else:
 
         st.divider()
 
-        # 每日一问逻辑 (使用点击即焚逻辑)
-        if "daily_q" not in st.session_state: st.session_state.daily_q = None
+        # 每日一问逻辑 (弹窗版)
+        sac.buttons([
+            sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_trigger", on_change=on_daily_change)
         
-        if st.session_state.daily_q is None:
-            # 1. 渲染按钮 (带闪电图标，Line风格)
-            sac.buttons([
-                sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
-            ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_trigger", on_change=on_daily_change)
-            
-            # 2. 检查事件
-            if st.session_state.daily_clicked == T['Ins']:
-                with st.spinner("Extracting meaning..."):
-                    st.session_state.daily_q = msc.generate_daily_question(st.session_state.username, radar_dict)
-                st.session_state.daily_clicked = None # 消费事件
-                st.rerun()
-        else:
-            st.markdown(
-                f"""
-                <div class='daily-card'>
-                    <div class='daily-label'>DAILY_PROTOCOL</div>
-                    {st.session_state.daily_q}
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
-            # 刷新按钮
-            sac.buttons([
-                sac.ButtonsItem(label=T['Ref'], icon='arrow-clockwise')
-            ], align='center', variant='outline', radius='sm', size='xs', use_container_width=True, index=None, color='#FF4B4B', key="daily_refresh", on_change=on_refresh_change)
-            
-            if st.session_state.refresh_clicked == T['Ref']:
-                st.session_state.daily_q = None
-                st.session_state.refresh_clicked = None # 消费事件
-                st.rerun()
+        if st.session_state.daily_clicked == T['Ins']:
+            daily_insight_dialog(st.session_state.username, radar_dict)
+            st.session_state.daily_clicked = None # 重置状态
 
         # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
-        # 可视化工具栏 (使用点击即焚逻辑)
+        # 可视化工具栏
         sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_toolbar", on_change=on_viz_change)
         
-        # 逻辑处理：只在事件存在的那个瞬间触发
         if st.session_state.viz_clicked == T['DNA']:
              viz.view_radar_details(radar_dict, st.session_state.username)
-             st.session_state.viz_clicked = None # 消费事件，防止下次 Rerun 再次触发
+             st.session_state.viz_clicked = None
              
         elif st.session_state.viz_clicked == T['Map']:
              all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
              viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
-             st.session_state.viz_clicked = None # 消费事件
+             st.session_state.viz_clicked = None 
 
         st.divider()
         
