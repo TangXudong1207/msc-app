@@ -1,4 +1,3 @@
-### msc_main.py ###
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -124,6 +123,17 @@ if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
+# 关键状态：用于捕获点击动作并分发 Dialog
+if "pending_dialog" not in st.session_state: st.session_state.pending_dialog = None
+
+# ==========================================
+# ⚡ 核心修复：回调函数用于捕获动作
+# ==========================================
+def on_action_click(key):
+    """当按钮被点击时，将对应的值存入待处理队列"""
+    clicked_val = st.session_state.get(key)
+    if clicked_val:
+        st.session_state.pending_dialog = clicked_val
 
 # ==========================================
 # 📚 本地备选语录库 (Fallback Library)
@@ -163,19 +173,15 @@ def daily_insight_dialog(username, radar):
 
     # 2. 生成逻辑
     if st.session_state.daily_content is None:
-        # 显示加载动画
         with st.container():
             st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
             with st.spinner(""):
                 try:
-                    # 尝试调用 AI
                     insight = msc.generate_daily_question(username, radar)
-                    # 核心检查：如果返回空，强制使用本地库
                     if not insight or "error" in str(insight).lower() or len(str(insight)) < 5:
                         raise ValueError("Invalid AI Response")
                     st.session_state.daily_content = insight
                 except:
-                    # 兜底：使用本地语录
                     st.session_state.daily_content = get_fallback_insight()
             st.rerun()
 
@@ -194,7 +200,6 @@ def daily_insight_dialog(username, radar):
     )
     st.caption("Generated based on your cognitive topology.")
     
-    # 4. 重新生成按钮
     if st.button("Regenerate Signal", use_container_width=True):
         st.session_state.daily_content = None
         st.rerun()
@@ -223,16 +228,13 @@ else:
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
-    # 引导检查
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
         st.stop()
     
-    # 首次进入自动发送消息
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
-    # 获取雷达资料
     user_profile = msc.get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
     if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
@@ -269,25 +271,26 @@ else:
 
         st.divider()
 
-        # 每日一问触发器 (sac.buttons)
-        # index=None 保证点击即触发
-        daily_trigger = sac.buttons([
+        # 每日一问按钮 (使用回调解决冲突)
+        sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_main_btn")
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
+           key="btn_daily_main", on_change=on_action_click, args=("btn_daily_main",))
         
         # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
-        # 可视化工具栏
-        viz_trigger = sac.buttons([
+        # 可视化工具栏 (使用回调解决冲突)
+        sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_main_btn")
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
+           key="btn_viz_main", on_change=on_action_click, args=("btn_viz_main",))
 
         st.divider()
         
-        # 核心导航菜单
+        # 核心菜单
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
@@ -302,7 +305,6 @@ else:
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
         st.divider()
-        # 语言切换
         lang_opts = ['EN', '中文']
         curr_idx = 0 if st.session_state.language == 'en' else 1
         lang_choice = sac.segmented(
@@ -314,15 +316,19 @@ else:
             st.session_state.language = mapped_lang
             st.rerun()
 
-    # === 🚀 触发逻辑处理 (必须在主循环中) ===
-    
-    if daily_trigger == T['Ins']:
+    # ==========================================
+    # 🚀 统一分发器：确保一轮只开启一个 Dialog
+    # ==========================================
+    if st.session_state.pending_dialog == T['Ins']:
+        st.session_state.pending_dialog = None # 立刻清理
         daily_insight_dialog(st.session_state.username, radar_dict)
-
-    if viz_trigger == T['DNA']:
+    
+    elif st.session_state.pending_dialog == T['DNA']:
+        st.session_state.pending_dialog = None # 立刻清理
         viz.view_radar_details(radar_dict, st.session_state.username)
              
-    if viz_trigger == T['Map']: 
+    elif st.session_state.pending_dialog == T['Map']: 
+        st.session_state.pending_dialog = None # 立刻清理
         all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
         viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
 
@@ -330,11 +336,7 @@ else:
     if selected_menu == T['Logout']: 
         st.session_state.clear()
         st.rerun()
-    elif selected_menu == T['AI']: 
-        pages.render_ai_page(st.session_state.username)
-    elif selected_menu == T['Chat']: 
-        pages.render_friends_page(st.session_state.username, unread_counts)
-    elif selected_menu == T['World']: 
-        pages.render_world_page()
-    elif selected_menu == T['God']: 
-        pages.render_admin_dashboard()
+    elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
+    elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
+    elif selected_menu == T['World']: pages.render_world_page()
+    elif selected_menu == T['God']: pages.render_admin_dashboard()
