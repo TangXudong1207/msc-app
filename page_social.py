@@ -36,7 +36,7 @@ def render_lock_screen(current_count, target_count, title, message):
         st.progress(min(current_count / target_count, 1.0))
 
 # ==========================================
-# 🚀 升空动画 (Ascension) - 解锁时播放
+# 🚀 升空动画 (Ascension)
 # ==========================================
 def render_ascension_animation():
     st.markdown("""
@@ -61,7 +61,7 @@ def render_ascension_animation():
             border: 1px solid #E0E0E0;
         }
         .guide-arrow {
-            position: fixed; top: 80px; left: 20px; /* 调整位置指向左上角菜单 */
+            position: fixed; top: 80px; left: 20px;
             font-size: 2em; color: #FF2B2B; z-index: 10001;
             font-weight: bold;
             animation: bounce 1s infinite;
@@ -72,18 +72,15 @@ def render_ascension_animation():
             50% { transform: translateX(10px); }
         }
     </style>
-    
     <div class='ascension-msg'>
         <div>阈值突破</div>
         <div style='font-size:0.5em; margin-top:10px; color:#666; letter-spacing: 2px;'>THRESHOLD BREACHED</div>
         <div style='font-size:0.4em; margin-top:20px; font-family:monospace; color: #00CCFF;'>World Layer Access: GRANTED</div>
     </div>
-    
     <div class='particle' style='left:10%; animation-duration: 4s;'></div>
     <div class='particle' style='left:30%; animation-duration: 2.5s;'></div>
     <div class='particle' style='left:60%; animation-duration: 3.2s;'></div>
     <div class='particle' style='left:80%; animation-duration: 4.5s;'></div>
-    
     <div class='guide-arrow'>⬅ CLICK 'WORLD'</div>
     """, unsafe_allow_html=True)
     
@@ -234,4 +231,4 @@ def render_world_page():
     with c3: st.metric("Your Contribution", count)
     
     # 新增：光谱图例
-    viz.render_spectrum_legend())
+    viz.render_spectrum_legend()
