@@ -119,7 +119,7 @@ if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
-# 事件状态初始化 (用于解决死循环)
+# 事件状态初始化
 if "viz_clicked" not in st.session_state: st.session_state.viz_clicked = None
 if "daily_clicked" not in st.session_state: st.session_state.daily_clicked = None
 
@@ -135,29 +135,36 @@ def on_daily_change():
     st.session_state.daily_trigger = None
 
 # ==========================================
-# 🔭 弹窗定义
+# 🔭 弹窗定义 (使用 st.dialog 装饰器)
 # ==========================================
-@st.dialog("⚡ DAILY INSIGHT", width="small")
+@st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 如果还没有生成过，或者强制刷新
-    if "daily_q_cache" not in st.session_state: st.session_state.daily_q_cache = None
+    # 使用 session_state 缓存结果，防止弹窗内刷新丢失
+    if "daily_q_cache" not in st.session_state: 
+        st.session_state.daily_q_cache = None
     
+    # 如果缓存为空，则生成
     if st.session_state.daily_q_cache is None:
-        with st.spinner("Analyzing resonance..."):
+        with st.spinner("Extracting meaning from the void..."):
+            # 模拟一点延迟感
+            time.sleep(0.5) 
             q = msc.generate_daily_question(username, radar)
             st.session_state.daily_q_cache = q
     
+    # 渲染内容
     st.markdown(
         f"""
         <div class='daily-card' style='margin-top: 20px;'>
             <div class='daily-label'>REFLECTION PROTOCOL</div>
-            <div style='font-size: 1.1em; line-height: 1.6;'>{st.session_state.daily_q_cache}</div>
+            <div style='font-size: 1.1em; line-height: 1.6; font-weight: 600;'>{st.session_state.daily_q_cache}</div>
         </div>
         """, 
         unsafe_allow_html=True
     )
     
-    if st.button("Refresh Protocol", use_container_width=True):
+    st.caption("This question is generated based on your current soul topology.")
+    
+    if st.button("Regenerate", use_container_width=True):
         st.session_state.daily_q_cache = None
         st.rerun()
 
@@ -227,14 +234,16 @@ else:
 
         st.divider()
 
-        # 每日一问逻辑 (弹窗版)
+        # 每日一问 (触发逻辑)
         sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_trigger", on_change=on_daily_change)
         
+        # 检查事件：如果点击了按钮，则调用弹窗函数
+        # st.dialog 装饰的函数被调用时，会自动在前端渲染模态框
         if st.session_state.daily_clicked == T['Ins']:
             daily_insight_dialog(st.session_state.username, radar_dict)
-            st.session_state.daily_clicked = None # 重置状态
+            st.session_state.daily_clicked = None # 消费事件
 
         # === 森林与工具栏 ===
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
