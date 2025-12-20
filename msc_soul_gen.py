@@ -173,4 +173,3 @@ def generate_soul_network(radar_dict, user_nodes):
     physics_config = get_physics_config(primary_attr, secondary_attr)
 
     return nodes, edges, physics_config, primary_attr, secondary_attr
-    
