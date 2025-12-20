@@ -11,31 +11,68 @@ import random
 import msc_config as config 
 
 # ==========================================
-# 🎨 CSS：Cyber-Zen 极简主义设计系统
+# 🎨 CSS：Cyber-Zen 极简主义设计系统 & PWA 配置
 # ==========================================
 def inject_custom_css():
-    st.markdown("""
+    # 🔴🔴🔴 【重要】请将下方的链接替换为你上传到 GitHub 后的图标 Raw 链接！ 🔴🔴🔴
+    APP_ICON_URL = "YOUR_GITHUB_RAW_LINK_HERE"
+    # 例如: "https://raw.githubusercontent.com/username/repo/main/msc_icon.png"
+    
+    # 如果你还没上传图标，可以使用下面这个临时链接占位，体验一下效果：
+    # APP_ICON_URL = "https://placehold.co/512x512/050505/FFFFFF/png?text=MSC&font=montserrat"
+
+    st.markdown(f"""
+    <head>
+        <!-- 浏览器标签页标题 -->
+        <title>MSC v75.5</title>
+        
+        <!-- 浏览器标签图标 (Favicon) -->
+        <link rel="icon" type="image/png" href="{APP_ICON_URL}">
+        <link rel="shortcut icon" type="image/png" href="{APP_ICON_URL}">
+        
+        <!-- iOS 主屏幕图标配置 -->
+        <link rel="apple-touch-icon" href="{APP_ICON_URL}">
+        <link rel="apple-touch-icon" sizes="152x152" href="{APP_ICON_URL}">
+        <link rel="apple-touch-icon" sizes="180x180" href="{APP_ICON_URL}">
+        <link rel="apple-touch-icon" sizes="167x167" href="{APP_ICON_URL}">
+        
+        <!-- PWA 移动端全屏体验配置 -->
+        <meta name="apple-mobile-web-app-title" content="MSC">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+        
+        <!-- Android 主屏幕配置 -->
+        <meta name="theme-color" content="#050505">
+        <meta name="mobile-web-app-capable" content="yes">
+    </head>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
         
-        html, body, [class*="css"] {
+        html, body, [class*="css"] {{
             font-family: 'Inter', sans-serif;
             color: #2D3436;
-        }
-        code, .stCode, .monospaced {
-            font-family: 'JetBrains Mono', monospace !important;
-        }
+            # 修复 iOS 滚动回弹时的背景色
+            background-color: #FAFAFA;
+        }}
 
-        .stApp { background-color: #FAFAFA; }
+        /* 隐藏 Streamlit 默认顶部栏和汉堡菜单，打造原生感 */
+        header[data-testid="stHeader"] {{ visibility: hidden !important; height: 0 !important; }}
+        [data-testid="stDecoration"] {{ display: none !important; }}
+        #MainMenu {{ visibility: hidden; }}
+        footer {{ visibility: hidden; }}
+
+        .stApp {{ background-color: #FAFAFA; }}
         
-        [data-testid="stSidebar"] {
+        [data-testid="stSidebar"] {{
             background-color: #FFFFFF;
             border-right: 1px solid #F0F0F0;
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
-        }
+        }}
         
-        /* 🛠️ 核心修改：美化原生 st.button，替代 sac.buttons */
-        .stButton > button {
+        /* 美化原生 st.button，替代 sac.buttons */
+        .stButton > button {{
             width: 100%;
             border-radius: 6px;
             font-weight: 500;
@@ -46,19 +83,20 @@ def inject_custom_css():
             transition: all 0.2s;
             font-family: 'JetBrains Mono', monospace;
             font-size: 14px;
-        }
-        .stButton > button:hover {
+        }}
+        .stButton > button:hover {{
             border-color: #FF4B4B;
             color: #FF4B4B;
             background: #FFF5F5;
             transform: translateY(-1px);
             box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        }
-        .stButton > button:active {
+        }}
+        .stButton > button:active {{
             background: #FFE0E0;
-        }
+            transform: translateY(0px);
+        }}
         
-        .chat-bubble-me {
+        .chat-bubble-me {{
             background-color: #2D2D2D; 
             color: #FFFFFF; 
             padding: 14px 18px; 
@@ -71,9 +109,9 @@ def inject_custom_css():
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             position: relative;
             float: right; clear: both; margin-bottom: 8px;
-        }
+        }}
         
-        .chat-bubble-other {
+        .chat-bubble-other {{
             background-color: #FFFFFF; 
             color: #333; 
             padding: 14px 18px; 
@@ -86,9 +124,9 @@ def inject_custom_css():
             line-height: 1.6;
             box-shadow: 0 1px 4px rgba(0,0,0,0.03);
             float: left; clear: both; margin-bottom: 8px;
-        }
+        }}
         
-        .chat-bubble-ai {
+        .chat-bubble-ai {{
             background: #F8F9FA;
             color: #666;
             border-left: 3px solid #00CCFF; 
@@ -99,10 +137,16 @@ def inject_custom_css():
             width: 100%;
             clear: both;
             border-radius: 0 4px 4px 0;
-        }
+        }}
+        
+        .meaning-dot-btn {{ 
+            display: flex; align-items: center; justify-content: center; height: 100%; 
+            opacity: 0.6; transition: opacity 0.3s;
+        }}
+        .meaning-dot-btn:hover {{ opacity: 1.0; }}
         
         /* 每日洞察卡片 */
-        .daily-card {
+        .daily-card {{
             border: 1px solid #DDD; 
             background: #F0F2F6; 
             padding: 24px;
@@ -114,22 +158,14 @@ def inject_custom_css():
             font-size: 14px;
             color: #333;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        }
-        .daily-label {
+        }}
+        .daily-label {{
             font-size: 10px; text-transform: uppercase; letter-spacing: 4px; color: #999; margin-bottom: 16px;
             border-bottom: 1px solid #DDD; padding-bottom: 8px;
-        }
+        }}
         
-        header, [data-testid="stHeader"] {
-            visibility: visible !important;
-            background-color: transparent !important;
-            z-index: 100000 !important;
-        }
-        [data-testid="stDecoration"] { display: none !important; visibility: hidden !important; }
-        [data-testid="stHeader"] button { color: #222 !important; border-color: transparent !important; }
-        [data-testid="stHeader"] button:hover { background-color: rgba(0,0,0,0.05) !important; }
-        [data-testid="stHeader"] svg { fill: #333 !important; }
-        .stToast { background-color: #333 !important; color: #fff !important; border-radius: 0px !important; }
+        .stToast {{ background-color: #333 !important; color: #fff !important; border-radius: 0px !important; }}
+        code, .stCode, .monospaced {{ font-family: 'JetBrains Mono', monospace !important; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -273,8 +309,7 @@ else:
 
         st.divider()
 
-        # 1. 每日一问按钮 (原生 st.button + 自定义CSS)
-        # 稳健：点击后直接执行下方的 if 逻辑，下次运行自动为 False
+        # 1. 每日一问按钮 (原生 st.button)
         if st.button(f"⚡ {T['Ins']}", use_container_width=True):
             daily_insight_dialog(st.session_state.username, radar_dict)
         
@@ -309,6 +344,8 @@ else:
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
         st.divider()
+        
+        # 语言切换
         lang_opts = ['EN', '中文']
         curr_idx = 0 if st.session_state.language == 'en' else 1
         lang_choice = sac.segmented(
@@ -319,6 +356,31 @@ else:
         if mapped_lang != st.session_state.language:
             st.session_state.language = mapped_lang
             st.rerun()
+            
+        # 📱 移动端安装引导 (折叠在最下方)
+        st.divider()
+        with st.expander("📲 Install App / 安装到桌面"):
+            st.caption("Add to Home Screen for fullscreen mode.")
+            if lang == 'zh':
+                st.markdown("""
+                **iOS (Safari):**
+                1. 点击分享按钮 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Apple_Share_Icon.png/640px-Apple_Share_Icon.png" width="12"/>
+                2. 选择 **“添加到主屏幕”**
+                
+                **Android (Chrome):**
+                1. 点击菜单 (⋮)
+                2. 选择 **“安装应用”** 或 **“添加到主屏幕”**
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                **iOS (Safari):**
+                1. Click Share <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Apple_Share_Icon.png/640px-Apple_Share_Icon.png" width="12"/>
+                2. Select **'Add to Home Screen'**
+                
+                **Android:**
+                1. Click Menu (⋮)
+                2. Select **'Install App'**
+                """, unsafe_allow_html=True)
 
     # === 页面路由 ===
     if selected_menu == T['Logout']: 
