@@ -17,7 +17,6 @@ def render_login_page():
             font-weight: 700; 
             font-size: 3em; 
             color: #333; 
-            text-align: center;
         }
         .login-subtitle { 
             color: #888; 
@@ -25,52 +24,53 @@ def render_login_page():
             font-size: 0.8em; 
             margin-top: -10px; 
             font-weight: 300; 
-            text-align: center;
         }
         
-        /* 🛠️ 布局核心：强制对齐 */
-        
-        /* 1. 提交按钮的外层容器：强制 Flex 居中，消除默认边距干扰 */
+        /* 🛠️ 修复核心：让按钮填满宽度，自动解决居中问题 */
+        /* 1. 针对提交按钮容器 */
         [data-testid="stFormSubmitButton"] {
-            display: flex !important;
-            justify-content: center !important; /* 水平居中 */
-            align-items: center !important;
-            width: 100% !important;
             border: none !important;
             padding: 0 !important;
-            margin: 0 !important;
+            width: 100% !important;
         }
         
-        /* 2. 按钮本体：填满容器，文字居中 */
+        /* 2. 针对按钮本体 */
         [data-testid="stFormSubmitButton"] button { 
-            width: 100% !important; /* 填满 */
+            width: 100% !important; /* 填满整行 */
+            margin: 10px 0 0 0 !important; /* 上方留一点空隙 */
             display: block !important;
-            margin: 15px 0 0 0 !important; /* 仅保留顶部间距 */
-            
             border-radius: 4px !important;
             font-family: 'JetBrains Mono', monospace !important;
             background-color: #FF4B4B !important; /* 红色 */
             color: white !important;
             border: none !important;
-            height: 45px !important; 
-            
-            /* 文字排版 */
-            text-align: center !important;
-            font-weight: 600 !important;
-            letter-spacing: 1px !important;
+            height: 45px !important; /* 增加高度，与输入框匹配 */
             font-size: 14px !important;
-            line-height: 45px !important; /* 垂直居中文字 */
-            padding: 0 !important;
+            letter-spacing: 1px !important;
+            font-weight: 600 !important;
         }
         
         /* 3. 悬停效果 */
         [data-testid="stFormSubmitButton"] button:hover {
             background-color: #FF2B2B !important;
-            box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 75, 75, 0.2);
         }
     </style>
     """, unsafe_allow_html=True)
+
+    # 1. 语言记忆逻辑
+    qp = st.query_params
+    url_lang = qp.get("lang", "en")
+    
+    if "language" not in st.session_state:
+        st.session_state.language = url_lang
+
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    with c2:
+        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+        
     # 1. 语言记忆逻辑
     qp = st.query_params
     url_lang = qp.get("lang", "en")
