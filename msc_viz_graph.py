@@ -1,4 +1,4 @@
-### msc_viz_graph.py ###import streamlit as st
+### msc_viz_graph.py ###
 import streamlit as st
 from streamlit_echarts import st_echarts
 import json
