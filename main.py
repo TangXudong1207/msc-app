@@ -124,6 +124,16 @@ if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
+if "viz_clicked" not in st.session_state: st.session_state.viz_clicked = None # 状态追踪
+
+# ==========================================
+# ⚡ 核心修复：防止死循环的回调
+# ==========================================
+def on_viz_change():
+    # 捕获点击的值
+    st.session_state.viz_clicked = st.session_state.viz_main_btn
+    # 立即重置组件状态
+    st.session_state.viz_main_btn = None
 
 # ==========================================
 # 📚 本地备选语录库 (Fallback Library)
@@ -275,11 +285,12 @@ else:
         st.divider()
 
         # 每日一问触发器 (sac.buttons)
+        # index=None 保证点击后不保持选中状态
         daily_btn = sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="daily_main_btn")
         
-        # 触发弹窗
+        # 触发逻辑
         if daily_btn == T['Ins']:
             daily_insight_dialog(st.session_state.username, radar_dict)
 
@@ -288,16 +299,21 @@ else:
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
         # 可视化工具栏
-        viz_btn = sac.buttons([
+        # 使用 on_change 回调解决死循环
+        sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
-        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_main_btn")
+        ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', key="viz_main_btn", on_change=on_viz_change)
         
-        if viz_btn == T['DNA']:
+        # 逻辑：只处理被捕获的事件，然后销毁
+        if st.session_state.viz_clicked == T['DNA']:
              viz.view_radar_details(radar_dict, st.session_state.username)
-        elif viz_btn == T['Map']:
-             all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-             viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+             st.session_state.viz_clicked = None # 销毁事件
+             
+        elif st.session_state.viz_clicked == T['Map']: 
+            all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
+            viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
+            st.session_state.viz_clicked = None # 销毁事件
 
         st.divider()
         
