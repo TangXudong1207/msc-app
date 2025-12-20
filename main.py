@@ -11,38 +11,33 @@ import random
 import msc_config as config 
 
 # ==========================================
-# 🎨 CSS：Cyber-Zen 极简主义设计系统 & PWA 配置
+# 🛠️ 配置与初始化
+# ==========================================
+
+# 🔴 核心修复 1：修正图标链接
+# 你之前的链接是 GitHub 网页链接 (blob)，浏览器无法识别为图片。
+# 必须使用 "Raw" 链接。我已经帮你转换成了正确的格式。
+APP_ICON_URL = "https://raw.githubusercontent.com/TangXudong1207/msc-app/main/app%E5%9B%BE%E6%A0%87.png"
+
+# 🔴 核心修复 2：使用标准方法设置浏览器图标和标题
+# page_icon 参数是设置浏览器标签页图标（Favicon）的标准方式。
+st.set_page_config(
+    page_title="MSC v75.5", 
+    page_icon=APP_ICON_URL, # 这里设置图标
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
+
+# ==========================================
+# 🎨 CSS：Cyber-Zen 极简主义设计系统
 # ==========================================
 def inject_custom_css():
-    # 🔴 请将下方的链接替换为你上传到 GitHub 后的图标 Raw 链接
-    APP_ICON_URL = "https://github.com/TangXudong1207/msc-app/blob/main/app%E5%9B%BE%E6%A0%87.png"
+    # 🔴 核心修复 3：清理错误的 <head> 标签注入
+    # 之前这里尝试用 st.markdown 注入 <head>、<link>、<meta> 等标签，
+    # Streamlit 不支持这种写法，导致它们以纯文本形式错误地显示在页面上。
+    # 我们删除了那些代码，只保留纯粹的 CSS 样式 (<style> 部分)。
 
     st.markdown(f"""
-    <head>
-        <!-- 浏览器标签页标题 -->
-        <title>MSC v75.5</title>
-        
-        <!-- 浏览器标签图标 (Favicon) -->
-        <link rel="icon" type="image/png" href="{APP_ICON_URL}">
-        <link rel="shortcut icon" type="image/png" href="{APP_ICON_URL}">
-        
-        <!-- iOS 主屏幕图标配置 -->
-        <link rel="apple-touch-icon" href="{APP_ICON_URL}">
-        <link rel="apple-touch-icon" sizes="152x152" href="{APP_ICON_URL}">
-        <link rel="apple-touch-icon" sizes="180x180" href="{APP_ICON_URL}">
-        <link rel="apple-touch-icon" sizes="167x167" href="{APP_ICON_URL}">
-        
-        <!-- PWA 移动端全屏体验配置 -->
-        <meta name="apple-mobile-web-app-title" content="MSC">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-        
-        <!-- Android 主屏幕配置 -->
-        <meta name="theme-color" content="#050505">
-        <meta name="mobile-web-app-capable" content="yes">
-    </head>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
         
@@ -128,7 +123,7 @@ def inject_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state="expanded")
+# 执行 CSS 注入
 inject_custom_css()
 
 # ==========================================
