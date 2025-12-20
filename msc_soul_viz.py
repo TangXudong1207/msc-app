@@ -55,7 +55,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
     # 2. 坐标轴配置 (调整大小)
     # 对于 graphGL，坐标轴更多是参考背景。
     # 我们设置一个适中的范围，让网络在其中自然生长。
-    axis_range = 100
+    axis_range = 150
     axis_common = {
         "show": True,
         "min": -axis_range, "max": axis_range,
