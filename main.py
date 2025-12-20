@@ -118,31 +118,11 @@ def inject_custom_css():
 st.set_page_config(page_title="MSC v75.5", layout="wide", initial_sidebar_state="expanded")
 inject_custom_css()
 
-# ==========================================
-# 🛠️ 核心：状态管理器
-# ==========================================
+# === 全局状态初始化 ===
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "is_admin" not in st.session_state: st.session_state.is_admin = False
 if "current_chat_partner" not in st.session_state: st.session_state.current_chat_partner = None
 if "language" not in st.session_state: st.session_state.language = "en" 
-# 弹窗一次性触发器
-if "dialog_trigger" not in st.session_state: st.session_state.dialog_trigger = None
-
-# 回调函数：处理按钮点击
-def handle_daily_click():
-    # 1. 设置触发器
-    st.session_state.dialog_trigger = "daily"
-    # 2. 强制重置按钮状态为 None (解决重复弹出问题)
-    st.session_state.btn_daily_key = None 
-
-def handle_viz_click():
-    # 1. 获取当前点击的值
-    val = st.session_state.btn_viz_key
-    if val:
-        # 2. 设置触发器
-        st.session_state.dialog_trigger = val
-    # 3. 强制重置按钮状态
-    st.session_state.btn_viz_key = None
 
 # ==========================================
 # 📚 本地备选语录库 (Fallback Library)
@@ -172,13 +152,15 @@ def get_fallback_insight():
     return random.choice(pool)
 
 # ==========================================
-# 🔭 每日洞察弹窗
+# 🔭 每日洞察弹窗 (Robust Version)
 # ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
+    # 1. 状态管理
     if "daily_content" not in st.session_state:
         st.session_state.daily_content = None
 
+    # 2. 生成逻辑
     if st.session_state.daily_content is None:
         with st.container():
             st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
@@ -192,6 +174,7 @@ def daily_insight_dialog(username, radar):
                     st.session_state.daily_content = get_fallback_insight()
             st.rerun()
 
+    # 3. 显示内容
     content = st.session_state.daily_content
     st.markdown(
         f"""
@@ -278,22 +261,22 @@ else:
         st.divider()
 
         # 1. 每日一问按钮
-        # 关键修改：绑定回调函数 on_change=handle_daily_click
-        sac.buttons([
+        # ⚠️ 关键：指定 key="daily_btn_key"，并且不使用回调
+        daily_btn_val = sac.buttons([
             sac.ButtonsItem(label=T['Ins'], icon='lightning-charge')
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
-           key="btn_daily_key", on_change=handle_daily_click)
+           key="daily_btn_key")
         
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         forest.render_forest_scene(radar_dict, my_nodes_list)
         
         # 2. 可视化工具栏
-        # 关键修改：绑定回调函数 on_change=handle_viz_click
-        sac.buttons([
+        # ⚠️ 关键：指定 key="viz_btn_key"
+        viz_btn_val = sac.buttons([
             sac.ButtonsItem(label=T['DNA'], icon='diagram-2'), 
             sac.ButtonsItem(label=T['Map'], icon='stars')      
         ], align='center', variant='outline', radius='sm', use_container_width=True, index=None, color='#FF4B4B', 
-           key="btn_viz_key", on_change=handle_viz_click)
+           key="viz_btn_key")
 
         st.divider()
         
@@ -324,28 +307,25 @@ else:
             st.rerun()
 
     # ==========================================
-    # 🚀 统一分发器 (One-Shot Trigger Logic)
+    # 🚀 弹窗逻辑 (修复版)
     # ==========================================
-    # 原理：
-    # 1. 只有点击按钮的瞬间，Callback 会把 dialog_trigger 设置为对应的值。
-    # 2. 这里判断 trigger 的值，打开对应的 Dialog。
-    # 3. 立即把 trigger 设回 None。这样下次刷新时，条件就不再满足，不会重复弹出。
-    # 4. Streamlit 的 st.dialog 只要被调用一次，就会保持打开，直到用户关闭。
+    # 原理：检测到按钮值存在 -> 打开弹窗 -> 强制重置按钮状态为 None -> 下次运行就不弹了
 
-    trigger = st.session_state.dialog_trigger
-
-    if trigger == "daily":
+    if daily_btn_val == T['Ins']:
         daily_insight_dialog(st.session_state.username, radar_dict)
-        st.session_state.dialog_trigger = None # 立即复位
+        # 💥 强制清理状态，防止刷新页面重复弹出
+        st.session_state["daily_btn_key"] = None
 
-    elif trigger == T['DNA']:
+    elif viz_btn_val == T['DNA']:
         viz.view_radar_details(radar_dict, st.session_state.username)
-        st.session_state.dialog_trigger = None # 立即复位
+        # 💥 强制清理状态
+        st.session_state["viz_btn_key"] = None
              
-    elif trigger == T['Map']: 
+    elif viz_btn_val == T['Map']: 
         all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
         viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
-        st.session_state.dialog_trigger = None # 立即复位
+        # 💥 强制清理状态
+        st.session_state["viz_btn_key"] = None
 
     # === 页面路由 ===
     if selected_menu == T['Logout']: 
