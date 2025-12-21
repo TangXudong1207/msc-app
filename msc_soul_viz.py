@@ -55,9 +55,9 @@ def render_soul_scene(radar_dict, user_nodes=None):
     physics_json = json.dumps(physics_config)
     
     # 🌟 关键参数配置区 (你可以在这里修改) 🌟
-    AUTO_ROTATE_SPEED = 10   # 旋转速度
-    CAMERA_DISTANCE = 400    # 相机距离 (越小越近)
-    BLOOM_INTENSITY = 0.6    # 发光强度
+    AUTO_ROTATE_SPEED = 50  # 旋转速度
+    CAMERA_DISTANCE = 700   # 相机距离 (越小越近)
+    BLOOM_INTENSITY = 0.8    # 发光强度
     AXIS_RANGE = 250         # 坐标轴范围
     
     html_code = f"""
