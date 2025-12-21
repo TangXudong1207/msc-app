@@ -19,35 +19,23 @@ def clean_for_json(obj):
     else:
         return obj
 
-# 🟢 [物理引擎重构]：增强重力，减小斥力，防止飞出，形成凝聚态
 def get_physics_config(primary_attr, secondary_attr):
-    # 基础配置：所有模式都显著增加了 gravity (从 0.x 增加到 1.0+)
+    # 🟢 [修改点]：摩擦力 (friction) 全局大幅降低，模拟真空环境，让粒子持续漂浮运动
+    base_friction = 0.1 
+    
     base_configs = {
-        # 爆发结构：稍微松散一点，但依然有强重力
         "Agency":        {"repulsion": 800,  "gravity": 1.5, "edgeLength": [30, 80]},
-        # 凝聚结构：极高的重力，紧密的一团
         "Care":          {"repulsion": 60,   "gravity": 4.0, "edgeLength": [5, 20]},
-        # 发散网络：虽然发散，但为了不飞出去，重力也要够
         "Curiosity":     {"repulsion": 400,  "gravity": 1.2, "edgeLength": [50, 150]},
-        # 晶格结构
         "Coherence":     {"repulsion": 500,  "gravity": 2.0, "edgeLength": [20, 50]},
-        # 深旋结构
         "Reflection":    {"repulsion": 300,  "gravity": 2.5, "edgeLength": [20, 60]},
-        # 升腾云结构
         "Transcendence": {"repulsion": 600,  "gravity": 1.0, "edgeLength": [40, 100]},
-        # 和谐球体
         "Aesthetic":     {"repulsion": 200,  "gravity": 3.0, "edgeLength": [30, 80]}
     }
     
-    aspect_configs = {
-        "Agency":        {"friction": 0.1},
-        "Care":          {"friction": 0.8},
-        "Curiosity":     {"friction": 0.3},
-        "Coherence":     {"friction": 0.9},
-        "Reflection":    {"friction": 0.5},
-        "Transcendence": {"friction": 0.05},
-        "Aesthetic":     {"friction": 0.4}
-    }
+    # 覆盖摩擦力设置
+    aspect_configs = {k: {"friction": base_friction} for k in base_configs.keys()}
+
     p_conf = base_configs.get(primary_attr, base_configs["Aesthetic"])
     s_conf = aspect_configs.get(secondary_attr, aspect_configs["Aesthetic"])
     return {**p_conf, **s_conf}
@@ -110,13 +98,11 @@ def generate_soul_network(radar_dict, user_nodes):
         nodes.append({
             "id": node_id,
             "name": str(user_node.get('care_point', 'Thought')),
-            # 🟢 [修改点]：缩小为主粒子的 2/3 (原25 -> 16)
             "symbolSize": 16,
             "itemStyle": {
                 "color": color,
                 "borderColor": "#FFFFFF" if found_match else "#CCFFCC",
                 "borderWidth": 1.5,
-                # 🟢 [修改点]：增加 ShadowBlur，配合 Bloom 产生更强光晕
                 "shadowBlur": 80, 
                 "shadowColor": color,
                 "opacity": 1.0
@@ -126,9 +112,7 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 3. 生成【氛围粒子】(背景点，形成彗星尾巴)
-    # 🟢 [修改点]：增加数量，形成“雾/彗星”感
-    # 系数从 5 -> 15，上限从 100 -> 250
+    # 3. 生成【氛围粒子】(背景点)
     base_count = len(user_nodes) * 15
     num_atmosphere = int(min(250, max(80, base_count)))
     
@@ -137,7 +121,6 @@ def generate_soul_network(radar_dict, user_nodes):
         target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
         color = get_dimension_color(target_dim)
         
-        # 尺寸稍微随机大一点点，形成光斑感
         size = float(random.uniform(2, 6))
         opacity = float(random.uniform(0.3, 0.6)) 
 
@@ -155,7 +138,7 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 4. 建立连接 (保持稀疏连接)
+    # 4. 建立连接
     thought_node_ids = [n["id"] for n in nodes if n["id"].startswith("thought")]
     atmos_node_ids = [n["id"] for n in nodes if n["id"].startswith("atmos")]
     
@@ -180,7 +163,7 @@ def generate_soul_network(radar_dict, user_nodes):
                 "target": int(target_idx),
                 "lineStyle": {
                     "color": source_color,
-                    "opacity": 0.15, # 稍微增加一点连接线的可见度
+                    "opacity": 0.15,
                     "width": 0.5
                 }
             })
