@@ -103,7 +103,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 "enable": True,
                 "bloom": {
                     "enable": True,
-                    "bloomIntensity": 0.8
+                    "bloomIntensity": 0.4
                 }
             },
             "environment": background_color
