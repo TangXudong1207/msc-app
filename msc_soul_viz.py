@@ -54,9 +54,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
     background_color = "#FFFFFF" # 纯白背景
 
     # 2. 坐标轴配置 (调整大小)
-    # 对于 graphGL，坐标轴更多是参考背景。
-    # 我们设置一个适中的范围，让网络在其中自然生长。
-    axis_range =150
+    axis_range = 150
     axis_common = {
         "show": True,
         "min": -axis_range, "max": axis_range,
@@ -70,7 +68,9 @@ def render_soul_scene(radar_dict, user_nodes=None):
         # 提示框组件
         "tooltip": {
             "show": True,
-            "formatter": lambda params: f"<b>{params.name}</b><br>{params.value}" if params.value else params.name,
+            # 🔴 核心修复：将 lambda 函数改为字符串模板
+            # {b} 代表节点名称 (Name)，{c} 代表数值 (Value/Insight)
+            "formatter": "{b}<br/>{c}", 
             "backgroundColor": "rgba(50,50,50,0.8)",
             "textStyle": {"color": "#fff"},
             "borderColor": "#333"
@@ -125,4 +125,5 @@ def render_soul_scene(radar_dict, user_nodes=None):
     
     # 增加组件高度，提供更有沉浸感的视野
     st_echarts(options=option, height="600px")
+    # 渲染图例
     viz.render_spectrum_legend()
