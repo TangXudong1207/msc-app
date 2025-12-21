@@ -124,12 +124,14 @@ def generate_soul_network(radar_dict, user_nodes):
         nodes.append({
             "id": node_id,
             "name": str(user_node.get('care_point', 'Thought')), # 强制转字符串
-            "symbolSize": 60,
+            # 🟢 [修改点]：尺寸从 60 减小到 25，使其更精致
+            "symbolSize": 25, 
             "itemStyle": {
                 "color": color,
                 "borderColor": "#FFFFFF",
-                "borderWidth": 3,
-                "shadowBlur": 50,
+                "borderWidth": 2, # 边框稍微变细一点
+                # 🟢 [关键]：ShadowBlur 配合 viz 中的 bloom 产生发光感
+                "shadowBlur": 50, 
                 "shadowColor": color,
                 "opacity": 1.0
             },
@@ -140,9 +142,6 @@ def generate_soul_network(radar_dict, user_nodes):
 
     # 3. 生成【氛围粒子】
     num_atmosphere = max(500, len(user_nodes) * 100)
-    
-    # random.choices 有时可能返回 numpy 类型，如果不小心
-    # 这里我们手动确保数据安全
     
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
@@ -224,7 +223,6 @@ def generate_soul_network(radar_dict, user_nodes):
     raw_physics = get_physics_config(primary_attr, secondary_attr)
 
     # 🔴 核心修复：在返回前，调用清洗函数，将所有数据转换为原生类型
-    # 这一步将彻底清除 numpy 类型，解决 MarshallComponentException
     return (
         clean_for_json(nodes), 
         clean_for_json(edges), 
