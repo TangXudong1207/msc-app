@@ -1,10 +1,32 @@
+### msc_soul_gen.py ###
 import random
 import math
 import numpy as np
 import msc_config as config
 
 # ==========================================
-# 🌌 1. 物理引擎参数映射 (Physics Parameter Mapping)
+# 🧹 强力清洗工具：彻底清除 Numpy 类型
+# ==========================================
+def clean_for_json(obj):
+    """
+    递归地将所有 numpy 类型转换为原生 Python 类型 (int, float, list, dict)。
+    这是解决 MarshallComponentException 的关键。
+    """
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return clean_for_json(obj.tolist())
+    elif isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_for_json(v) for v in obj]
+    else:
+        return obj
+
+# ==========================================
+# 🌌 1. 物理引擎参数映射
 # ==========================================
 def get_physics_config(primary_attr, secondary_attr):
     """根据基底和氛围维度，返回物理引擎配置字典"""
@@ -31,51 +53,37 @@ def get_physics_config(primary_attr, secondary_attr):
 
     p_conf = base_configs.get(primary_attr, base_configs["Aesthetic"])
     s_conf = aspect_configs.get(secondary_attr, aspect_configs["Aesthetic"])
+    
+    # 合并配置
     physics_config = {**p_conf, **s_conf}
-
-    # 确保物理参数也是原生类型
-    for k, v in physics_config.items():
-        if isinstance(v, list):
-            physics_config[k] = [float(x) if isinstance(x, (int, float, np.number)) else x for x in v]
-        elif isinstance(v, (int, float, np.number)):
-            physics_config[k] = float(v)
-
     return physics_config
 
 # ==========================================
-# 🧹 数据类型清洗工具 (Type Cleaning Helper)
+# 🕸️ 2. 网络构建器
 # ==========================================
-def convert_to_native_types(obj):
-    """递归地将 numpy 类型转换为 Python 原生类型，以便 JSON 序列化"""
-    if isinstance(obj, dict):
-        return {k: convert_to_native_types(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_native_types(i) for i in obj]
-    elif isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        return float(obj)
-    elif isinstance(obj, np.ndarray):
-        return convert_to_native_types(obj.tolist())
-    else:
-        return obj
 
-# ==========================================
-# 🕸️ 2. 网络构建器 (Network Builder)
-# ==========================================
+config.DIMENSION_MAP_REV = {v: k for k, v in config.DIMENSION_MAP.items()}
 
 def get_dimension_color(dim):
     """获取维度的颜色"""
     return config.SPECTRUM.get(config.DIMENSION_MAP_REV.get(dim, "Structure"), "#FFFFFF")
 
-config.DIMENSION_MAP_REV = {v: k for k, v in config.DIMENSION_MAP.items()}
-
 def generate_soul_network(radar_dict, user_nodes):
     """生成符合物理规则的灵魂网络数据"""
     
+    # 1. 数据准备
     if not radar_dict: radar_dict = {"Care": 3.0, "Reflection": 3.0}
+    
+    # 过滤无效键
     valid_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
-    clean_radar = {k: v for k, v in radar_dict.items() if k in valid_keys and v > 0}
+    clean_radar = {}
+    for k, v in radar_dict.items():
+        if k in valid_keys:
+            try:
+                val = float(v) # 强制转 float
+                if val > 0: clean_radar[k] = val
+            except: pass
+            
     if not clean_radar: clean_radar = {"Care": 3.0, "Reflection": 3.0}
     
     sorted_dims = sorted(clean_radar.items(), key=lambda x: x[1], reverse=True)
@@ -84,6 +92,8 @@ def generate_soul_network(radar_dict, user_nodes):
     secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr
     
     total_score = sum([s for d, s in sorted_dims])
+    if total_score == 0: total_score = 1
+    
     dim_weights = {d: s/total_score for d, s in sorted_dims}
     dims_list = list(dim_weights.keys())
     weights_list = list(dim_weights.values())
@@ -96,8 +106,13 @@ def generate_soul_network(radar_dict, user_nodes):
     for i, user_node in enumerate(user_nodes):
         node_id = f"thought_{i}"
         kw = user_node.get('keywords', [])
-        if kw:
-            color = "#FFFFFF"
+        # 确保 kw 是列表
+        if isinstance(kw, str):
+            try: kw = json.loads(kw)
+            except: kw = []
+            
+        color = "#FFFFFF"
+        if kw and isinstance(kw, list):
             for k in kw:
                 for dim_name, dim_color in config.SPECTRUM.items():
                     if k == dim_name:
@@ -108,7 +123,7 @@ def generate_soul_network(radar_dict, user_nodes):
 
         nodes.append({
             "id": node_id,
-            "name": user_node.get('care_point', 'Thought'),
+            "name": str(user_node.get('care_point', 'Thought')), # 强制转字符串
             "symbolSize": 60,
             "itemStyle": {
                 "color": color,
@@ -118,7 +133,7 @@ def generate_soul_network(radar_dict, user_nodes):
                 "shadowColor": color,
                 "opacity": 1.0
             },
-            "value": user_node.get('insight', ''), 
+            "value": str(user_node.get('insight', '')), # 强制转字符串
             "color_category": color
         })
         node_indices[node_id] = len(nodes) - 1
@@ -126,12 +141,18 @@ def generate_soul_network(radar_dict, user_nodes):
     # 3. 生成【氛围粒子】
     num_atmosphere = max(500, len(user_nodes) * 100)
     
+    # random.choices 有时可能返回 numpy 类型，如果不小心
+    # 这里我们手动确保数据安全
+    
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
+        
+        # 随机选择维度
         target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
         color = get_dimension_color(target_dim)
-        size = random.uniform(3, 8)
-        opacity = random.uniform(0.3, 0.7)
+        
+        size = float(random.uniform(3, 8)) # 强制 float
+        opacity = float(random.uniform(0.3, 0.7)) # 强制 float
 
         nodes.append({
             "id": node_id,
@@ -154,6 +175,7 @@ def generate_soul_network(radar_dict, user_nodes):
     for atmos_id in atmos_node_ids:
         source_idx = node_indices[atmos_id]
         source_color = nodes[source_idx]["color_category"]
+        
         num_links = random.choices([1, 2], weights=[0.7, 0.3])[0]
         
         for _ in range(num_links):
@@ -164,7 +186,14 @@ def generate_soul_network(radar_dict, user_nodes):
 
             same_color_targets = []
             diff_color_targets = []
-            for tid in target_pool:
+            
+            # 简化选择逻辑以提高性能
+            if len(target_pool) > 50:
+                sample_pool = random.sample(target_pool, 20)
+            else:
+                sample_pool = target_pool
+
+            for tid in sample_pool:
                 if tid == atmos_id: continue
                 t_idx = node_indices[tid]
                 if nodes[t_idx]["color_category"] == source_color:
@@ -183,8 +212,8 @@ def generate_soul_network(radar_dict, user_nodes):
             if target_id:
                 target_idx = node_indices[target_id]
                 edges.append({
-                    "source": source_idx,
-                    "target": target_idx,
+                    "source": int(source_idx), # 强制 int
+                    "target": int(target_idx), # 强制 int
                     "lineStyle": {
                         "color": source_color,
                         "opacity": 0.1,
@@ -192,11 +221,14 @@ def generate_soul_network(radar_dict, user_nodes):
                     }
                 })
 
-    physics_config = get_physics_config(primary_attr, secondary_attr)
+    raw_physics = get_physics_config(primary_attr, secondary_attr)
 
-    # 🔴 核心修复：在返回前清洗所有数据类型
-    clean_nodes = convert_to_native_types(nodes)
-    clean_edges = convert_to_native_types(edges)
-    clean_physics = convert_to_native_types(physics_config)
-
-    return clean_nodes, clean_edges, clean_physics, primary_attr, secondary_attr
+    # 🔴 核心修复：在返回前，调用清洗函数，将所有数据转换为原生类型
+    # 这一步将彻底清除 numpy 类型，解决 MarshallComponentException
+    return (
+        clean_for_json(nodes), 
+        clean_for_json(edges), 
+        clean_for_json(raw_physics), 
+        str(primary_attr), 
+        str(secondary_attr)
+    )
