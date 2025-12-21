@@ -45,10 +45,10 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
-    # 🟢 [关键]：切换为纯黑背景，这是“发光”效果能被看见的前提！
     background_color = "#000000"
 
-    axis_range = 150 
+    # 🟢 [修改点]：稍微放宽边界，让飘散的粒子不被切断
+    axis_range = 250 
     axis_common = {
         "show": False,
         "min": -axis_range, "max": axis_range,
@@ -76,9 +76,11 @@ def render_soul_scene(radar_dict, user_nodes=None):
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 3,
-                "distance": 200,
-                "minDistance": 100, "maxDistance": 400,
+                # 🟢 [修改点]：转速调高，确保肉眼可见旋转
+                "autoRotateSpeed": 5, 
+                # 🟢 [关键点]：相机拉远 (500)，因为重力减小了，粒子群会变得很大，必须拉远才能看全
+                "distance": 500,
+                "minDistance": 200, "maxDistance": 800,
                 "alpha": 20, "beta": 40
             },
             "light": {
@@ -89,7 +91,6 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 "enable": True,
                 "bloom": {
                     "enable": True,
-                    # 🟢 在黑色背景下，0.6 的强度会非常耀眼
                     "bloomIntensity": 0.6
                 }
             },
@@ -99,6 +100,8 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "series": [{
             "type": 'graphGL',
             "layout": 'force',
+            # 🟢 [关键]：显式开启平移和缩放 (虽然手机上缩放可能不灵，但平移是有的)
+            "roam": True,
             "force": {
                 "repulsion": physics_config["repulsion"],
                 "gravity": physics_config["gravity"],
@@ -118,6 +121,5 @@ def render_soul_scene(radar_dict, user_nodes=None):
         }]
     }
     
-    # 🟢 [修改点]：正方形视窗 (350px)，配合黑色背景，看起来像个宇宙视窗
     st_echarts(options=option, height="350px")
     viz.render_spectrum_legend()
