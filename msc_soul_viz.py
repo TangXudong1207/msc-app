@@ -8,7 +8,6 @@ import msc_soul_gen as gen
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 获取数据
     nodes, edges, physics_config, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
     
     lang = st.session_state.get('language', 'en')
@@ -48,19 +47,19 @@ def render_soul_scene(radar_dict, user_nodes=None):
     
     background_color = "#FFFFFF"
 
-    # 🟢 [保持设计]：坐标轴扩大到 350
+    # 🟢 [修改点]：彻底隐藏坐标轴
     axis_range = 350 
     axis_common = {
-        "show": True,
+        "show": False, # 不显示轴
         "min": -axis_range, "max": axis_range,
-        "axisLine": {"lineStyle": {"color": "#EEEEEE", "width": 1}},
+        "axisLine": {"show": False},
         "axisLabel": {"show": False},
-        "splitLine": {"show": True, "lineStyle": {"color": "#F5F5F5", "width": 1}}
+        "splitLine": {"show": False}, # 不显示网格
+        "axisTick": {"show": False}
     }
 
     option = {
         "backgroundColor": background_color,
-        # 🟢 [关键修复]：字符串格式 Tooltip，防止报错
         "tooltip": {
             "show": True,
             "formatter": "{b}<br/>{c}", 
@@ -74,12 +73,11 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "zAxis3D": axis_common,
 
         "grid3D": {
+            "show": False, # 隐藏网格盒子
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                # 🟢 [性能优化]：转速调低
-                "autoRotateSpeed": 2, 
-                # 🟢 [保持设计]：相机拉远
+                "autoRotateSpeed": 5, # 恢复旋转速度
                 "distance": 400,
                 "minDistance": 200, "maxDistance": 600,
                 "alpha": 20, "beta": 40
@@ -88,7 +86,6 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 "main": {"intensity": 1.2, "alpha": 30, "beta": 30},
                 "ambient": {"intensity": 0.8}
             },
-            # 🟢 [保持设计]：发光特效 (Post Effect Bloom)
             "postEffect": {
                 "enable": True,
                 "bloom": {
