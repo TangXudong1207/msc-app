@@ -79,7 +79,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 # 🟢 [修改点]：转速调高，确保肉眼可见旋转
                 "autoRotateSpeed": 100, 
                 # 🟢 [关键点]：相机拉远 (700)，因为重力减小了，粒子群会变得很大，必须拉远才能看全
-                "distance":700,
+                "distance":800,
                 "minDistance": 200, "maxDistance": 800,
                 "alpha": 20, "beta": 40
             },
