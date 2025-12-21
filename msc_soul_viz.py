@@ -8,12 +8,11 @@ import msc_soul_gen as gen
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 1. 调用生成器获取网络数据和物理配置
+    # 获取数据
     nodes, edges, physics_config, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
     
     lang = st.session_state.get('language', 'en')
     
-    # --- 标题和描述的翻译映射 (基于新的物理隐喻) ---
     ARCHETYPE_NAMES = {
         "Agency":        {"en": "Starburst Structure", "zh": "爆发结构"},
         "Care":          {"en": "Dense Cluster",      "zh": "凝聚结构"},
@@ -47,29 +46,23 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
-    # ==========================================
-    # 🎯 ECharts GraphGL 配置
-    # ==========================================
-    
-    background_color = "#FFFFFF" # 纯白背景
+    background_color = "#FFFFFF"
 
-    # 2. 坐标轴配置 (调整大小)
-    # 🟢 [修改点]：扩大坐标轴范围，从 150 -> 350，包容发散的粒子
+    # 🟢 [保持设计]：坐标轴扩大到 350
     axis_range = 350 
     axis_common = {
         "show": True,
         "min": -axis_range, "max": axis_range,
-        "axisLine": {"lineStyle": {"color": "#EEEEEE", "width": 1}}, # 非常淡的轴线
-        "axisLabel": {"show": False}, # 不显示标签，保持干净
-        "splitLine": {"show": True, "lineStyle": {"color": "#F5F5F5", "width": 1}} # 非常淡的网格
+        "axisLine": {"lineStyle": {"color": "#EEEEEE", "width": 1}},
+        "axisLabel": {"show": False},
+        "splitLine": {"show": True, "lineStyle": {"color": "#F5F5F5", "width": 1}}
     }
 
     option = {
         "backgroundColor": background_color,
-        # 提示框组件
+        # 🟢 [关键修复]：字符串格式 Tooltip，防止报错
         "tooltip": {
             "show": True,
-            # 🟢 确保使用字符串而非 lambda
             "formatter": "{b}<br/>{c}", 
             "backgroundColor": "rgba(50,50,50,0.8)",
             "textStyle": {"color": "#fff"},
@@ -81,49 +74,45 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "zAxis3D": axis_common,
 
         "grid3D": {
-            # 调整视野深度
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 5, 
-                # 🟢 [修改点]：因为坐标系变大了，这里把相机拉远一点 (250 -> 400)，否则会看里面
+                # 🟢 [性能优化]：转速调低
+                "autoRotateSpeed": 2, 
+                # 🟢 [保持设计]：相机拉远
                 "distance": 400,
                 "minDistance": 200, "maxDistance": 600,
                 "alpha": 20, "beta": 40
             },
-            # 明亮、干净的光照
             "light": {
                 "main": {"intensity": 1.2, "alpha": 30, "beta": 30},
                 "ambient": {"intensity": 0.8}
             },
-            # 🟢 [新增点]：开启后期处理 (Post Effect) 实现发光 (Bloom)
+            # 🟢 [保持设计]：发光特效 (Post Effect Bloom)
             "postEffect": {
                 "enable": True,
                 "bloom": {
                     "enable": True,
-                    "bloomIntensity": 0.4  # 发光强度，可微调
+                    "bloomIntensity": 0.3 
                 }
             },
             "environment": background_color
         },
 
         "series": [{
-            "type": 'graphGL', # 核心：使用 WebGL 加速的关系图
-            "layout": 'force', # 核心：使用力引导布局
+            "type": 'graphGL',
+            "layout": 'force',
             "force": {
-                # 3. 注入物理引擎参数
                 "repulsion": physics_config["repulsion"],
                 "gravity": physics_config["gravity"],
                 "friction": physics_config["friction"],
                 "edgeLength": physics_config["edgeLength"],
-                "initLayout": 'spherical' # 初始呈球状分布，然后炸开
+                "initLayout": 'spherical'
             },
             "data": nodes,
             "links": edges,
-            # 节点和边的通用样式已在数据生成时定义，这里设置全局默认
             "itemStyle": {"opacity": 1},
             "lineStyle": {"width": 0.5, "opacity": 0.1},
-            # 高亮样式
             "emphasis": {
                 "itemStyle": {"borderColor": "#000", "borderWidth": 1},
                 "lineStyle": {"width": 2, "opacity": 0.8},
@@ -132,7 +121,5 @@ def render_soul_scene(radar_dict, user_nodes=None):
         }]
     }
     
-    # 增加组件高度，提供更有沉浸感的视野
     st_echarts(options=option, height="600px")
-    # 渲染图例
     viz.render_spectrum_legend()
