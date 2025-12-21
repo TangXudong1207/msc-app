@@ -6,6 +6,7 @@ import msc_config as config
 import json
 
 def clean_for_json(obj):
+    """清理 Numpy 数据类型，防止报错"""
     if isinstance(obj, (np.integer, np.int64, np.int32)):
         return int(obj)
     elif isinstance(obj, (np.floating, np.float64, np.float32)):
@@ -20,27 +21,40 @@ def clean_for_json(obj):
         return obj
 
 def get_physics_config(primary_attr, secondary_attr):
-    # 🟢 [关键修改]：让粒子飘起来！
-    # 1. 摩擦力极低 (0.05)，保持运动惯性
-    # 2. 重力极低 (0.1 - 0.3)，不再死死吸在中间，允许扩散
-    # 3. 斥力适中，连线变长
+    # ==========================================
+    # 🎛️ 物理引擎控制台 (Physics Control)
+    # ==========================================
     
+    # [1] 摩擦力 (Friction): 范围 0.0 ~ 1.0
+    # 越小，粒子在真空中滑行越久，"持续运动"感越强。
+    # 越大，粒子停得越快。
     base_friction = 0.05 
     
+    # [2] 不同性格的物理参数
+    # repulsion (斥力): 粒子之间的排斥力。值越大，粒子分得越开（膨胀）。
+    # gravity (重力): 向中心的引力。值越大，粒子越往中间挤（收缩）。
+    # edgeLength (连线长): [min, max]。决定了相连粒子之间的距离。
+    
     base_configs = {
-        # 爆发结构：大范围扩散
+        # "Agency": 爆发型 - 斥力大，重力极小 -> 像烟花一样炸开
         "Agency":        {"repulsion": 1000, "gravity": 0.1, "edgeLength": [100, 300]},
-        # 凝聚结构：虽然凝聚，但也允许外围飘荡
+        
+        # "Care": 凝聚型 - 斥力小，重力大 -> 像紧密的星球
         "Care":          {"repulsion": 300,  "gravity": 0.5, "edgeLength": [20, 100]},
-        # 发散网络：极度发散
+        
+        # "Curiosity": 发散型 - 重力极小，连线很长 -> 像神经网络
         "Curiosity":     {"repulsion": 1200, "gravity": 0.05, "edgeLength": [150, 400]},
-        # 晶格结构
+        
+        # "Coherence": 晶格型 - 比较平衡
         "Coherence":     {"repulsion": 800,  "gravity": 0.2, "edgeLength": [50, 150]},
-        # 深旋结构
+        
+        # "Reflection": 深旋型 - 中等重力
         "Reflection":    {"repulsion": 600,  "gravity": 0.3, "edgeLength": [50, 200]},
-        # 升腾云结构：反重力感
+        
+        # "Transcendence": 升腾型 - 几乎没有重力，只有斥力 -> 飘散的云
         "Transcendence": {"repulsion": 1500, "gravity": 0.02, "edgeLength": [100, 400]},
-        # 和谐球体
+        
+        # "Aesthetic": 和谐型 - 平衡
         "Aesthetic":     {"repulsion": 500,  "gravity": 0.2, "edgeLength": [50, 200]}
     }
     
@@ -83,6 +97,7 @@ def generate_soul_network(radar_dict, user_nodes):
     edges = []
     node_indices = {}
 
+    # 🎨 默认老数据颜色 (绿色)
     default_old_data_color = "#00E676" 
 
     # 2. 生成【思想节点】(主粒子)
@@ -108,11 +123,13 @@ def generate_soul_network(radar_dict, user_nodes):
         nodes.append({
             "id": node_id,
             "name": str(user_node.get('care_point', 'Thought')),
+            # 📏 [尺寸]：主粒子大小 (原25 -> 16)
             "symbolSize": 16,
             "itemStyle": {
                 "color": color,
                 "borderColor": "#FFFFFF" if found_match else "#CCFFCC",
                 "borderWidth": 1.5,
+                # ✨ [光晕]：阴影模糊度，越大光晕越强
                 "shadowBlur": 80, 
                 "shadowColor": color,
                 "opacity": 1.0
@@ -122,9 +139,10 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 3. 生成【氛围粒子】(填充空间)
-    # 🟢 [修改点]：增加填充粒子，系数提升到 30
+    # 3. 生成【氛围粒子】(填充背景)
+    # 🔢 [数量]：系数越大，背景粒子越多。目前是 len * 30。
     base_count = len(user_nodes) * 30
+    # 🔢 [上限]：最大 400 个，防止太卡。
     num_atmosphere = int(min(400, max(150, base_count)))
     
     for i in range(num_atmosphere):
@@ -132,7 +150,7 @@ def generate_soul_network(radar_dict, user_nodes):
         target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
         color = get_dimension_color(target_dim)
         
-        # 尺寸差异化，有的很小像尘埃，有的大一点像卫星
+        # 📏 [尺寸]：背景粒子随机大小
         size = float(random.uniform(1, 5))
         opacity = float(random.uniform(0.2, 0.6)) 
 
@@ -158,16 +176,15 @@ def generate_soul_network(radar_dict, user_nodes):
         source_idx = node_indices[atmos_id]
         source_color = nodes[source_idx]["color_category"]
         
-        # 🟢 [关键逻辑]：让部分氛围粒子“断线”，或者连向其他氛围粒子，而不是全连主粒子
-        # 这样它们就会因为没有弹簧拉力，而在微弱重力下飘得更远
+        # 🔗 [连线逻辑]：这里决定了背景粒子是跟着主粒子跑，还是自由飘荡
         rand_val = random.random()
         
         if rand_val < 0.2:
              target_pool = thought_node_ids # 20% 紧跟主粒子
         elif rand_val < 0.6:
-             target_pool = atmos_node_ids # 40% 互连，形成云团
+             target_pool = atmos_node_ids # 40% 互连
         else:
-             target_pool = [] # 40% 不连线！变成自由漂浮的尘埃！
+             target_pool = [] # 40% 不连线 (最自由的漂浮状态)
              
         if target_pool:
             if len(target_pool) > 20: sample_pool = random.sample(target_pool, 5)
