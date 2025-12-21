@@ -120,7 +120,7 @@ def generate_soul_network(radar_dict, user_nodes):
 
     # 3. 生成【氛围粒子】(背景点)
     # 🟢 [极度削减]：系数降到 5，上限降到 100
-    base_count = len(user_nodes) * 10
+    base_count = len(user_nodes) * 20
     num_atmosphere = int(min(200, max(50, base_count)))
     
     for i in range(num_atmosphere):
