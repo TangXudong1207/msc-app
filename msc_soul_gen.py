@@ -5,9 +5,6 @@ import numpy as np
 import msc_config as config
 import json
 
-# ==========================================
-# 🧹 强力清洗工具：解决 MarshallComponentException
-# ==========================================
 def clean_for_json(obj):
     if isinstance(obj, (np.integer, np.int64, np.int32)):
         return int(obj)
@@ -22,9 +19,6 @@ def clean_for_json(obj):
     else:
         return obj
 
-# ==========================================
-# 🌌 1. 物理引擎参数映射
-# ==========================================
 def get_physics_config(primary_attr, secondary_attr):
     base_configs = {
         "Agency":        {"repulsion": 2500, "gravity": 0.01, "edgeLength": [50, 150]},
@@ -48,10 +42,6 @@ def get_physics_config(primary_attr, secondary_attr):
     s_conf = aspect_configs.get(secondary_attr, aspect_configs["Aesthetic"])
     return {**p_conf, **s_conf}
 
-# ==========================================
-# 🕸️ 2. 网络构建器
-# ==========================================
-
 config.DIMENSION_MAP_REV = {v: k for k, v in config.DIMENSION_MAP.items()}
 
 def get_dimension_color(dim):
@@ -65,10 +55,9 @@ def generate_soul_network(radar_dict, user_nodes):
     clean_radar = {}
     for k, v in radar_dict.items():
         if k in valid_keys:
-            try:
-                val = float(v)
-                if val > 0: clean_radar[k] = val
-            except: pass
+            try: val = float(v); 
+            except: val = 0
+            if val > 0: clean_radar[k] = val
             
     if not clean_radar: clean_radar = {"Care": 3.0, "Reflection": 3.0}
     
@@ -87,23 +76,25 @@ def generate_soul_network(radar_dict, user_nodes):
     edges = []
     node_indices = {}
 
-    # 🟢 获取“好奇 (Curiosity)”的颜色作为老数据默认色
-    # 根据之前的配置，Curiosity 应该是绿色 (#00E676)
-    default_old_data_color = config.SPECTRUM.get("Curiosity", "#00E676")
+    # 🟢 强行指定老数据为绿色 (#00E676)
+    default_old_data_color = "#00E676" 
 
     # 2. 生成【思想节点】(主粒子)
     for i, user_node in enumerate(user_nodes):
         node_id = f"thought_{i}"
         kw = user_node.get('keywords', [])
+        
+        # 严格的关键词解析
         if isinstance(kw, str):
             try: kw = json.loads(kw)
             except: kw = []
+        if kw is None: kw = []
             
-        # 🟢 [逻辑]：默认设为好奇色。如果有关键词匹配，则覆盖为特定颜色。
-        color = default_old_data_color 
+        color = default_old_data_color # 默认为绿
         found_match = False
         
-        if kw and isinstance(kw, list):
+        # 只要找到了 Spectrum 里的词，就用那个颜色
+        if isinstance(kw, list) and len(kw) > 0:
             for k in kw:
                 if k in config.SPECTRUM:
                     color = config.SPECTRUM[k]
@@ -113,14 +104,12 @@ def generate_soul_network(radar_dict, user_nodes):
         nodes.append({
             "id": node_id,
             "name": str(user_node.get('care_point', 'Thought')),
-            # 🟢 [保持设计]：尺寸 25，精致感
             "symbolSize": 25,
             "itemStyle": {
                 "color": color,
-                # 如果是匹配到的特定色，用白边；如果是老数据(好奇色)，用浅绿边区分一下
                 "borderColor": "#FFFFFF" if found_match else "#CCFFCC",
                 "borderWidth": 2,
-                "shadowBlur": 50, # 保持发光
+                "shadowBlur": 50,
                 "shadowColor": color,
                 "opacity": 1.0
             },
@@ -130,10 +119,9 @@ def generate_soul_network(radar_dict, user_nodes):
         node_indices[node_id] = len(nodes) - 1
 
     # 3. 生成【氛围粒子】(背景点)
-    # 🟢 [性能优化]：砍掉 70% 的数量
-    # 原逻辑是 len * 100，现在改为 len * 30，并设置硬上限 300
-    base_count = len(user_nodes) * 30
-    num_atmosphere = int(min(300, max(100, base_count)))
+    # 🟢 [极度削减]：系数降到 5，上限降到 100
+    base_count = len(user_nodes) * 5
+    num_atmosphere = int(min(100, max(50, base_count)))
     
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
@@ -141,7 +129,8 @@ def generate_soul_network(radar_dict, user_nodes):
         color = get_dimension_color(target_dim)
         
         size = float(random.uniform(3, 8))
-        opacity = float(random.uniform(0.3, 0.7))
+        # 🟢 [调整]：降低透明度，让背景更淡，突出主粒子
+        opacity = float(random.uniform(0.2, 0.5)) 
 
         nodes.append({
             "id": node_id,
@@ -165,10 +154,7 @@ def generate_soul_network(radar_dict, user_nodes):
         source_idx = node_indices[atmos_id]
         source_color = nodes[source_idx]["color_category"]
         
-        # 🟢 [性能优化]：每个氛围粒子最多只连 1 条线，且优先连接同色
         target_pool = thought_node_ids if (thought_node_ids and random.random() < 0.4) else atmos_node_ids
-
-        # 采样，避免遍历太多
         if len(target_pool) > 20: sample_pool = random.sample(target_pool, 10)
         else: sample_pool = target_pool
 
