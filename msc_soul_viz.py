@@ -4,6 +4,7 @@ from streamlit_echarts import st_echarts
 import streamlit_antd_components as sac
 import msc_viz as viz
 import msc_soul_gen as gen
+import time
 
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
@@ -12,6 +13,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
     
     lang = st.session_state.get('language', 'en')
     
+    # ... (省略翻译字典，保持不变) ...
     ARCHETYPE_NAMES = {
         "Agency":        {"en": "Starburst Structure", "zh": "爆发结构"},
         "Care":          {"en": "Dense Cluster",      "zh": "凝聚结构"},
@@ -45,10 +47,13 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
+    # 🎨 [背景色]：改为黑色 (#000000) 才能看到发光效果 (Bloom)
     background_color = "#000000"
 
-    # 🟢 [修改点]：稍微放宽边界，让飘散的粒子不被切断
+    # 📏 [边界范围]：控制粒子活动的隐形盒子大小
+    # 值越小，粒子越容易跑出屏幕；值越大，粒子看起来越小。
     axis_range = 250 
+    
     axis_common = {
         "show": False,
         "min": -axis_range, "max": axis_range,
@@ -73,13 +78,19 @@ def render_soul_scene(radar_dict, user_nodes=None):
 
         "grid3D": {
             "show": False,
+            # 📷 [相机控制]
             "viewControl": {
                 "projection": 'perspective',
+                # 🔄 [自动旋转]：True 为开启。如果没转，尝试刷新页面。
                 "autoRotate": True,
-                # 🟢 [修改点]：转速调高，确保肉眼可见旋转
-                "autoRotateSpeed": 100, 
-                # 🟢 [关键点]：相机拉远 (700)，因为重力减小了，粒子群会变得很大，必须拉远才能看全
-                "distance":800,
+                
+                # 🚀 [转速]：数值越大转得越快。比如设为 10 或 20 试试。
+                "autoRotateSpeed": 10, 
+                
+                # 🔭 [相机距离]：数值越大，相机离粒子越远（画面缩小）。
+                # 如果你想把所有粒子都放进去，就把这个数字调大 (比如 500, 600)。
+                "distance": 500,
+                
                 "minDistance": 200, "maxDistance": 800,
                 "alpha": 20, "beta": 40
             },
@@ -87,10 +98,12 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 "main": {"intensity": 1.5, "alpha": 30, "beta": 30},
                 "ambient": {"intensity": 0.5}
             },
+            # ✨ [发光特效] (Post Processing)
             "postEffect": {
                 "enable": True,
                 "bloom": {
                     "enable": True,
+                    # 💡 [发光强度]：0.1 (微弱) ~ 1.0 (极强)。
                     "bloomIntensity": 0.6
                 }
             },
@@ -100,8 +113,9 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "series": [{
             "type": 'graphGL',
             "layout": 'force',
-            # 🟢 [关键]：显式开启平移和缩放 (虽然手机上缩放可能不灵，但平移是有的)
-            "roam": True,
+            "roam": True, # 允许平移和缩放
+            
+            # ⚛️ [物理引擎参数]：来自 msc_soul_gen.py
             "force": {
                 "repulsion": physics_config["repulsion"],
                 "gravity": physics_config["gravity"],
@@ -121,5 +135,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
         }]
     }
     
-    st_echarts(options=option, height="350px")
+    # 📺 [视窗高度]：350px (正方形)
+    # 🔑 [强制刷新 Key]：添加 key 参数，确保每次参数修改后组件都会重绘
+    st_echarts(options=option, height="350px", key=f"soul_viz_{int(time.time())}")
     viz.render_spectrum_legend()
