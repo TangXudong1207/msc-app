@@ -47,8 +47,8 @@ def render_soul_scene(radar_dict, user_nodes=None):
     
     background_color = "#FFFFFF"
 
-    # 🟢 [修改点]：缩小坐标范围，收紧粒子雾
-    axis_range = 180 
+    # 🟢 [修改点]：范围缩小到 150，作为隐形边界
+    axis_range = 150 
     axis_common = {
         "show": False,
         "min": -axis_range, "max": axis_range,
@@ -76,9 +76,9 @@ def render_soul_scene(radar_dict, user_nodes=None):
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 2, 
-                # 🟢 [修改点]：拉近相机 (400 -> 220)，配合更小的视窗高度
-                "distance": 220,
+                "autoRotateSpeed": 3, 
+                # 🟢 [修改点]：距离调整为 200，配合 150 的轴范围，视角刚好填满正方形
+                "distance": 200,
                 "minDistance": 100, "maxDistance": 400,
                 "alpha": 20, "beta": 40
             },
@@ -90,7 +90,8 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 "enable": True,
                 "bloom": {
                     "enable": True,
-                    "bloomIntensity": 0.3 
+                    # 🟢 [修改点]：发光强度加倍 (0.3 -> 0.6)
+                    "bloomIntensity": 0.6
                 }
             },
             "environment": background_color
@@ -118,6 +119,6 @@ def render_soul_scene(radar_dict, user_nodes=None):
         }]
     }
     
-    # 🟢 [修改点]：高度改为 450px，视窗变小
-    st_echarts(options=option, height="450px")
+    # 🟢 [修改点]：正方形视窗 (350px)
+    st_echarts(options=option, height="350px")
     viz.render_spectrum_legend()
