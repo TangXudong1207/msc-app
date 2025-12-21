@@ -20,20 +20,30 @@ def clean_for_json(obj):
         return obj
 
 def get_physics_config(primary_attr, secondary_attr):
-    # 🟢 [修改点]：摩擦力 (friction) 全局大幅降低，模拟真空环境，让粒子持续漂浮运动
-    base_friction = 0.1 
+    # 🟢 [关键修改]：让粒子飘起来！
+    # 1. 摩擦力极低 (0.05)，保持运动惯性
+    # 2. 重力极低 (0.1 - 0.3)，不再死死吸在中间，允许扩散
+    # 3. 斥力适中，连线变长
+    
+    base_friction = 0.05 
     
     base_configs = {
-        "Agency":        {"repulsion": 800,  "gravity": 1.5, "edgeLength": [30, 80]},
-        "Care":          {"repulsion": 60,   "gravity": 4.0, "edgeLength": [5, 20]},
-        "Curiosity":     {"repulsion": 400,  "gravity": 1.2, "edgeLength": [50, 150]},
-        "Coherence":     {"repulsion": 500,  "gravity": 2.0, "edgeLength": [20, 50]},
-        "Reflection":    {"repulsion": 300,  "gravity": 2.5, "edgeLength": [20, 60]},
-        "Transcendence": {"repulsion": 600,  "gravity": 1.0, "edgeLength": [40, 100]},
-        "Aesthetic":     {"repulsion": 200,  "gravity": 3.0, "edgeLength": [30, 80]}
+        # 爆发结构：大范围扩散
+        "Agency":        {"repulsion": 1000, "gravity": 0.1, "edgeLength": [100, 300]},
+        # 凝聚结构：虽然凝聚，但也允许外围飘荡
+        "Care":          {"repulsion": 300,  "gravity": 0.5, "edgeLength": [20, 100]},
+        # 发散网络：极度发散
+        "Curiosity":     {"repulsion": 1200, "gravity": 0.05, "edgeLength": [150, 400]},
+        # 晶格结构
+        "Coherence":     {"repulsion": 800,  "gravity": 0.2, "edgeLength": [50, 150]},
+        # 深旋结构
+        "Reflection":    {"repulsion": 600,  "gravity": 0.3, "edgeLength": [50, 200]},
+        # 升腾云结构：反重力感
+        "Transcendence": {"repulsion": 1500, "gravity": 0.02, "edgeLength": [100, 400]},
+        # 和谐球体
+        "Aesthetic":     {"repulsion": 500,  "gravity": 0.2, "edgeLength": [50, 200]}
     }
     
-    # 覆盖摩擦力设置
     aspect_configs = {k: {"friction": base_friction} for k in base_configs.keys()}
 
     p_conf = base_configs.get(primary_attr, base_configs["Aesthetic"])
@@ -112,17 +122,19 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 3. 生成【氛围粒子】(背景点)
-    base_count = len(user_nodes) * 15
-    num_atmosphere = int(min(250, max(80, base_count)))
+    # 3. 生成【氛围粒子】(填充空间)
+    # 🟢 [修改点]：增加填充粒子，系数提升到 30
+    base_count = len(user_nodes) * 30
+    num_atmosphere = int(min(400, max(150, base_count)))
     
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
         target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
         color = get_dimension_color(target_dim)
         
-        size = float(random.uniform(2, 6))
-        opacity = float(random.uniform(0.3, 0.6)) 
+        # 尺寸差异化，有的很小像尘埃，有的大一点像卫星
+        size = float(random.uniform(1, 5))
+        opacity = float(random.uniform(0.2, 0.6)) 
 
         nodes.append({
             "id": node_id,
@@ -138,7 +150,7 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 4. 建立连接
+    # 4. 建立连接 (松散连接)
     thought_node_ids = [n["id"] for n in nodes if n["id"].startswith("thought")]
     atmos_node_ids = [n["id"] for n in nodes if n["id"].startswith("atmos")]
     
@@ -146,27 +158,38 @@ def generate_soul_network(radar_dict, user_nodes):
         source_idx = node_indices[atmos_id]
         source_color = nodes[source_idx]["color_category"]
         
-        target_pool = thought_node_ids if (thought_node_ids and random.random() < 0.3) else atmos_node_ids
-        if len(target_pool) > 20: sample_pool = random.sample(target_pool, 10)
-        else: sample_pool = target_pool
-
-        target_id = None
-        same = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]==source_color]
+        # 🟢 [关键逻辑]：让部分氛围粒子“断线”，或者连向其他氛围粒子，而不是全连主粒子
+        # 这样它们就会因为没有弹簧拉力，而在微弱重力下飘得更远
+        rand_val = random.random()
         
-        if same: target_id = random.choice(same)
-        elif sample_pool: target_id = random.choice(sample_pool)
+        if rand_val < 0.2:
+             target_pool = thought_node_ids # 20% 紧跟主粒子
+        elif rand_val < 0.6:
+             target_pool = atmos_node_ids # 40% 互连，形成云团
+        else:
+             target_pool = [] # 40% 不连线！变成自由漂浮的尘埃！
+             
+        if target_pool:
+            if len(target_pool) > 20: sample_pool = random.sample(target_pool, 5)
+            else: sample_pool = target_pool
 
-        if target_id:
-            target_idx = node_indices[target_id]
-            edges.append({
-                "source": int(source_idx),
-                "target": int(target_idx),
-                "lineStyle": {
-                    "color": source_color,
-                    "opacity": 0.15,
-                    "width": 0.5
-                }
-            })
+            target_id = None
+            same = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]==source_color]
+            
+            if same: target_id = random.choice(same)
+            elif sample_pool: target_id = random.choice(sample_pool)
+
+            if target_id:
+                target_idx = node_indices[target_id]
+                edges.append({
+                    "source": int(source_idx),
+                    "target": int(target_idx),
+                    "lineStyle": {
+                        "color": source_color,
+                        "opacity": 0.1,
+                        "width": 0.5
+                    }
+                })
 
     raw_physics = get_physics_config(primary_attr, secondary_attr)
 
