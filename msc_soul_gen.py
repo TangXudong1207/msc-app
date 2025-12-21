@@ -3,9 +3,10 @@ import random
 import math
 import numpy as np
 import msc_config as config
+import json
 
 # ==========================================
-# 🧹 强力清洗工具
+# 🧹 强力清洗工具：解决 MarshallComponentException
 # ==========================================
 def clean_for_json(obj):
     if isinstance(obj, (np.integer, np.int64, np.int32)):
@@ -86,7 +87,11 @@ def generate_soul_network(radar_dict, user_nodes):
     edges = []
     node_indices = {}
 
-    # 2. 生成【思想节点】
+    # 🟢 获取“好奇 (Curiosity)”的颜色作为老数据默认色
+    # 根据之前的配置，Curiosity 应该是绿色 (#00E676)
+    default_old_data_color = config.SPECTRUM.get("Curiosity", "#00E676")
+
+    # 2. 生成【思想节点】(主粒子)
     for i, user_node in enumerate(user_nodes):
         node_id = f"thought_{i}"
         kw = user_node.get('keywords', [])
@@ -94,30 +99,26 @@ def generate_soul_network(radar_dict, user_nodes):
             try: kw = json.loads(kw)
             except: kw = []
             
-        # 🟢 [核心修改逻辑] --------------------------------
-        # 默认颜色：中性银白 (代表未定义的原始思想)
-        color = "#E0E0E0" 
+        # 🟢 [逻辑]：默认设为好奇色。如果有关键词匹配，则覆盖为特定颜色。
+        color = default_old_data_color 
         found_match = False
         
         if kw and isinstance(kw, list):
             for k in kw:
-                # 必须精确匹配 Spectrum 中的颜色，才上色
                 if k in config.SPECTRUM:
                     color = config.SPECTRUM[k]
                     found_match = True
-                    break # 找到第一个匹配色就停止
+                    break 
         
-        # 如果没有找到匹配色，保持 #E0E0E0，不再强制使用 get_dimension_color(primary_attr)
-        # 这将避免因为你的主属性是“美学(紫)”导致所有老数据变紫
-        # ------------------------------------------------
-
         nodes.append({
             "id": node_id,
             "name": str(user_node.get('care_point', 'Thought')),
-            "symbolSize": 25, # 保持刚才调整的小尺寸
+            # 🟢 [保持设计]：尺寸 25，精致感
+            "symbolSize": 25,
             "itemStyle": {
                 "color": color,
-                "borderColor": "#FFFFFF" if found_match else "#CCCCCC", # 有颜色的加白边，没颜色的加灰边
+                # 如果是匹配到的特定色，用白边；如果是老数据(好奇色)，用浅绿边区分一下
+                "borderColor": "#FFFFFF" if found_match else "#CCFFCC",
                 "borderWidth": 2,
                 "shadowBlur": 50, # 保持发光
                 "shadowColor": color,
@@ -128,8 +129,11 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 3. 生成【氛围粒子】(这些粒子依然跟随你的主属性颜色，作为背景氛围)
-    num_atmosphere = max(500, len(user_nodes) * 100)
+    # 3. 生成【氛围粒子】(背景点)
+    # 🟢 [性能优化]：砍掉 70% 的数量
+    # 原逻辑是 len * 100，现在改为 len * 30，并设置硬上限 300
+    base_count = len(user_nodes) * 30
+    num_atmosphere = int(min(300, max(100, base_count)))
     
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
@@ -161,36 +165,30 @@ def generate_soul_network(radar_dict, user_nodes):
         source_idx = node_indices[atmos_id]
         source_color = nodes[source_idx]["color_category"]
         
-        num_links = random.choices([1, 2], weights=[0.7, 0.3])[0]
+        # 🟢 [性能优化]：每个氛围粒子最多只连 1 条线，且优先连接同色
+        target_pool = thought_node_ids if (thought_node_ids and random.random() < 0.4) else atmos_node_ids
+
+        # 采样，避免遍历太多
+        if len(target_pool) > 20: sample_pool = random.sample(target_pool, 10)
+        else: sample_pool = target_pool
+
+        target_id = None
+        same = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]==source_color]
         
-        for _ in range(num_links):
-            if thought_node_ids and random.random() < 0.3:
-                 target_pool = thought_node_ids
-            else:
-                 target_pool = atmos_node_ids
+        if same: target_id = random.choice(same)
+        elif sample_pool: target_id = random.choice(sample_pool)
 
-            if len(target_pool) > 50: sample_pool = random.sample(target_pool, 20)
-            else: sample_pool = target_pool
-
-            target_id = None
-            same = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]==source_color]
-            diff = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]!=source_color]
-
-            if random.random() < 0.8 and same: target_id = random.choice(same)
-            elif diff: target_id = random.choice(diff)
-            elif same: target_id = random.choice(same)
-
-            if target_id:
-                target_idx = node_indices[target_id]
-                edges.append({
-                    "source": int(source_idx),
-                    "target": int(target_idx),
-                    "lineStyle": {
-                        "color": source_color,
-                        "opacity": 0.1,
-                        "width": 0.5
-                    }
-                })
+        if target_id:
+            target_idx = node_indices[target_id]
+            edges.append({
+                "source": int(source_idx),
+                "target": int(target_idx),
+                "lineStyle": {
+                    "color": source_color,
+                    "opacity": 0.1,
+                    "width": 0.5
+                }
+            })
 
     raw_physics = get_physics_config(primary_attr, secondary_attr)
 
