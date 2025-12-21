@@ -19,16 +19,26 @@ def clean_for_json(obj):
     else:
         return obj
 
+# 🟢 [物理引擎重构]：增强重力，减小斥力，防止飞出，形成凝聚态
 def get_physics_config(primary_attr, secondary_attr):
+    # 基础配置：所有模式都显著增加了 gravity (从 0.x 增加到 1.0+)
     base_configs = {
-        "Agency":        {"repulsion": 2500, "gravity": 0.01, "edgeLength": [50, 150]},
-        "Care":          {"repulsion": 100,  "gravity": 0.8,  "edgeLength": [10, 30]},
-        "Curiosity":     {"repulsion": 800,  "gravity": 0.05, "edgeLength": [100, 300]},
-        "Coherence":     {"repulsion": 1000, "gravity": 0.2,  "edgeLength": [30, 60]},
-        "Reflection":    {"repulsion": 600,  "gravity": 0.3,  "edgeLength": [40, 80]},
-        "Transcendence": {"repulsion": 1500, "gravity": 0.0,  "edgeLength": [80, 200]},
-        "Aesthetic":     {"repulsion": 500,  "gravity": 0.1,  "edgeLength": [50, 100]}
+        # 爆发结构：稍微松散一点，但依然有强重力
+        "Agency":        {"repulsion": 800,  "gravity": 1.5, "edgeLength": [30, 80]},
+        # 凝聚结构：极高的重力，紧密的一团
+        "Care":          {"repulsion": 60,   "gravity": 4.0, "edgeLength": [5, 20]},
+        # 发散网络：虽然发散，但为了不飞出去，重力也要够
+        "Curiosity":     {"repulsion": 400,  "gravity": 1.2, "edgeLength": [50, 150]},
+        # 晶格结构
+        "Coherence":     {"repulsion": 500,  "gravity": 2.0, "edgeLength": [20, 50]},
+        # 深旋结构
+        "Reflection":    {"repulsion": 300,  "gravity": 2.5, "edgeLength": [20, 60]},
+        # 升腾云结构
+        "Transcendence": {"repulsion": 600,  "gravity": 1.0, "edgeLength": [40, 100]},
+        # 和谐球体
+        "Aesthetic":     {"repulsion": 200,  "gravity": 3.0, "edgeLength": [30, 80]}
     }
+    
     aspect_configs = {
         "Agency":        {"friction": 0.1},
         "Care":          {"friction": 0.8},
@@ -48,7 +58,6 @@ def get_dimension_color(dim):
     return config.SPECTRUM.get(config.DIMENSION_MAP_REV.get(dim, "Structure"), "#FFFFFF")
 
 def generate_soul_network(radar_dict, user_nodes):
-    # 1. 数据准备
     if not radar_dict: radar_dict = {"Care": 3.0, "Reflection": 3.0}
     
     valid_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
@@ -76,7 +85,6 @@ def generate_soul_network(radar_dict, user_nodes):
     edges = []
     node_indices = {}
 
-    # 🟢 强行指定老数据为绿色 (#00E676)
     default_old_data_color = "#00E676" 
 
     # 2. 生成【思想节点】(主粒子)
@@ -84,16 +92,14 @@ def generate_soul_network(radar_dict, user_nodes):
         node_id = f"thought_{i}"
         kw = user_node.get('keywords', [])
         
-        # 严格的关键词解析
         if isinstance(kw, str):
             try: kw = json.loads(kw)
             except: kw = []
         if kw is None: kw = []
             
-        color = default_old_data_color # 默认为绿
+        color = default_old_data_color 
         found_match = False
         
-        # 只要找到了 Spectrum 里的词，就用那个颜色
         if isinstance(kw, list) and len(kw) > 0:
             for k in kw:
                 if k in config.SPECTRUM:
@@ -104,12 +110,14 @@ def generate_soul_network(radar_dict, user_nodes):
         nodes.append({
             "id": node_id,
             "name": str(user_node.get('care_point', 'Thought')),
-            "symbolSize": 25,
+            # 🟢 [修改点]：缩小为主粒子的 2/3 (原25 -> 16)
+            "symbolSize": 16,
             "itemStyle": {
                 "color": color,
                 "borderColor": "#FFFFFF" if found_match else "#CCFFCC",
-                "borderWidth": 2,
-                "shadowBlur": 50,
+                "borderWidth": 1.5,
+                # 🟢 [修改点]：增加 ShadowBlur，配合 Bloom 产生更强光晕
+                "shadowBlur": 80, 
                 "shadowColor": color,
                 "opacity": 1.0
             },
@@ -118,19 +126,20 @@ def generate_soul_network(radar_dict, user_nodes):
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 3. 生成【氛围粒子】(背景点)
-    # 🟢 [极度削减]：系数降到 5，上限降到 100
-    base_count = len(user_nodes) * 20
-    num_atmosphere = int(min(200, max(50, base_count)))
+    # 3. 生成【氛围粒子】(背景点，形成彗星尾巴)
+    # 🟢 [修改点]：增加数量，形成“雾/彗星”感
+    # 系数从 5 -> 15，上限从 100 -> 250
+    base_count = len(user_nodes) * 15
+    num_atmosphere = int(min(250, max(80, base_count)))
     
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
         target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
         color = get_dimension_color(target_dim)
         
-        size = float(random.uniform(3, 8))
-        # 🟢 [调整]：降低透明度，让背景更淡，突出主粒子
-        opacity = float(random.uniform(0.2, 0.5)) 
+        # 尺寸稍微随机大一点点，形成光斑感
+        size = float(random.uniform(2, 6))
+        opacity = float(random.uniform(0.3, 0.6)) 
 
         nodes.append({
             "id": node_id,
@@ -139,14 +148,14 @@ def generate_soul_network(radar_dict, user_nodes):
             "itemStyle": {
                 "color": color,
                 "borderColor": color,
-                "borderWidth": 0.5,
+                "borderWidth": 0,
                 "opacity": opacity
             },
             "color_category": color
         })
         node_indices[node_id] = len(nodes) - 1
 
-    # 4. 建立连接
+    # 4. 建立连接 (保持稀疏连接)
     thought_node_ids = [n["id"] for n in nodes if n["id"].startswith("thought")]
     atmos_node_ids = [n["id"] for n in nodes if n["id"].startswith("atmos")]
     
@@ -154,7 +163,7 @@ def generate_soul_network(radar_dict, user_nodes):
         source_idx = node_indices[atmos_id]
         source_color = nodes[source_idx]["color_category"]
         
-        target_pool = thought_node_ids if (thought_node_ids and random.random() < 0.4) else atmos_node_ids
+        target_pool = thought_node_ids if (thought_node_ids and random.random() < 0.3) else atmos_node_ids
         if len(target_pool) > 20: sample_pool = random.sample(target_pool, 10)
         else: sample_pool = target_pool
 
@@ -171,7 +180,7 @@ def generate_soul_network(radar_dict, user_nodes):
                 "target": int(target_idx),
                 "lineStyle": {
                     "color": source_color,
-                    "opacity": 0.1,
+                    "opacity": 0.15, # 稍微增加一点连接线的可见度
                     "width": 0.5
                 }
             })
