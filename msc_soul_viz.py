@@ -54,7 +54,8 @@ def render_soul_scene(radar_dict, user_nodes=None):
     background_color = "#FFFFFF" # 纯白背景
 
     # 2. 坐标轴配置 (调整大小)
-    axis_range = 150
+    # 🟢 [修改点]：扩大坐标轴范围，从 150 -> 350，包容发散的粒子
+    axis_range = 350 
     axis_common = {
         "show": True,
         "min": -axis_range, "max": axis_range,
@@ -68,8 +69,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
         # 提示框组件
         "tooltip": {
             "show": True,
-            # 🔴 核心修复：将 lambda 函数改为字符串模板
-            # {b} 代表节点名称 (Name)，{c} 代表数值 (Value/Insight)
+            # 🟢 确保使用字符串而非 lambda
             "formatter": "{b}<br/>{c}", 
             "backgroundColor": "rgba(50,50,50,0.8)",
             "textStyle": {"color": "#fff"},
@@ -81,19 +81,28 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "zAxis3D": axis_common,
 
         "grid3D": {
-            # 调整视野深度，让巨大的节点看起来更震撼
+            # 调整视野深度
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 5, # 缓慢旋转展示动态
-                "distance": 250,
-                "minDistance": 150, "maxDistance": 400,
+                "autoRotateSpeed": 5, 
+                # 🟢 [修改点]：因为坐标系变大了，这里把相机拉远一点 (250 -> 400)，否则会看里面
+                "distance": 400,
+                "minDistance": 200, "maxDistance": 600,
                 "alpha": 20, "beta": 40
             },
             # 明亮、干净的光照
             "light": {
                 "main": {"intensity": 1.2, "alpha": 30, "beta": 30},
                 "ambient": {"intensity": 0.8}
+            },
+            # 🟢 [新增点]：开启后期处理 (Post Effect) 实现发光 (Bloom)
+            "postEffect": {
+                "enable": True,
+                "bloom": {
+                    "enable": True,
+                    "bloomIntensity": 0.4  # 发光强度，可微调
+                }
             },
             "environment": background_color
         },
