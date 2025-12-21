@@ -45,9 +45,9 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
-    background_color = "#FFFFFF"
+    # 🟢 [关键]：切换为纯黑背景，这是“发光”效果能被看见的前提！
+    background_color = "#000000"
 
-    # 🟢 [修改点]：范围缩小到 150，作为隐形边界
     axis_range = 150 
     axis_common = {
         "show": False,
@@ -76,21 +76,20 @@ def render_soul_scene(radar_dict, user_nodes=None):
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 3, 
-                # 🟢 [修改点]：距离调整为 200，配合 150 的轴范围，视角刚好填满正方形
+                "autoRotateSpeed": 3,
                 "distance": 200,
                 "minDistance": 100, "maxDistance": 400,
                 "alpha": 20, "beta": 40
             },
             "light": {
-                "main": {"intensity": 1.2, "alpha": 30, "beta": 30},
-                "ambient": {"intensity": 0.8}
+                "main": {"intensity": 1.5, "alpha": 30, "beta": 30},
+                "ambient": {"intensity": 0.5}
             },
             "postEffect": {
                 "enable": True,
                 "bloom": {
                     "enable": True,
-                    # 🟢 [修改点]：发光强度加倍 (0.3 -> 0.6)
+                    # 🟢 在黑色背景下，0.6 的强度会非常耀眼
                     "bloomIntensity": 0.6
                 }
             },
@@ -110,15 +109,15 @@ def render_soul_scene(radar_dict, user_nodes=None):
             "data": nodes,
             "links": edges,
             "itemStyle": {"opacity": 1},
-            "lineStyle": {"width": 0.5, "opacity": 0.1},
+            "lineStyle": {"width": 0.5, "opacity": 0.2},
             "emphasis": {
-                "itemStyle": {"borderColor": "#000", "borderWidth": 1},
-                "lineStyle": {"width": 2, "opacity": 0.8},
+                "itemStyle": {"borderColor": "#FFF", "borderWidth": 2},
+                "lineStyle": {"width": 2, "opacity": 1.0},
                 "label": {"show": True}
             }
         }]
     }
     
-    # 🟢 [修改点]：正方形视窗 (350px)
+    # 🟢 [修改点]：正方形视窗 (350px)，配合黑色背景，看起来像个宇宙视窗
     st_echarts(options=option, height="350px")
     viz.render_spectrum_legend()
