@@ -1,19 +1,20 @@
 ### msc_soul_viz.py ###
 import streamlit as st
-from streamlit_echarts import st_echarts
+import streamlit.components.v1 as components
 import streamlit_antd_components as sac
 import msc_viz as viz
 import msc_soul_gen as gen
-import time
+import json
 
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
+    # 1. 计算数据
     nodes, edges, physics_config, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
     
     lang = st.session_state.get('language', 'en')
     
-    # ... (省略翻译字典，保持不变) ...
+    # ... (保持原有的文案映射逻辑) ...
     ARCHETYPE_NAMES = {
         "Agency":        {"en": "Starburst Structure", "zh": "爆发结构"},
         "Care":          {"en": "Dense Cluster",      "zh": "凝聚结构"},
@@ -47,95 +48,119 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
-    # 🎨 [背景色]：改为黑色 (#000000) 才能看到发光效果 (Bloom)
-    background_color = "#000000"
-
-    # 📏 [边界范围]：控制粒子活动的隐形盒子大小
-    # 值越小，粒子越容易跑出屏幕；值越大，粒子看起来越小。
-    axis_range = 250 
+    # 2. 准备嵌入的 HTML/JS 代码
+    # 我们使用 json.dumps 将 Python 数据转为 JS 对象
+    nodes_json = json.dumps(nodes)
+    edges_json = json.dumps(edges)
+    physics_json = json.dumps(physics_config)
     
-    axis_common = {
-        "show": False,
-        "min": -axis_range, "max": axis_range,
-        "axisLine": {"show": False},
-        "axisLabel": {"show": False},
-        "splitLine": {"show": False}
-    }
+    # 🌟 关键参数配置区 (你可以在这里修改) 🌟
+    AUTO_ROTATE_SPEED = 10   # 旋转速度
+    CAMERA_DISTANCE = 400    # 相机距离 (越小越近)
+    BLOOM_INTENSITY = 0.6    # 发光强度
+    AXIS_RANGE = 250         # 坐标轴范围
+    
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <!-- 引入最新的 ECharts 和 ECharts-GL -->
+        <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/echarts-gl/dist/echarts-gl.min.js"></script>
+    </head>
+    <body style="margin: 0; background-color: #000000;">
+        <div id="main" style="width: 100%; height: 350px;"></div>
+        <script type="text/javascript">
+            var chartDom = document.getElementById('main');
+            var myChart = echarts.init(chartDom);
+            var option;
 
-    option = {
-        "backgroundColor": background_color,
-        "tooltip": {
-            "show": True,
-            "formatter": "{b}<br/>{c}", 
-            "backgroundColor": "rgba(50,50,50,0.8)",
-            "textStyle": {"color": "#fff"},
-            "borderColor": "#333"
-        },
-        
-        "xAxis3D": axis_common,
-        "yAxis3D": axis_common,
-        "zAxis3D": axis_common,
+            // 从 Python 传入的数据
+            var nodes = {nodes_json};
+            var edges = {edges_json};
+            var physics = {physics_json};
 
-        "grid3D": {
-            "show": False,
-            # 📷 [相机控制]
-            "viewControl": {
-                "projection": 'perspective',
-                # 🔄 [自动旋转]：True 为开启。如果没转，尝试刷新页面。
-                "autoRotate": True,
-                
-                # 🚀 [转速]：数值越大转得越快。比如设为 10 或 20 试试。
-                "autoRotateSpeed": 10, 
-                
-                # 🔭 [相机距离]：数值越大，相机离粒子越远（画面缩小）。
-                # 如果你想把所有粒子都放进去，就把这个数字调大 (比如 500, 600)。
-                "distance": 500,
-                
-                "minDistance": 200, "maxDistance": 800,
-                "alpha": 20, "beta": 40
-            },
-            "light": {
-                "main": {"intensity": 1.5, "alpha": 30, "beta": 30},
-                "ambient": {"intensity": 0.5}
-            },
-            # ✨ [发光特效] (Post Processing)
-            "postEffect": {
-                "enable": True,
-                "bloom": {
-                    "enable": True,
-                    # 💡 [发光强度]：0.1 (微弱) ~ 1.0 (极强)。
-                    "bloomIntensity": 0.6
-                }
-            },
-            "environment": background_color
-        },
+            option = {{
+                backgroundColor: '#000000',
+                tooltip: {{
+                    show: true,
+                    formatter: function (params) {{
+                        return params.name + '<br/>' + (params.value || '');
+                    }},
+                    backgroundColor: 'rgba(50,50,50,0.8)',
+                    textStyle: {{ color: '#fff' }}
+                }},
+                // 3D 坐标系配置
+                grid3D: {{
+                    show: false,
+                    viewControl: {{
+                        projection: 'perspective',
+                        autoRotate: true,
+                        autoRotateSpeed: {AUTO_ROTATE_SPEED}, 
+                        distance: {CAMERA_DISTANCE},
+                        minDistance: 100,
+                        maxDistance: 800,
+                        alpha: 20,
+                        beta: 40
+                    }},
+                    light: {{
+                        main: {{
+                            intensity: 1.5,
+                            alpha: 30,
+                            beta: 30
+                        }},
+                        ambient: {{ intensity: 0.5 }}
+                    }},
+                    postEffect: {{
+                        enable: true,
+                        bloom: {{
+                            enable: true,
+                            bloomIntensity: {BLOOM_INTENSITY}
+                        }}
+                    }},
+                    environment: '#000000'
+                }},
+                xAxis3D: {{ show: false, min: -{AXIS_RANGE}, max: {AXIS_RANGE} }},
+                yAxis3D: {{ show: false, min: -{AXIS_RANGE}, max: {AXIS_RANGE} }},
+                zAxis3D: {{ show: false, min: -{AXIS_RANGE}, max: {AXIS_RANGE} }},
+                series: [
+                    {{
+                        type: 'graphGL',
+                        layout: 'force',
+                        data: nodes,
+                        links: edges,
+                        force: {{
+                            repulsion: physics.repulsion,
+                            gravity: physics.gravity,
+                            friction: physics.friction,
+                            edgeLength: physics.edgeLength,
+                            initLayout: 'spherical'
+                        }},
+                        itemStyle: {{ opacity: 1 }},
+                        lineStyle: {{ width: 0.5, opacity: 0.2 }},
+                        emphasis: {{
+                            itemStyle: {{ borderColor: '#FFF', borderWidth: 2 }},
+                            label: {{ show: true }}
+                        }}
+                    }}
+                ]
+            }};
 
-        "series": [{
-            "type": 'graphGL',
-            "layout": 'force',
-            "roam": True, # 允许平移和缩放
+            myChart.setOption(option);
             
-            # ⚛️ [物理引擎参数]：来自 msc_soul_gen.py
-            "force": {
-                "repulsion": physics_config["repulsion"],
-                "gravity": physics_config["gravity"],
-                "friction": physics_config["friction"],
-                "edgeLength": physics_config["edgeLength"],
-                "initLayout": 'spherical'
-            },
-            "data": nodes,
-            "links": edges,
-            "itemStyle": {"opacity": 1},
-            "lineStyle": {"width": 0.5, "opacity": 0.2},
-            "emphasis": {
-                "itemStyle": {"borderColor": "#FFF", "borderWidth": 2},
-                "lineStyle": {"width": 2, "opacity": 1.0},
-                "label": {"show": True}
-            }
-        }]
-    }
+            // 响应式调整大小
+            window.addEventListener('resize', function() {{
+                myChart.resize();
+            }});
+        </script>
+    </body>
+    </html>
+    """
     
-    # 📺 [视窗高度]：350px (正方形)
-    # 🔑 [强制刷新 Key]：添加 key 参数，确保每次参数修改后组件都会重绘
-    st_echarts(options=option, height="350px", key=f"soul_viz_{int(time.time())}")
+    # 3. 使用原生 HTML 组件渲染
+    # height=350 对应正方形视窗
+    components.html(html_code, height=350)
+    
+    # 渲染图例 (保持不变)
     viz.render_spectrum_legend()
