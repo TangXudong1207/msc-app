@@ -46,21 +46,20 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
     
-    # 🟢 背景设为黑色
+    # 🌑 [背景]：纯黑
     background_color = "#000000"
 
     axis_range = 250 
     
-    # 🟢 [关键技巧]：
-    # 我们设置 show: True 让 ECharts 保持 Grid3D 的逻辑 (旋转、相机控制)
-    # 但是把 opacity 设为 0，让它视觉上消失
+    # 👻 [隐形坐标轴配置]
+    # 策略：组件开启 (show:True) 以保持逻辑，但视觉全关 (opacity:0 / show:False)
     invisible_axis = {
-        "show": True,
+        "show": True, # 必须为 True，否则 grid3D 不会建立，旋转就失效了
         "min": -axis_range, "max": axis_range,
-        "axisLine": {"lineStyle": {"color": "#FFF", "opacity": 0}}, # 透明
+        "axisLine": {"lineStyle": {"color": "#FFF", "opacity": 0}}, 
         "axisLabel": {"show": False},
         "axisTick": {"show": False},
-        "splitLine": {"show": False, "lineStyle": {"opacity": 0}}   # 透明
+        "splitLine": {"show": False} 
     }
 
     option = {
@@ -78,27 +77,23 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "zAxis3D": invisible_axis,
 
         "grid3D": {
-            "show": True, # 确保 grid3D 是开启的
-            "boxWidth": 200, # 控制盒子比例，确保是正方体
+            "show": True,
+            "boxWidth": 200, 
             "boxHeight": 200,
             "boxDepth": 200,
-            # 隐藏盒子的边框线
+            # 隐藏盒子边框
             "axisLine": {"lineStyle": {"opacity": 0}},
             "splitLine": {"lineStyle": {"opacity": 0}},
-            "axisPointer": {"show": False},
+            "axisPointer": {"show": False}, # 隐藏鼠标悬停时的十字准星
 
             "viewControl": {
                 "projection": 'perspective',
-                "autoRotate": True,       # 🟢 必须开启
-                "autoRotateSpeed": 10,    # 🟢 转速
-                "distance": 400,          # 🟢 相机距离
-                "minDistance": 100,
-                "maxDistance": 800,
-                "alpha": 20, 
-                "beta": 40,
-                # 尝试锁定 Y 轴旋转，有时能更稳定
-                "rotateSensitivity": 1, 
-                "zoomSensitivity": 1 
+                "autoRotate": True,
+                "autoRotateSpeed": 10,
+                # 📷 [相机]：拉远以容纳扩散的粒子
+                "distance": 500,
+                "minDistance": 200, "maxDistance": 800,
+                "alpha": 20, "beta": 40
             },
             "light": {
                 "main": {"intensity": 1.5, "alpha": 30, "beta": 30},
@@ -117,6 +112,10 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "series": [{
             "type": 'graphGL',
             "layout": 'force',
+            
+            # 🔗 [核心修复]：这句代码把粒子层和坐标层“钉”在了一起！
+            "coordinateSystem": 'cartesian3D',
+            
             "roam": True,
             "force": {
                 "repulsion": physics_config["repulsion"],
@@ -137,6 +136,5 @@ def render_soul_scene(radar_dict, user_nodes=None):
         }]
     }
     
-    # 使用 key 强制刷新
     st_echarts(options=option, height="350px", key=f"soul_viz_{int(time.time())}")
     viz.render_spectrum_legend()
