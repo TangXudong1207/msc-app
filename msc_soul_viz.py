@@ -89,9 +89,9 @@ def render_soul_scene(radar_dict, user_nodes=None):
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 10,
+                "autoRotateSpeed": 20,
                 # 📷 [相机]：拉远以容纳扩散的粒子
-                "distance": 500,
+                "distance": 700,
                 "minDistance": 200, "maxDistance": 800,
                 "alpha": 20, "beta": 40
             },
@@ -103,7 +103,7 @@ def render_soul_scene(radar_dict, user_nodes=None):
                 "enable": True,
                 "bloom": {
                     "enable": True,
-                    "bloomIntensity": 0.6
+                    "bloomIntensity": 0.8
                 }
             },
             "environment": background_color
