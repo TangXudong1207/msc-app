@@ -47,15 +47,14 @@ def render_soul_scene(radar_dict, user_nodes=None):
     
     background_color = "#FFFFFF"
 
-    # 🟢 [修改点]：彻底隐藏坐标轴
-    axis_range = 350 
+    # 🟢 [修改点]：缩小坐标范围，收紧粒子雾
+    axis_range = 180 
     axis_common = {
-        "show": False, # 不显示轴
+        "show": False,
         "min": -axis_range, "max": axis_range,
         "axisLine": {"show": False},
         "axisLabel": {"show": False},
-        "splitLine": {"show": False}, # 不显示网格
-        "axisTick": {"show": False}
+        "splitLine": {"show": False}
     }
 
     option = {
@@ -73,13 +72,14 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "zAxis3D": axis_common,
 
         "grid3D": {
-            "show": False, # 隐藏网格盒子
+            "show": False,
             "viewControl": {
                 "projection": 'perspective',
                 "autoRotate": True,
-                "autoRotateSpeed": 5, # 恢复旋转速度
-                "distance": 400,
-                "minDistance": 200, "maxDistance": 600,
+                "autoRotateSpeed": 2, 
+                # 🟢 [修改点]：拉近相机 (400 -> 220)，配合更小的视窗高度
+                "distance": 220,
+                "minDistance": 100, "maxDistance": 400,
                 "alpha": 20, "beta": 40
             },
             "light": {
@@ -118,5 +118,6 @@ def render_soul_scene(radar_dict, user_nodes=None):
         }]
     }
     
-    st_echarts(options=option, height="600px")
+    # 🟢 [修改点]：高度改为 450px，视窗变小
+    st_echarts(options=option, height="450px")
     viz.render_spectrum_legend()
