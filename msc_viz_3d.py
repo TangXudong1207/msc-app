@@ -1,161 +1,159 @@
 ### msc_viz_3d.py ###
 import streamlit as st
-import plotly.graph_objects as go
+import streamlit.components.v1 as components
 import json
 import random
 import msc_config as config
 import msc_viz_core as core
 
 # ==========================================
-# 🎨 视觉辅助：色彩暗淡化算法
+# 🎨 色彩暗淡算法
 # ==========================================
-def dim_color(hex_color, factor=0.4):
+def dim_color(hex_color, factor=0.3):
     """
-    将鲜艳的 HEX 颜色变暗，模拟时间沉淀的效果。
-    factor: 0~1，越小越暗
+    让颜色变得暗淡、失去光泽，用于沉淀物。
     """
     if not hex_color.startswith('#'): return "#333333"
     hex_color = hex_color.lstrip('#')
     try:
         r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        # 混合灰色背景 (RGB 20, 20, 20)
-        r = int(r * factor + 20 * (1-factor))
-        g = int(g * factor + 20 * (1-factor))
-        b = int(b * factor + 20 * (1-factor))
+        # 向深灰色(30,30,30)靠拢，降低亮度
+        r = int(r * factor + 30 * (1-factor))
+        g = int(g * factor + 30 * (1-factor))
+        b = int(b * factor + 30 * (1-factor))
         return '#{:02x}{:02x}{:02x}'.format(r, g, b)
     except: return "#333333"
 
 # ==========================================
-# 🌍 城市坐标库 (用于沉淀锚定)
+# 🌍 沉淀位置逻辑
 # ==========================================
-CITY_ANCHORS = {
-    "China": [35.8617, 104.1954], "USA": [37.0902, -95.7129], 
-    "UK": [55.3781, -3.4360], "Other": [0, 0],
-    "Tokyo": [35.6762, 139.6503], "London": [51.5074, -0.1278],
-    "New York": [40.7128, -74.0060], "Shanghai": [31.2304, 121.4737]
-}
-
-def get_sediment_location(node_data):
-    """
-    沉淀逻辑：尝试找回该节点的'根'（注册地），如果找不到则保持原位但锁死在地面
-    """
-    # 既然数据库目前没存每次节点的 IP，我们用一个简化的逻辑：
-    # Active 的时候是随机漂浮的，Sediment 的时候回到一个固定的'家'。
-    # 这里我们简单化：Sediment 依然使用原坐标，但视觉上'变重'。
-    # 如果你想强行回到城市，需要去 users 表查这个用户的 country/city。
-    # 为了视觉美感，我们让它就在原地下沉，变暗。
-    
+def get_location_data(node_data):
     loc = None
     try:
         if isinstance(node_data.get('location'), str): loc = json.loads(node_data['location'])
         elif isinstance(node_data.get('location'), dict): loc = node_data['location']
     except: pass
     
+    # 如果没有位置，给一个随机经纬度
     if not loc or not loc.get('lat'):
-        return core.get_random_coordinate() # 实在没有就随机丢海里
+        lat, lon = core.get_random_coordinate()
+    else:
+        lat, lon = loc.get('lat'), loc.get('lon')
         
-    return loc.get('lat'), loc.get('lon')
+    return lat, lon
 
 # ==========================================
-# 🛰️ 伪3D 地球 (卫星漂浮版 v2.0)
+# 🌌 WebGL 3D 地球渲染器 (Globe.gl)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
-    if not nodes: 
+    """
+    使用 Globe.gl (Three.js) 生成真实的 3D 悬浮卫星视图。
+    """
+    if not nodes:
         st.info("The universe is empty.")
         return
 
-    # 分组容器
-    # 1. 漂浮卫星 (Active Satellites) - 鲜亮，空心，大
-    sat_lats, sat_lons, sat_colors, sat_texts = [], [], [], []
+    # 1. 准备数据 (Python -> JSON)
+    viz_data = []
     
-    # 2. 沉淀遗迹 (Sediment Dust) - 暗淡，实心，小
-    sed_lats, sed_lons, sed_colors = [], [], []
-
     for node in nodes:
-        # 获取基础颜色
+        # 基础属性
         raw_color = core.get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
+        lat, lon = get_location_data(node)
         
-        # 获取位置
-        lat, lon = get_sediment_location(node)
-        
-        # --- 逻辑分流 ---
+        # 逻辑分流
         if mode == 'Sediment':
-            # 沉淀态：位置固定，颜色变暗
-            sed_lats.append(lat)
-            sed_lons.append(lon)
-            sed_colors.append(dim_color(raw_color, factor=0.3)) # 变暗
-            
+            # 沉淀物：贴地 (alt=0.01), 颜色暗淡, 尺寸小
+            viz_data.append({
+                "lat": lat, "lng": lon,
+                "alt": 0.005,             # 紧贴地表
+                "radius": 0.3,            # 很小
+                "color": dim_color(raw_color),
+                "label": f"Sediment: {node['care_point']}"
+            })
         else:
-            # 活跃态：像卫星一样漂浮
-            # 为了模拟'漂浮'，我们在原始坐标上加一点微小的随机抖动，
-            # 让它看起来不像是一个固定的地理点。
-            jitter = 0.5 
-            f_lat = lat + random.uniform(-jitter, jitter)
-            f_lon = lon + random.uniform(-jitter, jitter)
+            # 活跃卫星：悬浮 (alt > 0.1), 颜色鲜亮
+            # 增加随机高度，制造层次感
+            altitude = random.uniform(0.15, 0.45) 
             
-            sat_lats.append(f_lat)
-            sat_lons.append(f_lon)
-            sat_colors.append(raw_color) # 保持原色
+            # 判断是否是自己
+            if node['username'] == current_user:
+                # 自己：更大，更高亮
+                viz_data.append({
+                    "lat": lat, "lng": lon,
+                    "alt": altitude,
+                    "radius": 1.5,        # 大尺寸
+                    "color": raw_color,   # 原色
+                    "label": f"ME: {node['care_point']}",
+                    "isUser": True        # 标记，用于JS做特效
+                })
+            else:
+                # 别人：正常尺寸
+                viz_data.append({
+                    "lat": lat, "lng": lon,
+                    "alt": altitude,
+                    "radius": 0.6,        # 中等尺寸
+                    "color": raw_color,
+                    "label": f"{node['care_point']}",
+                    "isUser": False
+                })
+
+    # 将数据转为 JSON 字符串注入 HTML
+    json_data = json.dumps(viz_data)
+
+    # 2. 编写 HTML/JS (Globe.gl)
+    # 使用 unpkg 加载库，确保无背景色
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style> body {{ margin: 0; padding: 0; overflow: hidden; background: transparent; }} </style>
+        <script src="//unpkg.com/globe.gl"></script>
+    </head>
+    <body>
+    <div id="globeViz"></div>
+    <script>
+        const data = {json_data};
+        
+        // 初始化地球
+        const world = Globe()
+            (document.getElementById('globeViz'))
+            .backgroundColor('rgba(0,0,0,0)') // 关键：透明背景
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg') // 夜景贴图
+            .width(window.innerWidth)
+            .height(650) // 高度适配
             
-            # 构建 Hover 文本
-            is_mine = (node['username'] == current_user)
-            user_label = "ME" if is_mine else "SIGNAL"
-            sat_texts.append(f"<b>[{user_label}]</b> {node['care_point']}<br><span style='color:#ccc'>{node.get('insight','')}</span>")
+            // 粒子配置 (Points)
+            .pointsData(data)
+            .pointAltitude('alt')    // 绑定高度：实现漂浮
+            .pointColor('color')     // 绑定颜色：实现光谱色
+            .pointRadius('radius')   // 绑定大小：区分自己和他人
+            .pointResolution(16)     // 粒子圆滑度
+            .pointLabel('label')     // 鼠标悬停文字
+            
+            // 氛围光效
+            .atmosphereColor('#3a228a')
+            .atmosphereAltitude(0.15);
 
-    fig = go.Figure()
+        // 设置更具戏剧性的视角 (Cyber-Zen Angle)
+        world.pointOfView({{ lat: 20, lng: 100, altitude: 2.0 }});
 
-    # --- Layer 1: 沉淀层 (Sediment) ---
-    # 就像地表的尘埃，暗淡且密集
-    if sed_lats:
-        fig.add_trace(go.Scattergeo(
-            lon=sed_lons, lat=sed_lats, mode='markers',
-            marker=dict(
-                size=3,               # 极小
-                color=sed_colors, 
-                opacity=0.5,          # 低透明度
-                symbol='circle',      # 实心圆
-            ),
-            hoverinfo='skip',         # 沉淀物不显示信息，仅仅是背景
-            name='Sediment'
-        ))
+        // 自动旋转 (慢速)
+        world.controls().autoRotate = true;
+        world.controls().autoRotateSpeed = 0.6;
+        
+        // 交互设置
+        world.controls().enableZoom = true;
+    </script>
+    </body>
+    </html>
+    """
 
-    # --- Layer 2: 卫星层 (Satellites) ---
-    # 正在发生的意义，悬浮于高空
-    if sat_lats:
-        fig.add_trace(go.Scattergeo(
-            lon=sat_lons, lat=sat_lats, mode='markers',
-            text=sat_texts, hoverinfo='text',
-            marker=dict(
-                size=10,                # 较大，模拟'近'
-                color=sat_colors, 
-                opacity=1.0, 
-                symbol='diamond-open',  # 空心菱形 (线性风格)
-                line=dict(width=1.5, color=sat_colors) # 自身颜色的描边
-            ),
-            name='Active Signals'
-        ))
+    # 3. 渲染组件
+    # height 必须与 HTML 中的 height 匹配或略大
+    components.html(html_code, height=660, scrolling=False)
 
-    # --- 视觉配置 ---
-    fig.update_layout(
-        geo=dict(
-            scope='world', 
-            projection_type='orthographic', # 3D 球体投影
-            showland=True, landcolor='rgb(15, 15, 15)',   # 极黑陆地
-            showocean=True, oceancolor='rgb(5, 5, 8)',    # 近乎黑色的海洋
-            showlakes=False, 
-            showcountries=True, countrycolor='rgb(30, 30, 30)', # 极淡的国界线
-            showcoastlines=True, coastlinecolor='rgb(40, 40, 40)',
-            projection_rotation=dict(lon=120, lat=20),
-            bgcolor='rgba(0,0,0,0)' # 透明背景
-        ),
-        paper_bgcolor='rgba(0,0,0,0)', 
-        margin={"r":0,"t":0,"l":0,"b":0}, 
-        height=600, 
-        showlegend=False # 隐藏图例，保持极简
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-# 暂时保留 Galaxy 函数接口以免报错，虽然目前没用
+# 保留接口
 def render_3d_galaxy(nodes):
     pass
