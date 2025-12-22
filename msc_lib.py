@@ -81,10 +81,10 @@ def get_direct_messages(u1, u2): return db.get_direct_messages(u1, u2)
 def send_direct_message(s, r, c): return db.send_direct_message(s, r, c)
 def get_unread_counts(c): return db.get_unread_counts(c)
 def mark_messages_read(s, r): db.mark_read(s, r)
-def send_friend_request(s, r, m, meta): return db.send_friend_request(s, r, m, meta) # 🟢
-def get_pending_requests(u): return db.get_pending_requests(u) # 🟢
-def handle_friend_request(rid, act): return db.handle_friend_request(rid, act) # 🟢
-def get_my_friends(u): return db.get_my_friends(u) # 🟢
+def send_friend_request(s, r, m, meta): return db.send_friend_request(s, r, m, meta)
+def get_pending_requests(u): return db.get_pending_requests(u)
+def handle_friend_request(rid, act): return db.handle_friend_request(rid, act)
+def get_my_friends(u): return db.get_my_friends(u)
 
 # 节点
 def save_node(u, c, d, m, v): return db.save_node(u, c, d, m, v)
@@ -97,12 +97,20 @@ def check_world_access(username):
     nodes = db.get_all_nodes_for_map(username)
     return len(nodes) >= config.WORLD_UNLOCK_THRESHOLD, len(nodes)
 
+# 🟢 永久升空检查
+def check_if_ascended_permanently(username):
+    return db.check_user_event_exists(username, "ASCENSION_EVENT")
+
+def log_ascension_event(username):
+    db.log_system_event("INFO", "ASCENSION_EVENT", "User unlocked world layer", username)
+
 # ==========================================
 # 🟢 3. 社交匹配算法 (Top Near & Far)
 # ==========================================
 def get_match_candidates(current_username):
     """
     返回: { 'near': [Top5 Users], 'far': [Top5 Users] }
+    🟢 修正：增加对方是否解锁阈值的判断
     """
     candidates = db.get_all_users(current_username)
     if not candidates: return {'near':[], 'far':[]}
@@ -111,37 +119,37 @@ def get_match_candidates(current_username):
     my_radar_str = my_profile.get('radar_profile')
     my_radar = json.loads(my_radar_str) if isinstance(my_radar_str, str) else (my_radar_str or {})
     
-    # 距离计算
     scored_users = []
     axes = config.RADAR_AXES
     
     for user in candidates:
+        # 🟢 核心修正：过滤掉未突破阈值的用户 (Node < 20)
+        # 注意：这里会产生 N 次 DB 查询，原型阶段可接受。
+        # 如果性能卡顿，建议在 users 表增加 node_count 字段。
+        target_nodes = db.get_all_nodes_for_map(user['username'])
+        if len(target_nodes) < config.WORLD_UNLOCK_THRESHOLD:
+            continue
+
         u_radar = json.loads(user['radar_profile']) if isinstance(user.get('radar_profile'), str) else (user.get('radar_profile') or {})
         dist_sq = 0
         valid_data = False
         
-        # 简单欧氏距离
         for axis in axes:
             v1 = float(my_radar.get(axis, 3.0))
             v2 = float(u_radar.get(axis, 3.0))
             dist_sq += (v1 - v2) ** 2
-            if u_radar: valid_data = True # 只要对方有数据
+            if u_radar: valid_data = True
             
         distance = math.sqrt(dist_sq)
         if not valid_data: distance = 999 
         scored_users.append((user, distance))
 
-    # 排序
     scored_users.sort(key=lambda x: x[1])
     
-    # 筛选有效用户（排除距离999的幽灵数据，除非只有幽灵）
     valid_users = [x for x in scored_users if x[1] < 100]
     if not valid_users: valid_users = scored_users
 
-    # Near: 距离最小
     near_list = [item[0] for item in valid_users[:5]]
-    
-    # Far: 距离最大 (且不是无效数据)
     far_list = [item[0] for item in reversed(valid_users[-5:])]
 
     return {'near': near_list, 'far': far_list}
@@ -214,19 +222,14 @@ def generate_daily_question(username, radar_data):
     res = call_ai_api(prompt)
     return res.get("question", "")
 
-# 🟢 新增：生成隐喻
 def generate_relationship_metaphor(u_self, u_target, match_type):
     lang = st.session_state.get('language', 'en')
-    # 获取两人的 Radar
     p1 = db.get_user_profile(u_self); r1 = p1.get('radar_profile', {})
     p2 = db.get_user_profile(u_target); r2 = p2.get('radar_profile', {})
-    
     data_str = f"User A: {r1}\nUser B: {r2}\nMatch Type: {match_type}"
     lang_instr = "ZH" if lang == 'zh' else "EN"
-    
     prompt = f"{config.PROMPT_METAPHOR}\nDATA:\n{data_str}\nTARGET_LANG: {lang_instr}"
     res = call_ai_api(prompt)
-    
     fallback = "The moon and the tide." if lang_instr == "EN" else "月亮与潮汐。"
     return res.get("metaphor", fallback)
 
