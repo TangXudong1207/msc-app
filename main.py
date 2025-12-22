@@ -10,6 +10,7 @@ import msc_i18n as i18n
 import time
 import random
 import msc_config as config 
+from datetime import datetime
 
 # ==========================================
 # 🛠️ 配置与初始化
@@ -36,9 +37,6 @@ def inject_custom_css():
             color: #2D3436;
             background-color: #FAFAFA;
         }}
-
-        /* 🔴 核心修复：删除了隐藏 Header 的代码，以便能找回侧边栏 */
-        /* header[data-testid="stHeader"] {{ visibility: hidden !important; height: 0 !important; }} */
         
         [data-testid="stDecoration"] {{ display: none !important; }}
         #MainMenu {{ visibility: hidden; }}
@@ -52,7 +50,6 @@ def inject_custom_css():
             box-shadow: 2px 0 10px rgba(0,0,0,0.02);
         }}
         
-        /* 🛠️ 核心修改：美化原生 st.button，使其看起来像卡片 */
         .stButton > button {{
             width: 100%;
             border-radius: 6px;
@@ -97,7 +94,6 @@ def inject_custom_css():
             clear: both; border-radius: 0 4px 4px 0;
         }}
         
-        /* 每日洞察卡片 */
         .daily-card {{
             border: 1px solid #DDD; background: #F0F2F6; padding: 24px; border-radius: 4px; 
             text-align: center; margin-top: 10px; margin-bottom: 20px; 
@@ -114,7 +110,6 @@ def inject_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-# 执行 CSS 注入
 inject_custom_css()
 
 # ==========================================
@@ -126,34 +121,18 @@ if "current_chat_partner" not in st.session_state: st.session_state.current_chat
 if "language" not in st.session_state: st.session_state.language = "en" 
 
 # ==========================================
-# 📚 本地备选语录库 (Fallback)
+# 📚 功能函数
 # ==========================================
 LOCAL_INSIGHTS = {
-    "en": [
-        "What constitutes the boundary of your self?",
-        "Is your current silence a form of speech?",
-        "If memory is a vector, where is it pointing now?",
-        "Are you observing the world, or is the world observing you?"
-    ],
-    "zh": [
-        "构成你“自我”边界的究竟是什么？",
-        "你此刻的沉默，是否也是一种表达？",
-        "如果记忆是一个向量，它现在指向哪里？",
-        "是你正在观察世界，还是世界正在观察你？"
-    ]
+    "en": ["What constitutes the boundary of your self?", "Is silence a form of speech?"],
+    "zh": ["构成你“自我”边界的究竟是什么？", "你此刻的沉默，是否也是一种表达？"]
 }
-
 def get_fallback_insight():
     lang = st.session_state.language
-    pool = LOCAL_INSIGHTS.get(lang, LOCAL_INSIGHTS['en'])
-    return random.choice(pool)
+    return random.choice(LOCAL_INSIGHTS.get(lang, LOCAL_INSIGHTS['en']))
 
-# ==========================================
-# 🔭 每日洞察弹窗
-# ==========================================
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
-    # 确保有内容可显示
     if "daily_content" not in st.session_state or st.session_state.daily_content is None:
         with st.container():
             st.markdown("<div style='text-align:center; padding:20px; color:#888;'>Connecting to Void...</div>", unsafe_allow_html=True)
@@ -167,35 +146,51 @@ def daily_insight_dialog(username, radar):
             st.rerun()
 
     content = st.session_state.daily_content
-    st.markdown(
-        f"""
-        <div class='daily-card'>
-            <div class='daily-label'>REFLECTION PROTOCOL</div>
-            <div style='font-size: 1.2em; line-height: 1.6; font-weight: 600; color: #222;'>
-                {content}
-            </div>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-    st.caption("Generated based on your cognitive topology.")
-    
+    st.markdown(f"<div class='daily-card'><div class='daily-label'>REFLECTION PROTOCOL</div><div style='font-size: 1.2em; font-weight: 600; color: #222;'>{content}</div></div>", unsafe_allow_html=True)
     if st.button("Regenerate Signal", use_container_width=True):
-        st.session_state.daily_content = None
-        st.rerun()
+        st.session_state.daily_content = None; st.rerun()
 
-# ==========================================
-# 🆕 首次接触逻辑
-# ==========================================
+@st.dialog("📦 MEANING BOX", width="large")
+def meaning_box_dialog(username):
+    nodes = msc.get_all_nodes_for_map(username)
+    if not nodes:
+        st.info("No meaning collected yet.")
+        return
+
+    # 按时间倒序
+    nodes = sorted(nodes, key=lambda x: x['id'], reverse=True)
+    
+    st.caption(f"Total Cards: {len(nodes)}")
+    
+    for n in nodes:
+        with st.container(border=True):
+            # 时间格式化
+            ts = n.get('created_at', '')[:16].replace('T', ' ')
+            
+            c1, c2 = st.columns([0.2, 0.8])
+            with c1:
+                st.caption(ts)
+                kw = n.get('keywords', [])
+                if isinstance(kw, str): 
+                    try: kw = json.loads(kw)
+                    except: kw = []
+                if kw: st.markdown(f"**#{kw[0]}**")
+                
+            with c2:
+                # 核心意义点
+                st.markdown(f"#### {n.get('care_point', 'Unknown')}")
+                # AI Insight
+                st.info(n.get('insight', ''))
+                # 原文折叠
+                with st.expander("Original Context / 原文"):
+                    st.write(n.get('content', ''))
+
 def check_and_send_first_contact(username):
     history = msc.get_active_chats(username)
     if not history:
         lang = st.session_state.language
-        if lang == 'zh':
-            first_msg = """先说清楚一件事：\n这里就是一个和 AI 聊天的对话框，\n和你用过的那些差不多。\n\n如果你现在不知道该从哪开始，\n那也正常。\n\n那就从最简单的开始吧——\n吃了吗？"""
-        else:
-            first_msg = """Let's get one thing clear:\nThis is just a chat box where you talk to an AI.\n\nLet's start with something simple—\nHow is your day going?"""
-        msc.save_chat(username, "assistant", first_msg)
+        msg = "先说清楚一件事：\n这里就是一个和 AI 聊天的对话框。\n那就从最简单的开始吧——\n吃了吗？" if lang == 'zh' else "Let's start simple.\nHow is your day going?"
+        msc.save_chat(username, "assistant", msg)
 
 # --- 1. 登录注册 ---
 if not st.session_state.logged_in:
@@ -204,44 +199,29 @@ if not st.session_state.logged_in:
 # --- 2. 主界面 ---
 else:
     msc.update_heartbeat(st.session_state.username)
-
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
-    # 引导检查
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
-        pages.render_onboarding(st.session_state.username)
-        st.stop()
+        pages.render_onboarding(st.session_state.username); st.stop()
     
-    # 首次进入自动发送消息
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
 
     user_profile = msc.get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
-    if isinstance(raw_radar, str): radar_dict = json.loads(raw_radar)
-    else: 
-        radar_dict = raw_radar if raw_radar else {k:3.0 for k in config.RADAR_AXES}
+    radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
     
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
 
-    # 翻译字典
     MENU_TEXT = {
-        "en": {
-            "AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", 
-            "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", 
-            "Map": "STAR_MAP", "DNA": "DNA_SEQ", "Ins": "INSIGHT", "Ref": "REFRESH"
-        },
-        "zh": {
-            "AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", 
-            "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", 
-            "Map": "星图投影", "DNA": "基因序列", "Ins": "每日洞察", "Ref": "刷新"
-        }
+        "en": {"AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", "Box": "MEANING BOX", "Ins": "INSIGHT"},
+        "zh": {"AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", "Box": "意义盒子", "Ins": "每日洞察"}
     }
     T = MENU_TEXT[lang]
 
-    # === 侧边栏导航 ===
+    # === 侧边栏 ===
     with st.sidebar:
         c_av, c_info = st.columns([0.25, 0.75])
         with c_av:
@@ -253,84 +233,44 @@ else:
 
         st.divider()
 
-        # 1. 每日一问按钮 (使用最稳定的原生 st.button)
-        # 通过 CSS 美化成了白色卡片样式
-        if st.button(f"⚡ {T['Ins']}", use_container_width=True):
-            daily_insight_dialog(st.session_state.username, radar_dict)
+        # 功能按钮区
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button(f"⚡ {T['Ins']}", use_container_width=True):
+                daily_insight_dialog(st.session_state.username, radar_dict)
+        with col_btn2:
+            # 🟢 新增：意义盒子按钮
+            if st.button(f"📦 {T['Box']}", use_container_width=True):
+                meaning_box_dialog(st.session_state.username)
         
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         soul_viz.render_soul_scene(radar_dict, my_nodes_list)
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-        
-        # 2. 可视化工具栏 (原生 st.button)
-        col_viz1, col_viz2 = st.columns(2)
-        with col_viz1:
-            if st.button(f"🧬 {T['DNA']}", use_container_width=True):
-                viz.view_radar_details(radar_dict, st.session_state.username)
-        with col_viz2:
-            if st.button(f"🔭 {T['Map']}", use_container_width=True):
-                all_nodes_list = msc.get_all_nodes_for_map(st.session_state.username)
-                viz.view_fullscreen_map(all_nodes_list, st.session_state.nickname)
 
         st.divider()
         
-        # 核心菜单 (导航保留 sac.menu，因为它适合做 Tab 切换)
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
             sac.MenuItem(T['World'], icon='globe-americas'), 
         ]
         
-        if st.session_state.is_admin:
-            menu_items.append(sac.MenuItem(T['God'], icon='eye-fill'))
-        
+        if st.session_state.is_admin: menu_items.append(sac.MenuItem(T['God'], icon='eye-fill'))
         menu_items.append(sac.MenuItem(T['Sys'], type='group', children=[sac.MenuItem(T['Logout'], icon='box-arrow-right')]))
 
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
         st.divider()
         
-        # 语言切换
         lang_opts = ['EN', '中文']
         curr_idx = 0 if st.session_state.language == 'en' else 1
-        lang_choice = sac.segmented(
-            items=lang_opts, 
-            align='center', size='xs', index=curr_idx, key="sidebar_lang_selector"
-        )
+        lang_choice = sac.segmented(items=lang_opts, align='center', size='xs', index=curr_idx, key="sidebar_lang_selector")
         mapped_lang = 'en' if lang_choice == 'EN' else 'zh'
         if mapped_lang != st.session_state.language:
-            st.session_state.language = mapped_lang
-            st.rerun()
-            
-        # 📱 移动端安装引导 (折叠在最下方)
-        st.divider()
-        with st.expander("📲 Install App / 安装到桌面"):
-            st.caption("Add to Home Screen for fullscreen mode.")
-            if lang == 'zh':
-                st.markdown("""
-                **iOS (Safari):**
-                1. 点击分享按钮 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Apple_Share_Icon.png/640px-Apple_Share_Icon.png" width="12"/>
-                2. 选择 **“添加到主屏幕”**
-                
-                **Android (Chrome):**
-                1. 点击菜单 (⋮)
-                2. 选择 **“安装应用”** 或 **“添加到主屏幕”**
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                **iOS (Safari):**
-                1. Click Share <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Apple_Share_Icon.png/640px-Apple_Share_Icon.png" width="12"/>
-                2. Select **'Add to Home Screen'**
-                
-                **Android:**
-                1. Click Menu (⋮)
-                2. Select **'Install App'**
-                """, unsafe_allow_html=True)
+            st.session_state.language = mapped_lang; st.rerun()
 
     # === 页面路由 ===
-    if selected_menu == T['Logout']: 
-        st.session_state.clear()
-        st.rerun()
+    if selected_menu == T['Logout']: st.session_state.clear(); st.rerun()
     elif selected_menu == T['AI']: pages.render_ai_page(st.session_state.username)
     elif selected_menu == T['Chat']: pages.render_friends_page(st.session_state.username, unread_counts)
     elif selected_menu == T['World']: pages.render_world_page()
