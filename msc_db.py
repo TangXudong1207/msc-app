@@ -22,21 +22,24 @@ def make_hashes(password):
     return hashlib.sha256(str.encode(raw)).hexdigest()
 
 # ==========================================
-# 📊 可观测性：系统日志
+# 📊 可观测性：系统日志 (Fixed)
 # ==========================================
 def log_system_event(level, component, message, user="system"):
     try:
         payload = {
             "level": level, "component": component,
             "message": str(message)[:500],
-            "created_at": datetime.now(timezone.utc).isoformat(), "user_id": user
+            "created_at": datetime.now(timezone.utc).isoformat(), 
+            "user_id": user # 确保这里字段名对应数据库列名
         }
         supabase.table('system_logs').insert(payload).execute()
-    except: pass 
+    except Exception as e: 
+        print(f"Log Error: {e}") # 打印错误以便调试
 
-# 🟢 新增：检查用户是否发生过某类事件 (用于一次性动画判断)
+# 🟢 检查用户是否发生过某类事件 (Fixed)
 def check_user_event_exists(username, component_tag):
     try:
+        # 查询 component = 'ASCENSION_EVENT' 且 user_id = username 的记录
         res = supabase.table('system_logs').select("id").eq('user_id', username).eq('component', component_tag).limit(1).execute()
         return len(res.data) > 0
     except: return False
