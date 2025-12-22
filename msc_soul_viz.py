@@ -8,100 +8,85 @@ import msc_soul_gen as gen
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 1. 获取 Plotly 格式的数据
+    # 获取归一化后的数据
     plot_data, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
-    
     lang = st.session_state.get('language', 'en')
     
-    # ... (保留文案映射) ...
+    # 文案映射 (保持不变)
     ARCHETYPE_NAMES = {
-        "Agency":        {"en": "Starburst Structure", "zh": "爆发结构"},
-        "Care":          {"en": "Dense Cluster",      "zh": "凝聚结构"},
-        "Curiosity":     {"en": "Wide Web",           "zh": "发散网络"},
-        "Coherence":     {"en": "Crystalline Grid",   "zh": "晶格结构"},
-        "Reflection":    {"en": "Deep Swirl",         "zh": "深旋结构"},
-        "Transcendence": {"en": "Ascending Cloud",    "zh": "升腾云结构"},
-        "Aesthetic":     {"en": "Harmonic Sphere",    "zh": "和谐球体"}
+        "Agency": {"en": "Starburst", "zh": "爆发结构"},
+        "Care": {"en": "Dense Cluster", "zh": "凝聚结构"},
+        "Curiosity": {"en": "Wide Web", "zh": "发散网络"},
+        "Coherence": {"en": "Crystalline", "zh": "晶格结构"},
+        "Reflection": {"en": "Deep Swirl", "zh": "深旋结构"},
+        "Transcendence": {"en": "Ascending Cloud", "zh": "升腾结构"},
+        "Aesthetic": {"en": "Harmonic Sphere", "zh": "和谐球体"}
     }
-    ASPECT_NAMES = {
-        "Agency":        {"en": "Volatile Mode",   "zh": "躁动模式"},
-        "Care":          {"en": "Gentle Mode",     "zh": "柔缓模式"},
-        "Curiosity":     {"en": "Flowing Mode",    "zh": "流转模式"},
-        "Coherence":     {"en": "Stable Mode",     "zh": "稳定模式"},
-        "Reflection":    {"en": "Breathing Mode",  "zh": "呼吸模式"},
-        "Transcendence": {"en": "Drifting Mode",   "zh": "漂浮模式"},
-        "Aesthetic":     {"en": "Elegant Mode",    "zh": "优雅模式"}
-    }
-
     p_name = ARCHETYPE_NAMES.get(p_attr, {}).get(lang, p_attr)
-    s_name = ASPECT_NAMES.get(s_attr, {}).get(lang, s_attr)
     
-    if len(user_nodes) == 0:
-        creature_title = "Proto-Field" if lang=='en' else "初生场域"
-        creature_desc = "Awaiting thought injection..." if lang=='en' else "等待思想注入..."
-    else:
-        creature_title = p_name
-        creature_desc = f"operating in {s_name}" if lang=='en' else f"运行于 {s_name}"
-
     label_title = "SOUL FORM" if lang=='en' else "灵魂形态"
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
-    st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center; margin-top:-10px; margin-bottom:10px;'><b style='color:#333;'>{p_name}</b></div>", unsafe_allow_html=True)
     
     # ==========================================
-    # 🟢 Plotly 3D 渲染
+    # 🟢 Plotly 双层发光渲染
     # ==========================================
     fig = go.Figure()
 
-    # 1. 画连线 (Lines) - 淡淡的网格
+    # 第一层：光晕 (Aura) - 较大，低透明度
     fig.add_trace(go.Scatter3d(
-        x=plot_data["lines_x"],
-        y=plot_data["lines_y"],
-        z=plot_data["lines_z"],
-        mode='lines',
-        line=dict(color='#444444', width=1), # 深灰色的线
-        hoverinfo='none',
-        opacity=0.3
+        x=plot_data["x"], y=plot_data["y"], z=plot_data["z"],
+        mode='markers',
+        marker=dict(
+            size=[s * 2.5 for s in plot_data["size"]], # 光晕比核心大
+            color=plot_data["color"],
+            opacity=0.15, # 非常淡
+        ),
+        hoverinfo='none'
     ))
 
-    # 2. 画节点 (Nodes)
+    # 第二层：核心 (Core) - 较小，高亮度
     fig.add_trace(go.Scatter3d(
-        x=plot_data["x"],
-        y=plot_data["y"],
-        z=plot_data["z"],
+        x=plot_data["x"], y=plot_data["y"], z=plot_data["z"],
         mode='markers',
         marker=dict(
             size=plot_data["size"],
             color=plot_data["color"],
             opacity=0.9,
-            # ✨ 模拟发光：给点加一个白色的边框
-            line=dict(color='white', width=1)
+            line=dict(color='white', width=0.5) # 白色描边增加亮度
         ),
-        text=plot_data["text"], # Tooltip 内容
+        text=plot_data["text"],
         hoverinfo='text'
     ))
 
-    # 3. 样式配置 (全黑背景，隐藏坐标轴)
+    # 3. 样式配置 (彻底修复旋转与缩放)
     fig.update_layout(
-        height=350, # 正方形视窗
-        margin=dict(l=0, r=0, b=0, t=0), # 零边距
-        paper_bgcolor='black', # 画布背景黑
+        height=400,
+        margin=dict(l=0, r=0, b=0, t=0),
+        paper_bgcolor='rgba(0,0,0,0)', # 透明背景适配 Streamlit 主题
+        showlegend=False,
         scene=dict(
-            # 🌑 隐藏所有轴、网格、背景
-            xaxis=dict(visible=False, showbackground=False, showgrid=False, showline=False),
-            yaxis=dict(visible=False, showbackground=False, showgrid=False, showline=False),
-            zaxis=dict(visible=False, showbackground=False, showgrid=False, showline=False),
-            bgcolor='black', # 3D 场景背景黑
-            
-            # 📷 相机初始视角
+            xaxis=dict(visible=False, range=[-1.2, 1.2]), # 限制显示范围，形成硬边框感
+            yaxis=dict(visible=False, range=[-1.2, 1.2]),
+            zaxis=dict(visible=False, range=[-1.2, 1.2]),
+            aspectmode='cube', # 强制比例为 1:1:1
+            bgcolor='black',   # 内部空间背景黑
             camera=dict(
-                eye=dict(x=1.5, y=1.5, z=1.5) # 稍微拉远一点
+                eye=dict(x=1.8, y=1.8, z=1.2), # 调整相机距离，确保在手机端能看全
+                projection=dict(type='perspective') # 使用透视视图增加深度感
             ),
-            # 禁用默认的旋转惯性，让拖拽更精准 (或者开启以获得滑行感)
-            dragmode='orbit'
-        )
+            dragmode='orbit' # 允许旋转
+        ),
+        # 针对移动端的特殊配置
+        hoverlabel=dict(bgcolor="black", font_size=12, font_family="JetBrains Mono")
     )
     
-    # 渲染！
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    # 🟢 关键：config 参数决定了是否可以旋转、缩放
+    st.plotly_chart(fig, use_container_width=True, config={
+        'displayModeBar': False, # 隐藏上方工具栏
+        'scrollZoom': True,      # 开启缩放
+        'staticPlot': False,     # 必须为 False 才能旋转
+        'responsive': True       # 自适应手机屏幕
+    })
     
     viz.render_spectrum_legend()
