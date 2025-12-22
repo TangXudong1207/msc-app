@@ -1,139 +1,161 @@
 ### msc_viz_3d.py ###
 import streamlit as st
-import plotly.express as px
 import plotly.graph_objects as go
 import json
+import random
 import msc_config as config
 import msc_viz_core as core
 
 # ==========================================
-# 🌍 1. 伪3D 地球 (卫星漂浮版)
+# 🎨 视觉辅助：色彩暗淡化算法
+# ==========================================
+def dim_color(hex_color, factor=0.4):
+    """
+    将鲜艳的 HEX 颜色变暗，模拟时间沉淀的效果。
+    factor: 0~1，越小越暗
+    """
+    if not hex_color.startswith('#'): return "#333333"
+    hex_color = hex_color.lstrip('#')
+    try:
+        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        # 混合灰色背景 (RGB 20, 20, 20)
+        r = int(r * factor + 20 * (1-factor))
+        g = int(g * factor + 20 * (1-factor))
+        b = int(b * factor + 20 * (1-factor))
+        return '#{:02x}{:02x}{:02x}'.format(r, g, b)
+    except: return "#333333"
+
+# ==========================================
+# 🌍 城市坐标库 (用于沉淀锚定)
+# ==========================================
+CITY_ANCHORS = {
+    "China": [35.8617, 104.1954], "USA": [37.0902, -95.7129], 
+    "UK": [55.3781, -3.4360], "Other": [0, 0],
+    "Tokyo": [35.6762, 139.6503], "London": [51.5074, -0.1278],
+    "New York": [40.7128, -74.0060], "Shanghai": [31.2304, 121.4737]
+}
+
+def get_sediment_location(node_data):
+    """
+    沉淀逻辑：尝试找回该节点的'根'（注册地），如果找不到则保持原位但锁死在地面
+    """
+    # 既然数据库目前没存每次节点的 IP，我们用一个简化的逻辑：
+    # Active 的时候是随机漂浮的，Sediment 的时候回到一个固定的'家'。
+    # 这里我们简单化：Sediment 依然使用原坐标，但视觉上'变重'。
+    # 如果你想强行回到城市，需要去 users 表查这个用户的 country/city。
+    # 为了视觉美感，我们让它就在原地下沉，变暗。
+    
+    loc = None
+    try:
+        if isinstance(node_data.get('location'), str): loc = json.loads(node_data['location'])
+        elif isinstance(node_data.get('location'), dict): loc = node_data['location']
+    except: pass
+    
+    if not loc or not loc.get('lat'):
+        return core.get_random_coordinate() # 实在没有就随机丢海里
+        
+    return loc.get('lat'), loc.get('lon')
+
+# ==========================================
+# 🛰️ 伪3D 地球 (卫星漂浮版 v2.0)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
     if not nodes: 
         st.info("The universe is empty.")
         return
 
-    # 数据容器
-    # 1. 地面层 (Lights) - 其他人的信号
-    sig_lats, sig_lons, sig_colors, sig_texts = [], [], [], []
+    # 分组容器
+    # 1. 漂浮卫星 (Active Satellites) - 鲜亮，空心，大
+    sat_lats, sat_lons, sat_colors, sat_texts = [], [], [], []
     
-    # 2. 轨道层 (Satellites) - 我的信号
-    my_lats, my_lons, my_colors, my_texts = [], [], [], []
-    
-    # 3. 沉淀层 (Sediment) - 过期信号
+    # 2. 沉淀遗迹 (Sediment Dust) - 暗淡，实心，小
     sed_lats, sed_lons, sed_colors = [], [], []
 
     for node in nodes:
-        # --- 位置解析 ---
-        loc = None
-        try:
-            if isinstance(node.get('location'), str): loc = json.loads(node['location'])
-            elif isinstance(node.get('location'), dict): loc = node['location']
-        except: pass
-        
-        # 如果没有位置，随机飞在天上
-        if not loc or not loc.get('lat'): 
-            d_lat, d_lon = core.get_random_coordinate()
-            loc = {"lat": d_lat, "lon": d_lon}
-
-        lat, lon = loc.get('lat'), loc.get('lon')
-        color = core.get_spectrum_color(str(node.get('keywords', '')))
+        # 获取基础颜色
+        raw_color = core.get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
-
-        # --- 分层逻辑 ---
+        
+        # 获取位置
+        lat, lon = get_sediment_location(node)
+        
+        # --- 逻辑分流 ---
         if mode == 'Sediment':
-            sed_lats.append(lat); sed_lons.append(lon)
-            sed_colors.append(color) 
-        elif node['username'] == current_user:
-            # 这里的坐标其实是一样的，但我们将用样式把它“提”起来
-            my_lats.append(lat); my_lons.append(lon)
-            my_colors.append(color)
-            my_texts.append(f"<b>{node['care_point']}</b><br><span style='font-size:0.8em; color:#ccc'>{node.get('insight','')}</span>")
+            # 沉淀态：位置固定，颜色变暗
+            sed_lats.append(lat)
+            sed_lons.append(lon)
+            sed_colors.append(dim_color(raw_color, factor=0.3)) # 变暗
+            
         else:
-            sig_lats.append(lat); sig_lons.append(lon)
-            sig_colors.append(color)
-            sig_texts.append(f"Signal: {node['care_point']}")
+            # 活跃态：像卫星一样漂浮
+            # 为了模拟'漂浮'，我们在原始坐标上加一点微小的随机抖动，
+            # 让它看起来不像是一个固定的地理点。
+            jitter = 0.5 
+            f_lat = lat + random.uniform(-jitter, jitter)
+            f_lon = lon + random.uniform(-jitter, jitter)
+            
+            sat_lats.append(f_lat)
+            sat_lons.append(f_lon)
+            sat_colors.append(raw_color) # 保持原色
+            
+            # 构建 Hover 文本
+            is_mine = (node['username'] == current_user)
+            user_label = "ME" if is_mine else "SIGNAL"
+            sat_texts.append(f"<b>[{user_label}]</b> {node['care_point']}<br><span style='color:#ccc'>{node.get('insight','')}</span>")
 
     fig = go.Figure()
 
-    # --- Layer 1: 历史沉淀 (暗淡背景) ---
+    # --- Layer 1: 沉淀层 (Sediment) ---
+    # 就像地表的尘埃，暗淡且密集
     if sed_lats:
         fig.add_trace(go.Scattergeo(
             lon=sed_lons, lat=sed_lats, mode='markers',
-            marker=dict(size=2, color=sed_colors, opacity=0.2, symbol='circle'),
-            hoverinfo='skip', name='Sediment'
-        ))
-
-    # --- Layer 2: 地面灯光 (City Lights) ---
-    # 其他用户的节点：处理为发光点，半透明，贴地
-    if sig_lats:
-        fig.add_trace(go.Scattergeo(
-            lon=sig_lons, lat=sig_lats, mode='markers',
-            text=sig_texts, hoverinfo='text',
             marker=dict(
-                size=5,             # 较小
-                color=sig_colors, 
-                opacity=0.6,        # 半透明
-                symbol='circle',    # 圆点
-                line=dict(width=0)  # 无边框，柔和
+                size=3,               # 极小
+                color=sed_colors, 
+                opacity=0.5,          # 低透明度
+                symbol='circle',      # 实心圆
             ),
-            name='Signals'
+            hoverinfo='skip',         # 沉淀物不显示信息，仅仅是背景
+            name='Sediment'
         ))
 
-    # --- Layer 3: 轨道卫星 (Satellites) ---
-    # 用户的节点：处理为高科技感的几何体，看起来像漂浮在上方
-    if my_lats:
+    # --- Layer 2: 卫星层 (Satellites) ---
+    # 正在发生的意义，悬浮于高空
+    if sat_lats:
         fig.add_trace(go.Scattergeo(
-            lon=my_lons, lat=my_lats, mode='markers',
-            text=my_texts, hoverinfo='text',
+            lon=sat_lons, lat=sat_lats, mode='markers',
+            text=sat_texts, hoverinfo='text',
             marker=dict(
-                size=12,                # 很大，产生“近大远小”的错觉
-                color=my_colors, 
+                size=10,                # 较大，模拟'近'
+                color=sat_colors, 
                 opacity=1.0, 
-                symbol='diamond-open',  # 空心菱形，像瞄准框或卫星
-                line=dict(width=2, color='white') # 强烈的白色边框，高亮
+                symbol='diamond-open',  # 空心菱形 (线性风格)
+                line=dict(width=1.5, color=sat_colors) # 自身颜色的描边
             ),
-            name='My Orbit'
+            name='Active Signals'
         ))
 
     # --- 视觉配置 ---
     fig.update_layout(
         geo=dict(
             scope='world', 
-            projection_type='orthographic',
-            showland=True, landcolor='rgb(10, 10, 10)',   # 极黑的陆地
-            showocean=True, oceancolor='rgb(5, 5, 12)',   # 深蓝黑色海洋
+            projection_type='orthographic', # 3D 球体投影
+            showland=True, landcolor='rgb(15, 15, 15)',   # 极黑陆地
+            showocean=True, oceancolor='rgb(5, 5, 8)',    # 近乎黑色的海洋
             showlakes=False, 
-            showcountries=True, countrycolor='rgb(30, 30, 30)', # 隐约的国界
-            showcoastlines=True, coastlinecolor='rgb(40, 40, 50)',
+            showcountries=True, countrycolor='rgb(30, 30, 30)', # 极淡的国界线
+            showcoastlines=True, coastlinecolor='rgb(40, 40, 40)',
             projection_rotation=dict(lon=120, lat=20),
-            bgcolor='black'
+            bgcolor='rgba(0,0,0,0)' # 透明背景
         ),
-        paper_bgcolor='black', margin={"r":0,"t":0,"l":0,"b":0}, height=600, 
-        showlegend=True, legend=dict(x=0, y=0, font=dict(color="#666"), bgcolor="rgba(0,0,0,0)", orientation="h")
+        paper_bgcolor='rgba(0,0,0,0)', 
+        margin={"r":0,"t":0,"l":0,"b":0}, 
+        height=600, 
+        showlegend=False # 隐藏图例，保持极简
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# ==========================================
-# 🌌 2. 星河 (Galaxy View)
-# ==========================================
+# 暂时保留 Galaxy 函数接口以免报错，虽然目前没用
 def render_3d_galaxy(nodes):
-    if len(nodes) < 3: 
-        st.info("🌌 星河汇聚中...")
-        return
-    df = core.compute_clusters(nodes, n_clusters=6)
-    if df.empty: return
-    df['size'] = 6
-    fig = px.scatter_3d(
-        df, x='x', y='y', z='z', 
-        color='cluster', 
-        color_continuous_scale=list(config.SPECTRUM.values()), 
-        hover_name='care_point', 
-        template="plotly_dark", opacity=0.9
-    )
-    fig.update_layout(
-        scene=dict(xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False), bgcolor='black'), 
-        paper_bgcolor="black", margin={"r":0,"t":0,"l":0,"b":0}, height=600, showlegend=False
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    pass
