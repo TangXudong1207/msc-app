@@ -28,7 +28,7 @@ def prepare_soul_data(radar_dict, user_nodes):
     primary_attr = sorted_dims[0][0]
     secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr
 
-    # 2. 颜色映射表 (传递给 JS)
+    # 2. 颜色映射表
     AXIS_COLOR = {
         "Care": config.SPECTRUM["Empathy"], "Agency": config.SPECTRUM["Vitality"],
         "Structure": config.SPECTRUM["Structure"], "Coherence": config.SPECTRUM["Rationality"],
@@ -50,10 +50,8 @@ def prepare_soul_data(radar_dict, user_nodes):
             for k in kw: 
                 if k in config.SPECTRUM: color = config.SPECTRUM[k]; break
         
-        insight = node.get('insight', '')
-        # 简单的转义处理
         safe_content = node.get('care_point','?').replace('"', '&quot;')
-        safe_insight = insight.replace('"', '&quot;')
+        safe_insight = node.get('insight', '').replace('"', '&quot;')
         
         thoughts_payload.append({
             "color": color,
@@ -62,11 +60,10 @@ def prepare_soul_data(radar_dict, user_nodes):
         })
 
     # 4. 氛围数据 (Atmosphere)
-    # 我们只传递数量和权重，位置由 JS 实时生成
     total_w = sum(clean_radar.values())
     weights = {k: v/total_w for k,v in clean_radar.items()}
     
-    # 计算氛围颜色池，供 JS 随机取用
+    # 计算氛围颜色池
     atmos_colors = []
     for k, w in weights.items():
         count = int(w * 100)
