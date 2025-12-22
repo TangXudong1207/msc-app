@@ -1,162 +1,163 @@
 ### msc_soul_viz.py ###
 import streamlit as st
 import plotly.graph_objects as go
+import numpy as np
 import streamlit_antd_components as sac
 import msc_viz as viz
 import msc_soul_gen as gen
-import itertools
+import math
+
+def rotate_points(x, y, angle_rad):
+    """
+    二维旋转算法，用于生成旋转动画帧
+    """
+    x_new = x * math.cos(angle_rad) - y * math.sin(angle_rad)
+    y_new = x * math.sin(angle_rad) + y * math.cos(angle_rad)
+    return x_new, y_new
 
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 1. 计算数据
-    plot_data, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
+    # 1. 获取静态粒子数据
+    data, p_attr, s_attr = gen.generate_nebula_data(radar_dict, user_nodes)
+    
     lang = st.session_state.get('language', 'en')
     
-    # --- 文案 ---
+    # --- 文案映射 (保持原逻辑) ---
     ARCHETYPE_NAMES = {
-        "Agency": {"en": "Starburst Structure", "zh": "爆发结构"},
-        "Care": {"en": "Dense Cluster", "zh": "凝聚结构"},
-        "Curiosity": {"en": "Wide Web", "zh": "发散网络"},
-        "Coherence": {"en": "Crystalline Grid", "zh": "晶格结构"},
-        "Reflection": {"en": "Deep Swirl", "zh": "深旋结构"},
-        "Transcendence": {"en": "Ascending Cloud", "zh": "升腾云结构"},
-        "Aesthetic": {"en": "Harmonic Sphere", "zh": "和谐球体"}
+        "Agency":        {"en": "Starburst Nebula", "zh": "爆发星云"},
+        "Care":          {"en": "Dense Cluster",    "zh": "致密星团"},
+        "Curiosity":     {"en": "Wide Web",         "zh": "发散网状云"},
+        "Coherence":     {"en": "Crystalline Grid", "zh": "晶格结构"},
+        "Reflection":    {"en": "Deep Swirl",       "zh": "深旋星系"},
+        "Transcendence": {"en": "Ascending Cloud",  "zh": "升腾云层"},
+        "Aesthetic":     {"en": "Harmonic Sphere",  "zh": "和谐球体"}
     }
-    # ... (此处省略 ASPECT_NAMES 以节省空间，逻辑不变，保持之前的映射即可) ... 
-    # 为了防止报错，这里简写，实际上你应该保留原来完整的字典
-    ASPECT_NAMES = {"Agency": "Volatile", "Care": "Gentle", "Curiosity": "Flowing", "Coherence": "Stable", "Reflection": "Breathing", "Transcendence": "Drifting", "Aesthetic": "Elegant"} 
-    
     p_name = ARCHETYPE_NAMES.get(p_attr, {}).get(lang, p_attr)
-    s_text = s_attr # 简化显示，或者保留原有的多语言逻辑
     
+    if len(user_nodes) == 0:
+        creature_title = "Proto-Field" if lang=='en' else "初生场域"
+        creature_desc = "Awaiting thought injection..." if lang=='en' else "等待思想注入..."
+    else:
+        creature_title = p_name
+        creature_desc = "Soul Resonance Field" if lang=='en' else "灵魂共鸣场"
+
     label_title = "SOUL FORM" if lang=='en' else "灵魂形态"
     sac.divider(label=label_title, icon='layers', align='center', color='gray')
-    st.markdown(f"<div style='text-align:center; margin-top:-15px; margin-bottom:10px; font-family:JetBrains Mono; font-size:0.8em; color:#888;'>MODE: {s_text.upper()} // TYPE: {p_name}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center; margin-bottom: -10px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
+
+    # ==========================================
+    # 🌌 Plotly 3D 渲染 (带自旋动画)
+    # ==========================================
     
-    # 2. 数据分离
-    thought_indices = [i for i, t in enumerate(plot_data['type']) if t == 'thought']
-    atmos_indices = [i for i, t in enumerate(plot_data['type']) if t == 'atmos']
-    
-    def get_subset(idx):
-        return {k: [plot_data[k][i] for i in idx] for k in ["x","y","z","color","size","text"]}
-
-    thoughts = get_subset(thought_indices)
-    atmos = get_subset(atmos_indices)
-
-    fig = go.Figure()
-
-    # ==========================================
-    # 🟢 视觉层 1: 容器线框 (Cyber Cube)
-    # 模拟参考图中的外部轮廓
-    # ==========================================
-    box_range = [-1.1, 1.1]
-    for x in box_range:
-        for y in box_range:
-            fig.add_trace(go.Scatter3d(
-                x=[x, x], y=[y, y], z=[-1.1, 1.1],
-                mode='lines', line=dict(color='#222', width=1), hoverinfo='none'
-            ))
-            fig.add_trace(go.Scatter3d(
-                x=[x, x], y=[-1.1, 1.1], z=[y, y],
-                mode='lines', line=dict(color='#222', width=1), hoverinfo='none'
-            ))
-            fig.add_trace(go.Scatter3d(
-                x=[-1.1, 1.1], y=[x, x], z=[y, y],
-                mode='lines', line=dict(color='#222', width=1), hoverinfo='none'
-            ))
-
-    # ==========================================
-    # 🟢 视觉层 2: 结构连线 (Web Structure)
-    # 连接思想粒子，形成参考图中的网格感
-    # ==========================================
-    if len(thoughts['x']) > 1:
-        # 简单策略：按顺序连接，或者连接到最近的邻居（这里用简单的顺序闭环模拟结构）
-        # 为了美观，我们只画几条淡线
-        fig.add_trace(go.Scatter3d(
-            x=thoughts['x'], y=thoughts['y'], z=thoughts['z'],
-            mode='lines',
-            line=dict(color='white', width=1, dash='dot'), # 虚线网格
-            opacity=0.3,
-            hoverinfo='skip'
-        ))
-
-    # ==========================================
-    # 🟢 视觉层 3: 氛围尘埃 (Data Dust)
-    # 样式：极小(1/10)、正方形(Square)、高密度
-    # ==========================================
-    if atmos['x']:
-        fig.add_trace(go.Scatter3d(
-            x=atmos["x"], y=atmos["y"], z=atmos["z"],
-            mode='markers',
-            marker=dict(
-                symbol='square',  # 🔷 改为方形像素点
-                size=1.5,         # 🔷 极小尺寸 (思想粒子的 1/10)
-                color=atmos["color"],
-                opacity=0.6,      # 半透明，叠加产生光感
-                line=dict(width=0)
-            ),
-            hoverinfo='none'
-        ))
-
-    # ==========================================
-    # 🟢 视觉层 4: 思想晶体 (Thought Crystals)
-    # 样式：大、菱形(Diamond)、高亮
-    # ==========================================
-    if thoughts['x']:
-        # 内核
-        fig.add_trace(go.Scatter3d(
-            x=thoughts["x"], y=thoughts["y"], z=thoughts["z"],
-            mode='markers',
-            marker=dict(
-                symbol='diamond', # 🔷 改为菱形晶体
-                size=15,          # 🔷 大尺寸
-                color=thoughts["color"],
-                opacity=1.0,      # 实心
-                line=dict(color='white', width=1.5) # 强轮廓
-            ),
-            text=thoughts["text"],
-            hoverinfo='text'
-        ))
-        # 辉光 (复用坐标，低透明度)
-        fig.add_trace(go.Scatter3d(
-            x=thoughts["x"], y=thoughts["y"], z=thoughts["z"],
-            mode='markers',
-            marker=dict(
-                symbol='diamond',
-                size=30,          # 辉光范围
-                color=thoughts["color"],
-                opacity=0.15,
-            ),
-            hoverinfo='skip'
-        ))
-
-    # ==========================================
-    # 场景配置
-    # ==========================================
-    fig.update_layout(
-        height=450,
-        margin=dict(l=0, r=0, b=0, t=0),
-        paper_bgcolor='black',
-        scene=dict(
-            xaxis=dict(visible=False, range=[-1.5, 1.5]),
-            yaxis=dict(visible=False, range=[-1.5, 1.5]),
-            zaxis=dict(visible=False, range=[-1.5, 1.5]),
-            aspectmode='cube',
-            bgcolor='black',
-            camera=dict(
-                eye=dict(x=1.8, y=1.8, z=1.2) # 赛博朋克视角
-            ),
-            dragmode='orbit'
+    # 1. 初始 Trace (第0帧)
+    # Trace 0: 氛围 (Atmos)
+    trace_atmos = go.Scatter3d(
+        x=data["atmos"]["x"], y=data["atmos"]["y"], z=data["atmos"]["z"],
+        mode='markers',
+        marker=dict(
+            size=data["atmos"]["s"],
+            color=data["atmos"]["c"],
+            opacity=0.6, # 氛围半透明
+            line=dict(width=0) # 无边框
         ),
-        showlegend=False
+        hoverinfo='none', # 氛围不显示文字
+        name='Atmosphere'
     )
     
-    st.plotly_chart(fig, use_container_width=True, config={
-        'scrollZoom': True,      
-        'displayModeBar': False, 
-        'staticPlot': False,     
-        'responsive': True       
-    })
+    # Trace 1: 思想 (Thoughts)
+    trace_thoughts = go.Scatter3d(
+        x=data["thoughts"]["x"], y=data["thoughts"]["y"], z=data["thoughts"]["z"],
+        mode='markers',
+        marker=dict(
+            size=data["thoughts"]["s"],
+            color=data["thoughts"]["c"],
+            opacity=1.0,
+            symbol='circle',
+            line=dict(width=2, color='white') # 恒星有白边
+        ),
+        text=data["thoughts"]["t"],
+        hoverinfo='text',
+        name='Thoughts'
+    )
+
+    # 2. 生成动画帧 (Frames)
+    # 我们生成 30 帧，旋转 360 度
+    frames = []
+    num_frames = 60 # 帧数越多越流畅，但加载越慢。60帧对于手机端是合理的权衡。
     
+    # 预先转换 numpy array 加速计算
+    ax_np = np.array(data["atmos"]["x"])
+    ay_np = np.array(data["atmos"]["y"])
+    tx_np = np.array(data["thoughts"]["x"])
+    ty_np = np.array(data["thoughts"]["y"])
+    
+    for i in range(num_frames):
+        angle = (2 * math.pi * i) / num_frames
+        
+        # 旋转氛围
+        ax_rot, ay_rot = rotate_points(ax_np, ay_np, angle)
+        # 旋转思想
+        tx_rot, ty_rot = rotate_points(tx_np, ty_np, angle)
+        
+        frames.append(go.Frame(
+            data=[
+                go.Scatter3d(x=ax_rot, y=ay_rot), # Update Trace 0
+                go.Scatter3d(x=tx_rot, y=ty_rot)  # Update Trace 1
+            ],
+            traces=[0, 1] 
+        ))
+
+    # 3. 布局设置
+    fig = go.Figure(
+        data=[trace_atmos, trace_thoughts],
+        frames=frames
+    )
+
+    fig.update_layout(
+        height=350, # 正方形视窗
+        margin=dict(l=0, r=0, b=0, t=0),
+        paper_bgcolor='black',
+        showlegend=False,
+        scene=dict(
+            xaxis=dict(visible=False, showbackground=False),
+            yaxis=dict(visible=False, showbackground=False),
+            zaxis=dict(visible=False, showbackground=False),
+            bgcolor='black',
+            dragmode='orbit', # 关键：允许像星球一样旋转
+            camera=dict(
+                eye=dict(x=1.8, y=1.8, z=0.5), # 稍微俯视
+                projection=dict(type='perspective')
+            )
+        ),
+        # 动画按钮配置
+        updatemenus=[dict(
+            type='buttons',
+            showactive=False,
+            y=0.1, x=0.1, xanchor='right', yanchor='bottom',
+            pad=dict(t=0, r=10),
+            buttons=[dict(
+                label='⚡ LIVE', # 播放按钮文案
+                method='animate',
+                args=[None, dict(
+                    frame=dict(duration=100, redraw=True), # 每一帧 100ms
+                    fromcurrent=True,
+                    transition=dict(duration=0),
+                    mode='immediate',
+                    loop=True # 循环播放
+                )]
+            )]
+        )]
+    )
+
+    # 渲染
+    # config 中 scrollZoom: True 允许滚轮缩放
+    # displayModeBar: False 隐藏讨厌的 Plotly 工具栏，保持极简
+    st.plotly_chart(
+        fig, 
+        use_container_width=True, 
+        config={'displayModeBar': False, 'scrollZoom': True}
+    )
+    
+    # 底部图例
     viz.render_spectrum_legend()
