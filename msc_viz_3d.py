@@ -64,7 +64,7 @@ def render_3d_particle_map(nodes, current_user):
                 ground_data.append({
                     "lat": lat, "lng": lon,
                     "alt": 0.005,        # 微微离地
-                    "radius": 0.4,      # 稍大
+                    "radius": 0.6,      # 稍大
                     "color": raw_color,
                     "label": f"Light: {node['care_point']}"
                 })
