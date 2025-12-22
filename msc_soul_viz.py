@@ -1,120 +1,138 @@
 ### msc_soul_viz.py ###
 import streamlit as st
-import plotly.graph_objects as go
-import numpy as np
+from streamlit_echarts import st_echarts
 import streamlit_antd_components as sac
 import msc_viz as viz
 import msc_soul_gen as gen
 
-# ==========================================
-# 🌌 物理引擎 (NumPy Vectorized)
-# ==========================================
-def calculate_physics_frame(particles, mode, t, global_rot):
-    # 提取数组
-    X = np.array([p['x'] for p in particles])
-    Y = np.array([p['y'] for p in particles])
-    Z = np.array([p['z'] for p in particles])
-    P = np.array([p['phase'] for p in particles])
-    S = np.array([p['speed'] for p in particles])
-
-    # 1. 局部物理运动 (Local Motion)
-    if mode == "Agency": # 呼吸效应
-        factor = 1.0 + 0.1 * np.sin(t * 2 * S + P)
-        X *= factor; Y *= factor; Z *= factor
-    elif mode == "Reflection": # 漩涡效应
-        R = np.sqrt(X**2 + Y**2 + 0.01)
-        ang = t * (1.0/R) * S * 0.5
-        X_new = X*np.cos(ang) - Y*np.sin(ang)
-        Y = X*np.sin(ang) + Y*np.cos(ang)
-        X = X_new
-    elif mode == "Transcendence": # 上升流
-        Z = ((Z + t * S * 0.5 + 2.5) % 5.0) - 2.5
-    else: # 默认：布朗微动
-        jitter = 0.05 * np.sin(t * 5 + P)
-        X += jitter; Y += jitter; Z += jitter
-
-    # 2. 全局公转 (Global Rotation)
-    cos_g = np.cos(global_rot); sin_g = np.sin(global_rot)
-    X_f = X * cos_g - Y * sin_g
-    Y_f = X * sin_g + Y * cos_g
-    
-    return X_f, Y_f, Z
-
-# ==========================================
-# 🎨 渲染主程序
-# ==========================================
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 1. 生成基础数据
-    raw, p_attr = gen.generate_nebula_data(radar_dict, user_nodes)
+    # 1. 调用生成器获取网络数据和物理配置
+    nodes, edges, physics_config, p_attr, s_attr = gen.generate_soul_network(radar_dict, user_nodes)
+    
     lang = st.session_state.get('language', 'en')
     
-    # 文案
-    NAMES = {
-        "Agency": "Starburst", "Care": "Cluster", "Curiosity": "Nebula",
-        "Coherence": "Grid", "Reflection": "Swirl", "Transcendence": "Ascension", "Aesthetic": "Sphere"
+    # --- 标题和描述的翻译映射 (基于新的物理隐喻) ---
+    ARCHETYPE_NAMES = {
+        "Agency":        {"en": "Starburst Structure", "zh": "爆发结构"},
+        "Care":          {"en": "Dense Cluster",      "zh": "凝聚结构"},
+        "Curiosity":     {"en": "Wide Web",           "zh": "发散网络"},
+        "Coherence":     {"en": "Crystalline Grid",   "zh": "晶格结构"},
+        "Reflection":    {"en": "Deep Swirl",         "zh": "深旋结构"},
+        "Transcendence": {"en": "Ascending Cloud",    "zh": "升腾云结构"},
+        "Aesthetic":     {"en": "Harmonic Sphere",    "zh": "和谐球体"}
     }
-    title = NAMES.get(p_attr, "Nebula")
-    desc = "Topology of thought based on dialogue meaning structure" if lang=='en' else "基于对话意义结构生成的思想拓扑图"
+    ASPECT_NAMES = {
+        "Agency":        {"en": "Volatile Mode",   "zh": "躁动模式"},
+        "Care":          {"en": "Gentle Mode",     "zh": "柔缓模式"},
+        "Curiosity":     {"en": "Flowing Mode",    "zh": "流转模式"},
+        "Coherence":     {"en": "Stable Mode",     "zh": "稳定模式"},
+        "Reflection":    {"en": "Breathing Mode",  "zh": "呼吸模式"},
+        "Transcendence": {"en": "Drifting Mode",   "zh": "漂浮模式"},
+        "Aesthetic":     {"en": "Elegant Mode",    "zh": "优雅模式"}
+    }
 
-    sac.divider(label="SOUL FORM", icon='layers', align='center', color='gray')
-    st.markdown(f"<div style='text-align:center; margin-bottom:15px;'><div style='font-size:1.1em;font-weight:600;'>{title}</div><div style='font-size:0.75em;color:#888;'>{desc}</div></div>", unsafe_allow_html=True)
-
-    # 2. 生成动画帧 (30帧循环，性能平衡点)
-    frames = []
-    n_frames = 30 
+    p_name = ARCHETYPE_NAMES.get(p_attr, {}).get(lang, p_attr)
+    s_name = ASPECT_NAMES.get(s_attr, {}).get(lang, s_attr)
     
-    # 提取静态属性
-    ac = [p['c'] for p in raw['atmos']]; as_ = [p['s'] for p in raw['atmos']]
-    tc = [p['c'] for p in raw['thoughts']]; ts = [p['s'] for p in raw['thoughts']]; tt = [p['t'] for p in raw['thoughts']]
+    if len(user_nodes) == 0:
+        creature_title = "Proto-Field" if lang=='en' else "初生场域"
+        creature_desc = "Awaiting thought injection..." if lang=='en' else "等待思想注入..."
+    else:
+        creature_title = p_name
+        creature_desc = f"operating in {s_name}" if lang=='en' else f"运行于 {s_name}"
 
-    for i in range(n_frames):
-        t = (i / n_frames) * 2 * np.pi
-        ax, ay, az = calculate_physics_frame(raw['atmos'], p_attr, t, t) # 局部t=全局t
-        tx, ty, tz = calculate_physics_frame(raw['thoughts'], p_attr, t, t)
+    label_title = "SOUL FORM" if lang=='en' else "灵魂形态"
+    sac.divider(label=label_title, icon='layers', align='center', color='gray')
+    st.markdown(f"<div style='text-align:center; margin-bottom: -20px;'><b>{creature_title}</b><br><span style='font-size:0.8em;color:gray'>{creature_desc}</span></div>", unsafe_allow_html=True)
+    
+    # ==========================================
+    # 🎯 ECharts GraphGL 配置
+    # ==========================================
+    
+    background_color = "#FFFFFF" # 纯白背景
+
+    # 2. 坐标轴配置 (调整大小)
+    # 🟢 [修改点]：扩大坐标轴范围，从 150 -> 350，包容发散的粒子
+    axis_range = 350 
+    axis_common = {
+        "show": True,
+        "min": -axis_range, "max": axis_range,
+        "axisLine": {"lineStyle": {"color": "#EEEEEE", "width": 1}}, # 非常淡的轴线
+        "axisLabel": {"show": False}, # 不显示标签，保持干净
+        "splitLine": {"show": True, "lineStyle": {"color": "#F5F5F5", "width": 1}} # 非常淡的网格
+    }
+
+    option = {
+        "backgroundColor": background_color,
+        # 提示框组件
+        "tooltip": {
+            "show": True,
+            # 🟢 确保使用字符串而非 lambda
+            "formatter": "{b}<br/>{c}", 
+            "backgroundColor": "rgba(50,50,50,0.8)",
+            "textStyle": {"color": "#fff"},
+            "borderColor": "#333"
+        },
         
-        frames.append(go.Frame(
-            data=[
-                go.Scatter3d(x=ax, y=ay, z=az),
-                go.Scatter3d(x=tx, y=ty, z=tz)
-            ],
-            traces=[0, 1]
-        ))
+        "xAxis3D": axis_common,
+        "yAxis3D": axis_common,
+        "zAxis3D": axis_common,
 
-    # 3. 初始帧
-    ax0, ay0, az0 = calculate_physics_frame(raw['atmos'], p_attr, 0, 0)
-    tx0, ty0, tz0 = calculate_physics_frame(raw['thoughts'], p_attr, 0, 0)
+        "grid3D": {
+            # 调整视野深度
+            "viewControl": {
+                "projection": 'perspective',
+                "autoRotate": True,
+                "autoRotateSpeed": 5, 
+                # 🟢 [修改点]：因为坐标系变大了，这里把相机拉远一点 (250 -> 400)，否则会看里面
+                "distance": 400,
+                "minDistance": 200, "maxDistance": 600,
+                "alpha": 20, "beta": 40
+            },
+            # 明亮、干净的光照
+            "light": {
+                "main": {"intensity": 1.2, "alpha": 30, "beta": 30},
+                "ambient": {"intensity": 0.8}
+            },
+            # 🟢 [新增点]：开启后期处理 (Post Effect) 实现发光 (Bloom)
+            "postEffect": {
+                "enable": True,
+                "bloom": {
+                    "enable": True,
+                    "bloomIntensity": 0.4  # 发光强度，可微调
+                }
+            },
+            "environment": background_color
+        },
 
-    fig = go.Figure(
-        data=[
-            go.Scatter3d(x=ax0, y=ay0, z=az0, mode='markers', marker=dict(size=as_, color=ac, opacity=0.6, line=dict(width=0)), hoverinfo='none', name='Atmos'),
-            go.Scatter3d(x=tx0, y=ty0, z=tz0, mode='markers', marker=dict(size=ts, color=tc, opacity=1.0, line=dict(width=1, color='white')), text=tt, hoverinfo='text', name='Thoughts')
-        ],
-        frames=frames
-    )
-
-    # 4. 布局 (包含播放按钮)
-    fig.update_layout(
-        height=350, margin=dict(l=0, r=0, b=0, t=0),
-        paper_bgcolor='black', showlegend=False,
-        scene=dict(
-            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
-            bgcolor='black', dragmode='orbit',
-            camera=dict(eye=dict(x=1.6, y=0, z=0.6))
-        ),
-        updatemenus=[dict(
-            type='buttons', showactive=False,
-            y=0, x=0.5, xanchor='center', yanchor='bottom', # 居中
-            pad=dict(t=10, r=10),
-            bgcolor='rgba(50,50,50,0.5)', # 灰色半透明背景
-            buttons=[dict(
-                label='▶ ACTIVATE DYNAMICS', # 明显的按钮
-                method='animate',
-                args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True, mode='immediate', loop=True)]
-            )]
-        )]
-    )
-
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
+        "series": [{
+            "type": 'graphGL', # 核心：使用 WebGL 加速的关系图
+            "layout": 'force', # 核心：使用力引导布局
+            "force": {
+                # 3. 注入物理引擎参数
+                "repulsion": physics_config["repulsion"],
+                "gravity": physics_config["gravity"],
+                "friction": physics_config["friction"],
+                "edgeLength": physics_config["edgeLength"],
+                "initLayout": 'spherical' # 初始呈球状分布，然后炸开
+            },
+            "data": nodes,
+            "links": edges,
+            # 节点和边的通用样式已在数据生成时定义，这里设置全局默认
+            "itemStyle": {"opacity": 1},
+            "lineStyle": {"width": 0.5, "opacity": 0.1},
+            # 高亮样式
+            "emphasis": {
+                "itemStyle": {"borderColor": "#000", "borderWidth": 1},
+                "lineStyle": {"width": 2, "opacity": 0.8},
+                "label": {"show": True}
+            }
+        }]
+    }
+    
+    # 增加组件高度，提供更有沉浸感的视野
+    st_echarts(options=option, height="600px")
+    # 渲染图例
     viz.render_spectrum_legend()
