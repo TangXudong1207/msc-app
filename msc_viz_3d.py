@@ -78,7 +78,7 @@ def render_3d_particle_map(nodes, current_user):
                 satellite_data.append({
                     "lat": lat, "lng": lon,
                     "alt": altitude,
-                    "radius": 0.6,       # 卫星大小
+                    "radius": 0.4,       # 卫星大小
                     "color": raw_color,
                     "label": f"ME: {node['care_point']}"
                 })
