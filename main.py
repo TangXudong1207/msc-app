@@ -210,13 +210,11 @@ def meaning_box_dialog(username):
         st.info("No meaning collected yet.")
         return
         
-    # 按时间倒序
     nodes = sorted(nodes, key=lambda x: x['id'], reverse=True)
     st.caption(f"Total Cards: {len(nodes)}")
     
     for n in nodes:
         with st.container(border=True):
-            # 时间格式化
             ts = n.get('created_at', '')[:16].replace('T', ' ')
             c1, c2 = st.columns([0.2, 0.8])
             with c1:
@@ -228,13 +226,27 @@ def meaning_box_dialog(username):
                 if kw:
                     st.markdown(f"**#{kw[0]}**")
             with c2:
-                # 核心意义点
                 st.markdown(f"#### {n.get('care_point', 'Unknown')}")
-                # AI Insight
                 st.info(n.get('insight', ''))
-                # 原文折叠
                 with st.expander("Original Context / 原文"):
                     st.write(n.get('content', ''))
+
+# 🟢 安装说明弹窗
+@st.dialog("📱 Install to Home Screen")
+def install_instructions_dialog():
+    st.markdown("""
+    **To use MSC as a native app:**
+    
+    1. **iOS (Safari):**
+       - Tap the **Share** button (box with arrow).
+       - Scroll down and tap **"Add to Home Screen"**.
+       
+    2. **Android (Chrome):**
+       - Tap the **Menu** button (three dots).
+       - Tap **"Add to Home screen"** or **"Install App"**.
+       
+    *The app will launch in fullscreen immersive mode.*
+    """)
 
 def check_and_send_first_contact(username):
     history = msc.get_active_chats(username)
@@ -259,35 +271,28 @@ else:
     my_nodes_list = list(msc.get_active_nodes_map(st.session_state.username).values())
     node_count = len(my_nodes_list)
     
-    # 引导流程检查
     if node_count == 0 and not st.session_state.is_admin and "onboarding_complete" not in st.session_state:
         pages.render_onboarding(st.session_state.username)
         st.stop()
         
-    # 初次接触消息
     if node_count == 0 and not st.session_state.is_admin:
         check_and_send_first_contact(st.session_state.username)
         
-    # 读取档案
     user_profile = msc.get_user_profile(st.session_state.username)
     raw_radar = user_profile.get('radar_profile')
-    
-    # 容错雷达数据
     radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
     
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
     
-    # 菜单文案定义
     MENU_TEXT = {
-        "en": {"AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", "Box": "MEANING BOX", "Ins": "INSIGHT"},
-        "zh": {"AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", "Box": "意义盒子", "Ins": "每日洞察"}
+        "en": {"AI": "AI_PARTNER", "Chat": "SIGNAL_LINK", "World": "WORLD_LAYER", "God": "OVERSEER", "Sys": "SYSTEM", "Logout": "DISCONNECT", "Install": "INSTALL APP", "Box": "MEANING BOX", "Ins": "INSIGHT"},
+        "zh": {"AI": "AI 伴侣", "Chat": "信号频段", "World": "世界层", "God": "上帝视角", "Sys": "系统", "Logout": "断开连接", "Install": "安装到桌面", "Box": "意义盒子", "Ins": "每日洞察"}
     }
     T = MENU_TEXT[lang]
 
     # === 侧边栏 (Sidebar) ===
     with st.sidebar:
-        # 头像与Rank
         c_av, c_info = st.columns([0.25, 0.75])
         with c_av:
             rank_name, rank_icon = msc.calculate_rank(radar_dict)
@@ -298,7 +303,6 @@ else:
             
         st.divider()
         
-        # 功能按钮区
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
             if st.button(f"⚡ {T['Ins']}", use_container_width=True):
@@ -307,22 +311,29 @@ else:
             if st.button(f"📦 {T['Box']}", use_container_width=True):
                 meaning_box_dialog(st.session_state.username)
         
-        # 灵魂可视化 (JS Canvas)
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         soul_viz.render_soul_scene(radar_dict, my_nodes_list)
         st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
         st.divider()
         
-        # 导航菜单
+        # 🟢 侧边栏菜单定义
         menu_items = [
             sac.MenuItem(T['AI'], icon='robot'),
             sac.MenuItem(T['Chat'], icon='chat-dots', tag=sac.Tag(str(total_unread), color='red') if total_unread > 0 else None),
             sac.MenuItem(T['World'], icon='globe-americas'),
         ]
         
+        # 管理员选项
         if st.session_state.is_admin:
             menu_items.append(sac.MenuItem(T['God'], icon='eye-fill'))
-            menu_items.append(sac.MenuItem(T['Sys'], type='group', children=[sac.MenuItem(T['Logout'], icon='box-arrow-right')]))
+        
+        # 🟢 系统与退出选项 (修复丢失项)
+        menu_items.append(
+            sac.MenuItem(T['Sys'], type='group', children=[
+                sac.MenuItem(T['Install'], icon='phone'),
+                sac.MenuItem(T['Logout'], icon='box-arrow-right')
+            ])
+        )
         
         selected_menu = sac.menu(menu_items, index=0, format_func='title', size='sm', variant='light', open_all=True)
         
@@ -342,6 +353,8 @@ else:
     if selected_menu == T['Logout']:
         st.session_state.clear()
         st.rerun()
+    elif selected_menu == T['Install']: # 🟢 处理安装说明
+        install_instructions_dialog()
     elif selected_menu == T['AI']:
         pages.render_ai_page(st.session_state.username)
     elif selected_menu == T['Chat']:
