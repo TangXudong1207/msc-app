@@ -34,6 +34,13 @@ def log_system_event(level, component, message, user="system"):
         supabase.table('system_logs').insert(payload).execute()
     except: pass 
 
+# 🟢 新增：检查用户是否发生过某类事件 (用于一次性动画判断)
+def check_user_event_exists(username, component_tag):
+    try:
+        res = supabase.table('system_logs').select("id").eq('user_id', username).eq('component', component_tag).limit(1).execute()
+        return len(res.data) > 0
+    except: return False
+
 # ==========================================
 # 👤 用户管理
 # ==========================================
@@ -165,12 +172,11 @@ def get_global_nodes():
     except: return []
 
 # ==========================================
-# 📡 社交 & 消息 & 🟢 好友请求 (新)
+# 📡 社交 & 消息 & 好友请求
 # ==========================================
 @st.cache_data(ttl=60)
 def get_all_users(curr):
     try: 
-        # 🟢 增加 radar_profile 字段
         return supabase.table('users').select("username,nickname,last_seen,uid,radar_profile").neq('username',curr).execute().data
     except: return []
 
@@ -199,10 +205,9 @@ def mark_read(s, r):
     try: supabase.table('direct_messages').update({"is_read":True}).eq('sender',s).eq('receiver',r).execute()
     except: pass
 
-# 🟢 新增：好友请求相关
 def send_friend_request(sender, receiver, match_type, metaphor):
     try:
-        # 检查是否已存在请求或已经是好友(这里简化逻辑，暂不检查friends表，假设通过request判断)
+        # 检查是否已存在
         existing = supabase.table('friend_requests').select("*").or_(f"and(sender.eq.{sender},receiver.eq.{receiver}),and(sender.eq.{receiver},receiver.eq.{sender})").execute()
         if existing.data: return False, "Link already exists or pending."
         
@@ -229,16 +234,12 @@ def handle_friend_request(req_id, action): # action: 'accepted' or 'rejected'
     except: return False
 
 def get_my_friends(username):
-    # 获取所有 status='accepted' 的记录
     try:
         r1 = supabase.table('friend_requests').select("receiver, metaphor").eq('sender', username).eq('status', 'accepted').execute()
         r2 = supabase.table('friend_requests').select("sender, metaphor").eq('receiver', username).eq('status', 'accepted').execute()
-        
         friends = []
-        # 格式化输出: {'username': 'xxx', 'metaphor': 'xxx'}
         for r in r1.data: friends.append({'username': r['receiver'], 'metaphor': r['metaphor']})
         for r in r2.data: friends.append({'username': r['sender'], 'metaphor': r['metaphor']})
-        
         return friends
     except: return []
 
@@ -274,8 +275,8 @@ def nuke_user(target_username):
         supabase.table('direct_messages').delete().eq('receiver', target_username).execute()
         supabase.table('nodes').delete().eq('username', target_username).execute()
         supabase.table('chats').delete().eq('username', target_username).execute()
-        supabase.table('friend_requests').delete().eq('sender', target_username).execute() # 🟢 清理
-        supabase.table('friend_requests').delete().eq('receiver', target_username).execute() # 🟢 清理
+        supabase.table('friend_requests').delete().eq('sender', target_username).execute() 
+        supabase.table('friend_requests').delete().eq('receiver', target_username).execute() 
         supabase.table('users').delete().eq('username', target_username).execute()
         
         get_active_nodes_map.clear()
