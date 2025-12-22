@@ -54,7 +54,7 @@ def render_3d_particle_map(nodes, current_user):
             ground_data.append({
                 "lat": lat, "lng": lon,
                 "alt": 0.0,              # 贴地
-                "radius": 0.1,           # 极小
+                "radius": 0.2,           # 极小
                 "color": dim_color(raw_color, 0.4),
                 "label": f"History: {node['care_point']}"
             })
@@ -64,7 +64,7 @@ def render_3d_particle_map(nodes, current_user):
                 ground_data.append({
                     "lat": lat, "lng": lon,
                     "alt": 0.005,        # 微微离地
-                    "radius": 0.25,      # 稍大
+                    "radius": 0.4,      # 稍大
                     "color": raw_color,
                     "label": f"Light: {node['care_point']}"
                 })
@@ -78,7 +78,7 @@ def render_3d_particle_map(nodes, current_user):
                 satellite_data.append({
                     "lat": lat, "lng": lon,
                     "alt": altitude,
-                    "radius": 0.4,       # 卫星大小
+                    "radius": 0.6,       # 卫星大小
                     "color": raw_color,
                     "label": f"ME: {node['care_point']}"
                 })
@@ -88,7 +88,7 @@ def render_3d_particle_map(nodes, current_user):
                     "lat": lat, "lng": lon,
                     "alt": altitude,
                     "color": raw_color,
-                    "maxR": 6,
+                    "maxR": 3,
                     "prop": 0.4
                 })
 
