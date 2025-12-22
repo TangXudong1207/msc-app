@@ -30,7 +30,6 @@ def render_lock_screen(current_count, target_count, title, message):
 # 🚀 升空动画 (永久一次性)
 # ==========================================
 def render_ascension_animation(username):
-    # 动画 HTML
     st.markdown("""
     <style>
         @keyframes floatUp { 0% { opacity: 0; transform: translateY(50px); } 100% { opacity: 1; transform: translateY(0); } }
@@ -47,28 +46,24 @@ def render_ascension_animation(username):
     </div>
     """, unsafe_allow_html=True)
     
-    # 1. 写入数据库
+    # 🟢 写入数据库日志，标记已播放
     msc.log_ascension_event(username)
-    # 2. 🟢 增加 Session 标记，防止当前会话内重复弹
-    st.session_state.has_shown_ascension = True 
-    
+    st.session_state.has_shown_ascension = True
     time.sleep(3.0)
     st.rerun()
 
 # ==========================================
-# 📡 信号分析对话框
+# 📡 信号分析对话框 (Form修复版)
 # ==========================================
 @st.dialog("📡 SIGNAL ANALYSIS", width="large")
 def render_scan_dialog(username):
     st.caption("Scanning cognitive frequencies...")
     
-    # 扫描缓存
+    # 扫描缓存，避免每次刷新重算
     if "scan_results" not in st.session_state:
         with st.spinner("Triangulating soul coordinates..."):
             res = msc.get_match_candidates(username)
             st.session_state.scan_results = res
-            st.session_state.selected_near = []
-            st.session_state.selected_far = []
             
     res = st.session_state.scan_results
     
@@ -80,55 +75,67 @@ def render_scan_dialog(username):
     </style>
     """, unsafe_allow_html=True)
 
-    c_near, c_far = st.columns(2)
-    
-    # NEAR
-    with c_near:
-        st.markdown("<div class='section-header'>RESONANCE // 共鸣 (Max 2)</div>", unsafe_allow_html=True)
-        if not res['near']: st.caption("No signals in range.")
-        for u in res['near']:
-            checked = u['username'] in st.session_state.selected_near
-            disabled = len(st.session_state.selected_near) >= 2 and not checked
-            if st.checkbox(f"{u['nickname']}", value=checked, key=f"n_{u['username']}", disabled=disabled):
-                if not checked: st.session_state.selected_near.append(u['username'])
-            elif checked:
-                st.session_state.selected_near.remove(u['username'])
-            st.markdown(f"<div class='match-meta'>Mirror Soul detected.</div>", unsafe_allow_html=True)
-            st.write("")
+    # 🟢 使用 st.form 防止交互导致的闪退
+    with st.form("scan_form", border=False):
+        c_near, c_far = st.columns(2)
+        
+        selected_near = []
+        selected_far = []
+        
+        # NEAR
+        with c_near:
+            st.markdown("<div class='section-header'>RESONANCE // 共鸣 (Max 2)</div>", unsafe_allow_html=True)
+            if not res['near']: st.caption("No signals in range.")
+            for u in res['near']:
+                # Form内勾选不会Rerun
+                if st.checkbox(f"{u['nickname']}", key=f"n_{u['username']}"):
+                    selected_near.append(u['username'])
+                st.markdown(f"<div class='match-meta'>Mirror Soul detected.</div>", unsafe_allow_html=True)
+                st.write("")
 
-    # FAR
-    with c_far:
-        st.markdown("<div class='section-header'>TENSION // 张力 (Max 2)</div>", unsafe_allow_html=True)
-        if not res['far']: st.caption("No signals in range.")
-        for u in res['far']:
-            checked = u['username'] in st.session_state.selected_far
-            disabled = len(st.session_state.selected_far) >= 2 and not checked
-            if st.checkbox(f"{u['nickname']}", value=checked, key=f"f_{u['username']}", disabled=disabled):
-                if not checked: st.session_state.selected_far.append(u['username'])
-            elif checked:
-                st.session_state.selected_far.remove(u['username'])
-            st.markdown(f"<div class='match-meta'>Necessary conflict.</div>", unsafe_allow_html=True)
-            st.write("")
+        # FAR
+        with c_far:
+            st.markdown("<div class='section-header'>TENSION // 张力 (Max 2)</div>", unsafe_allow_html=True)
+            if not res['far']: st.caption("No signals in range.")
+            for u in res['far']:
+                if st.checkbox(f"{u['nickname']}", key=f"f_{u['username']}"):
+                    selected_far.append(u['username'])
+                st.markdown(f"<div class='match-meta'>Necessary conflict.</div>", unsafe_allow_html=True)
+                st.write("")
 
-    st.divider()
-    st.markdown("**Manual Calibration // 手动锁定**")
-    manual_target = st.text_input("Target Username", placeholder="Enter specific ID...")
+        st.divider()
+        st.markdown("**Manual Calibration // 手动锁定**")
+        manual_target = st.text_input("Target Username", placeholder="Enter specific ID...")
+        
+        # 提交按钮
+        submitted = st.form_submit_button("TRANSMIT SIGNALS", type="primary", use_container_width=True)
     
-    targets = []
-    for t in st.session_state.selected_near: targets.append({'u': t, 'type': 'Resonance'})
-    for t in st.session_state.selected_far: targets.append({'u': t, 'type': 'Tension'})
-    if manual_target: targets.append({'u': manual_target, 'type': 'Manual'})
-    
-    btn_disabled = len(targets) == 0
-    if st.button("TRANSMIT SIGNALS", type="primary", use_container_width=True, disabled=btn_disabled):
+    # 🟢 处理提交 (Form外)
+    if submitted:
+        if len(selected_near) > 2 or len(selected_far) > 2:
+            st.error("Protocol Violation: Max 2 targets per category.")
+            return
+
+        targets = []
+        for t in selected_near: targets.append({'u': t, 'type': 'Resonance'})
+        for t in selected_far: targets.append({'u': t, 'type': 'Tension'})
+        if manual_target: targets.append({'u': manual_target, 'type': 'Manual'})
+        
+        if not targets:
+            st.warning("No targets locked.")
+            return
+
         progress_bar = st.progress(0)
         logs = st.empty()
+        
         for i, target in enumerate(targets):
             logs.caption(f"Analyzing link with {target['u']}...")
             metaphor = msc.generate_relationship_metaphor(username, target['u'], target['type'])
             success, msg = msc.send_friend_request(username, target['u'], target['type'], metaphor)
             progress_bar.progress((i + 1) / len(targets))
+        
         st.success("All signals transmitted to the Ether.")
+        del st.session_state.scan_results # 清除缓存以便下次刷新
         time.sleep(1.5)
         st.rerun()
 
@@ -145,15 +152,15 @@ def render_friends_page(username, unread_counts):
     all_nodes = msc.get_all_nodes_for_map(username)
     node_count = len(all_nodes)
     
-    # 🟢 阈值检查与升空动画 (利用数据库永久标记)
+    # 🟢 阈值检查与升空动画 (双重检查)
     if node_count >= config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
-        # 🟢 双重检查：既查数据库，也查 Session State
         if "has_shown_ascension" not in st.session_state:
+            # 先查数据库
             if not msc.check_if_ascended_permanently(username):
                 render_ascension_animation(username)
                 return 
             else:
-                # 数据库里有，说明以前看过了，标记 Session 跳过
+                # 数据库有记录，标记当前会话已跳过
                 st.session_state.has_shown_ascension = True
 
     if node_count < config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
@@ -167,7 +174,6 @@ def render_friends_page(username, unread_counts):
         
         # 🟢 A. 扫描按钮
         if st.button("📡 SCAN", use_container_width=True):
-             # 每次点击重置缓存，确保是最新的
             if "scan_results" in st.session_state: del st.session_state.scan_results
             render_scan_dialog(username)
         
@@ -252,3 +258,5 @@ def render_world_page():
     st.markdown(f"### 🌍 {i18n.get_text('World')}")
     viz.render_3d_particle_map(msc.get_global_nodes(), st.session_state.username)
     viz.render_spectrum_legend()
+
+
