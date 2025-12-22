@@ -7,26 +7,23 @@ import msc_config as config
 import msc_viz_core as core
 
 # ==========================================
-# 🎨 色彩暗淡算法
+# 🎨 视觉辅助
 # ==========================================
-def dim_color(hex_color, factor=0.3):
+def dim_color(hex_color, factor=0.5):
     """
-    让颜色变得暗淡、失去光泽，用于沉淀物。
+    让颜色变得暗淡，用于沉淀物。
     """
-    if not hex_color.startswith('#'): return "#333333"
+    if not hex_color.startswith('#'): return "#444444"
     hex_color = hex_color.lstrip('#')
     try:
         r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        # 向深灰色(30,30,30)靠拢，降低亮度
-        r = int(r * factor + 30 * (1-factor))
-        g = int(g * factor + 30 * (1-factor))
-        b = int(b * factor + 30 * (1-factor))
+        # 混合深色
+        r = int(r * factor)
+        g = int(g * factor)
+        b = int(b * factor)
         return '#{:02x}{:02x}{:02x}'.format(r, g, b)
-    except: return "#333333"
+    except: return "#444444"
 
-# ==========================================
-# 🌍 沉淀位置逻辑
-# ==========================================
 def get_location_data(node_data):
     loc = None
     try:
@@ -34,126 +31,118 @@ def get_location_data(node_data):
         elif isinstance(node_data.get('location'), dict): loc = node_data['location']
     except: pass
     
-    # 如果没有位置，给一个随机经纬度
     if not loc or not loc.get('lat'):
-        lat, lon = core.get_random_coordinate()
-    else:
-        lat, lon = loc.get('lat'), loc.get('lon')
-        
-    return lat, lon
+        return core.get_random_coordinate()
+    return loc.get('lat'), loc.get('lon')
 
 # ==========================================
-# 🌌 WebGL 3D 地球渲染器 (Globe.gl)
+# 🌌 WebGL 3D 渲染器 (Globe.gl - Starry Night Edition)
 # ==========================================
 def render_3d_particle_map(nodes, current_user):
-    """
-    使用 Globe.gl (Three.js) 生成真实的 3D 悬浮卫星视图。
-    """
     if not nodes:
         st.info("The universe is empty.")
         return
 
-    # 1. 准备数据 (Python -> JSON)
-    viz_data = []
+    points_data = [] # 静态点（沉淀+活跃）
+    rings_data = []  # 动态波纹（仅限我的活跃点）
     
     for node in nodes:
-        # 基础属性
         raw_color = core.get_spectrum_color(str(node.get('keywords', '')))
         mode = node.get('mode', 'Active')
         lat, lon = get_location_data(node)
         
-        # 逻辑分流
+        # --- 沉淀层 (城市微光) ---
         if mode == 'Sediment':
-            # 沉淀物：贴地 (alt=0.01), 颜色暗淡, 尺寸小
-            viz_data.append({
+            points_data.append({
                 "lat": lat, "lng": lon,
-                "alt": 0.005,             # 紧贴地表
-                "radius": 0.3,            # 很小
+                "alt": 0.002,             # 紧贴地面
+                "radius": 0.15,           # 极小的光点
                 "color": dim_color(raw_color),
                 "label": f"Sediment: {node['care_point']}"
             })
-        else:
-            # 活跃卫星：悬浮 (alt > 0.1), 颜色鲜亮
-            # 增加随机高度，制造层次感
-            altitude = random.uniform(0.15, 0.45) 
             
-            # 判断是否是自己
+        # --- 活跃层 (漂浮卫星) ---
+        else:
+            # 随机漂浮高度 (0.1 ~ 0.35)
+            # 地球半径是1，0.1 相当于离地表 600km，很有卫星感
+            altitude = random.uniform(0.1, 0.35)
+            
+            # 基础卫星点
+            points_data.append({
+                "lat": lat, "lng": lon,
+                "alt": altitude,
+                "radius": 0.5,            # 明显的亮点 (之前太大了变成了柱子)
+                "color": raw_color,
+                "label": f"{node['care_point']}"
+            })
+            
+            # 如果是当前用户，增加一个动态波纹圈
             if node['username'] == current_user:
-                # 自己：更大，更高亮
-                viz_data.append({
+                rings_data.append({
                     "lat": lat, "lng": lon,
-                    "alt": altitude,
-                    "radius": 1.5,        # 大尺寸
-                    "color": raw_color,   # 原色
-                    "label": f"ME: {node['care_point']}",
-                    "isUser": True        # 标记，用于JS做特效
-                })
-            else:
-                # 别人：正常尺寸
-                viz_data.append({
-                    "lat": lat, "lng": lon,
-                    "alt": altitude,
-                    "radius": 0.6,        # 中等尺寸
+                    "alt": altitude,      # 波纹也在空中
                     "color": raw_color,
-                    "label": f"{node['care_point']}",
-                    "isUser": False
+                    "maxR": 5,            # 波纹扩散半径
+                    "prop": 0.5           # 波纹速度
                 })
 
-    # 将数据转为 JSON 字符串注入 HTML
-    json_data = json.dumps(viz_data)
+    # 注入数据
+    json_points = json.dumps(points_data)
+    json_rings = json.dumps(rings_data)
 
-    # 2. 编写 HTML/JS (Globe.gl)
-    # 使用 unpkg 加载库，确保无背景色
+    # 生成 HTML (强制黑色背景)
     html_code = f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <style> body {{ margin: 0; padding: 0; overflow: hidden; background: transparent; }} </style>
+        <style> 
+            body {{ margin: 0; padding: 0; background-color: #000000; overflow: hidden; }} 
+            #globeViz {{ width: 100vw; height: 100vh; }}
+        </style>
         <script src="//unpkg.com/globe.gl"></script>
     </head>
     <body>
     <div id="globeViz"></div>
     <script>
-        const data = {json_data};
+        const pointsData = {json_points};
+        const ringsData = {json_rings};
         
-        // 初始化地球
         const world = Globe()
             (document.getElementById('globeViz'))
-            .backgroundColor('rgba(0,0,0,0)') // 关键：透明背景
-            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg') // 夜景贴图
-            .width(window.innerWidth)
-            .height(650) // 高度适配
             
-            // 粒子配置 (Points)
-            .pointsData(data)
-            .pointAltitude('alt')    // 绑定高度：实现漂浮
-            .pointColor('color')     // 绑定颜色：实现光谱色
-            .pointRadius('radius')   // 绑定大小：区分自己和他人
-            .pointResolution(16)     // 粒子圆滑度
-            .pointLabel('label')     // 鼠标悬停文字
+            // 1. 核心外观：黑夜模式
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+            .backgroundColor('#000000') // 强制纯黑背景
+            .atmosphereColor('#4444ff') // 幽蓝大气层
+            .atmosphereAltitude(0.2)
             
-            // 氛围光效
-            .atmosphereColor('#3a228a')
-            .atmosphereAltitude(0.15);
+            // 2. 粒子层 (Points)
+            .pointsData(pointsData)
+            .pointAltitude('alt')    // 高度
+            .pointColor('color')     // 颜色
+            .pointRadius('radius')   // 半径 (已缩小，不会变成柱子了)
+            .pointResolution(16)     // 圆度
+            .pointLabel('label')
+            
+            // 3. 波纹层 (Rings - 仅我的节点)
+            .ringsData(ringsData)
+            .ringColor('color')
+            .ringAltitude('alt')
+            .ringMaxRadius('maxR')
+            .ringPropagationSpeed('prop')
+            .ringRepeatPeriod(800);  // 波纹频率
 
-        // 设置更具戏剧性的视角 (Cyber-Zen Angle)
-        world.pointOfView({{ lat: 20, lng: 100, altitude: 2.0 }});
-
-        // 自动旋转 (慢速)
+        // 4. 视角与控制
         world.controls().autoRotate = true;
-        world.controls().autoRotateSpeed = 0.6;
-        
-        // 交互设置
-        world.controls().enableZoom = true;
+        world.controls().autoRotateSpeed = 0.5;
+        world.pointOfView({{ lat: 20, lng: 100, altitude: 2.2 }}); // 稍微拉远一点视角
+
     </script>
     </body>
     </html>
     """
 
-    # 3. 渲染组件
-    # height 必须与 HTML 中的 height 匹配或略大
-    components.html(html_code, height=660, scrolling=False)
+    components.html(html_code, height=700, scrolling=False)
 
-# 保留接口
 def render_3d_galaxy(nodes):
     pass
