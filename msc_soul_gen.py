@@ -149,4 +149,3 @@ def generate_nebula_data(radar_dict, user_nodes):
         particles["thoughts"]["t"].append(f"<b>{node.get('care_point','?')}</b><br>{insight}")
 
     return particles, primary_attr, secondary_attr
-msc_soul_viz.py
