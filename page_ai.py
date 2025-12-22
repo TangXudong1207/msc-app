@@ -1,8 +1,8 @@
-### page_ai.py ###
 import streamlit as st
 import msc_lib as msc
 import time
 import msc_i18n as i18n
+import random  # 🟢 新增：为了随机抽取提示语
 
 # ==========================================
 # 🧠 核心逻辑：第一张意义卡提示 (静默版)
@@ -16,6 +16,28 @@ def check_first_meaning_card_silent(username):
         else:
             msg = """That sentence just now, we kept it.\n\nHere, it is called a "Meaning Card".\n\nA Meaning Card is not an opinion, nor a conclusion, but a trace of your genuine thought.\n\nUnlock more Meaning Cards, and you will see more ways to interact with the world."""
         msc.save_chat(username, "assistant", msg)
+
+# ==========================================
+# 🟢 定义随机提示语列表
+# ==========================================
+PLACEHOLDERS_ZH = [
+    "今天有没有哪一刻，你突然停了一下......",
+    "不用想清楚，说到哪算哪......",
+    "不需要说的对......",
+    "不成熟也没关系，慢慢说......",
+    "这里不是考试，也没人逼你说......",
+    "不用不好意思，有啥就整......",
+    "映射此刻的情绪.......",
+]
+
+PLACEHOLDERS_EN = [
+    "Any moment today made you pause? ...",
+    "No need to be clear, just start anywhere...",
+    "It doesn't have to be 'correct'...",
+    "It's okay to be raw, take your time...",
+    "This is not a test...",
+    "Just reflect on your thoughts...",
+]
 
 # ==========================================
 # 🤖 AI 页面渲染 (流畅优化版)
@@ -49,9 +71,14 @@ def render_ai_page(username):
                         st.info(node.get('insight', 'No insight'))
                     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. 输入框
+    # 3. 输入框逻辑 (🟢 修改点)
     st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
-    placeholder = "Reflect on your thoughts..." if lang == 'en' else "映射此刻的思绪..."
+    
+    # 根据语言随机选择一句
+    if lang == 'zh':
+        placeholder = random.choice(PLACEHOLDERS_ZH)
+    else:
+        placeholder = random.choice(PLACEHOLDERS_EN)
     
     if prompt := st.chat_input(placeholder):
         # A. 显示用户消息
