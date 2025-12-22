@@ -20,132 +20,153 @@ def clean_for_json(obj):
     else:
         return obj
 
-# 辅助：获取颜色
-def get_dimension_color(dim):
-    # 反向查找 config 中的颜色
-    return config.SPECTRUM.get(dim, "#FFFFFF")
-
 def generate_nebula_data(radar_dict, user_nodes):
     """
-    生成 3D 星云数据 (Nebula/Soul Field)
-    不使用 NetworkX，纯数学生成粒子云
+    基于灵魂形态（Archetype）的粒子生成器
     """
     if not radar_dict: radar_dict = {"Care": 3.0, "Reflection": 3.0}
 
-    # 1. 权重分析 (决定星云的颜色构成)
+    # 1. 确定主属性 (Archetype)
     valid_keys = config.RADAR_AXES
-    clean_radar = {}
-    total_score = 0
-    for k, v in radar_dict.items():
-        if k in valid_keys:
-            try: val = float(v)
-            except: val = 0
-            if val > 0: 
-                clean_radar[k] = val
-                total_score += val
+    clean_radar = {k: float(v) for k, v in radar_dict.items() if k in valid_keys and float(v) > 0}
+    if not clean_radar: clean_radar = {"Reflection": 5.0}
     
-    if total_score == 0: 
-        clean_radar = {"Reflection": 5.0}
-        total_score = 5.0
-
-    # 排序用于确定主属性
     sorted_dims = sorted(clean_radar.items(), key=lambda x: x[1], reverse=True)
-    primary_attr = sorted_dims[0][0]
-    secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr
-
-    # 权重归一化 (用于随机抽样)
+    primary_attr = sorted_dims[0][0] # 主属性决定形状
+    secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr # 副属性影响颜色/密度
+    
+    # 颜色权重
+    total_score = sum(clean_radar.values())
     dims_list = list(clean_radar.keys())
     weights_list = [v/total_score for v in clean_radar.values()]
 
     # ---------------------------------------------------------
-    # 🌌 2. 粒子生成逻辑
+    # 🌌 形状数学引擎
     # ---------------------------------------------------------
-    
-    # 容器
+    def get_pos_by_shape(shape_type):
+        """返回单个粒子的 (x, y, z)"""
+        # 基础随机变量
+        u = random.random()
+        v = random.random()
+        theta = 2 * math.pi * u
+        phi = math.acos(2 * v - 1)
+        r_base = random.gauss(0, 1)
+
+        # 🟥 Agency -> Starburst (大爆炸，射线状)
+        if shape_type == "Agency":
+            r = random.uniform(0.1, 2.5) # 扩散得很远
+            # 挤压成扁平爆发或球形爆发
+            return r * math.sin(phi) * math.cos(theta), r * math.sin(phi) * math.sin(theta), r * math.cos(phi)
+
+        # 🟦 Coherence -> Grid/Crystal (晶格，有序)
+        elif shape_type == "Coherence":
+            # 离散化坐标，制造“人造物”的感觉
+            step = 0.5
+            x = round(random.gauss(0, 1.5) / step) * step
+            y = round(random.gauss(0, 1.5) / step) * step
+            z = round(random.gauss(0, 1.5) / step) * step
+            return x, y, z
+
+        # 🟪 Reflection -> Swirl (螺旋，黑洞吸积盘)
+        elif shape_type == "Reflection":
+            a = 0.5
+            b = 0.3 # 螺旋紧密度
+            angle = random.uniform(0, 4 * math.pi) # 绕两圈
+            dist = a * math.exp(b * angle) * random.uniform(0.8, 1.2) # 对数螺旋
+            # 转换为笛卡尔坐标
+            x = dist * math.cos(angle)
+            y = dist * math.sin(angle)
+            z = random.gauss(0, 0.2) * (dist * 0.5) # 中心薄，边缘厚
+            return x, y, z
+
+        # 🟩 Transcendence -> Ascending (升腾，垂直光柱)
+        elif shape_type == "Transcendence":
+            h = random.uniform(-1, 3) # 偏向上方
+            w = random.gauss(0, 0.4 * (1 + h*0.2)) # 随高度略微扩散
+            return w * math.cos(theta), w * math.sin(theta), h
+
+        # 🟨 Curiosity -> Web (发散，多核心)
+        elif shape_type == "Curiosity":
+            # 随机选择 3 个中心点
+            centers = [(1,0,0), (-0.5, 0.8, 0), (-0.5, -0.8, 0)]
+            cx, cy, cz = random.choice(centers)
+            # 在中心点附近生成
+            return cx + random.gauss(0, 0.6), cy + random.gauss(0, 0.6), cz + random.gauss(0, 0.6)
+
+        # 🟧 Care -> Cluster (凝聚，致密核心)
+        elif shape_type == "Care":
+            r = random.uniform(0, 1) ** 3 # 极度向中心聚集
+            return r * math.sin(phi) * math.cos(theta) * 2, r * math.sin(phi) * math.sin(theta) * 2, r * math.cos(phi) * 2
+
+        # 🟪 Aesthetic -> Sphere (完美球壳)
+        elif shape_type == "Aesthetic":
+            r = random.gauss(1.5, 0.1) # 这是一个空心球壳
+            return r * math.sin(phi) * math.cos(theta), r * math.sin(phi) * math.sin(theta), r * math.cos(phi)
+
+        # 默认：球形云
+        else:
+            r = random.gauss(0, 1)
+            return r * math.sin(phi) * math.cos(theta), r * math.sin(phi) * math.sin(theta), r * math.cos(phi)
+
+    # ---------------------------------------------------------
+    # 🌌 生成数据
+    # ---------------------------------------------------------
     particles = {
-        "thoughts": {"x":[], "y":[], "z":[], "c":[], "s":[], "t":[]}, # 恒星 (用户数据)
-        "atmos":    {"x":[], "y":[], "z":[], "c":[], "s":[]}          # 氛围 (尘埃)
+        "thoughts": {"x":[], "y":[], "z":[], "c":[], "s":[], "t":[]}, 
+        "atmos":    {"x":[], "y":[], "z":[], "c":[], "s":[]}
     }
 
-    # A. 生成氛围粒子 (Atmosphere Dust)
-    # 数量取决于用户的思维密度，最少 200，最多 500
-    num_atmos = int(min(500, max(200, len(user_nodes) * 20)))
+    # 1. 生成氛围 (Atmosphere)
+    # 数量：稍微多一点，制造“雾”的感觉
+    num_atmos = int(min(600, max(300, len(user_nodes) * 30)))
     
+    # 颜色映射表
+    AXIS_COLOR = {
+        "Care": config.SPECTRUM["Empathy"], "Agency": config.SPECTRUM["Vitality"],
+        "Structure": config.SPECTRUM["Structure"], "Coherence": config.SPECTRUM["Rationality"],
+        "Curiosity": config.SPECTRUM["Curiosity"], "Reflection": config.SPECTRUM["Melancholy"],
+        "Aesthetic": config.SPECTRUM["Aesthetic"], "Transcendence": config.SPECTRUM["Consciousness"]
+    }
+
     for _ in range(num_atmos):
-        # 颜色：基于 Radar 权重随机
+        x, y, z = get_pos_by_shape(primary_attr)
+        
+        # 氛围颜色：随机取样
         dim = random.choices(dims_list, weights=weights_list, k=1)[0]
+        color = AXIS_COLOR.get(dim, "#888888")
         
-        # 坐标：球形正态分布 (Spherical Gaussian)
-        # r 控制云的大小，theta/phi 控制方向
-        r = random.gauss(0, 1.0) # 核心密集，边缘稀疏
-        theta = random.uniform(0, 2 * math.pi)
-        phi = random.uniform(0, math.pi)
-        
-        # 转换为直角坐标
-        # 这里加一点扁平化处理 (multiply z by 0.7) 让它像个星系盘
-        mx = r * math.sin(phi) * math.cos(theta)
-        my = r * math.sin(phi) * math.sin(theta)
-        mz = r * math.cos(phi) * 0.7 
-
-        # 映射颜色
-        # 我们用 DIMENSION_MAP 把 Radar 轴映射回 Spectrum 颜色
-        # 但这里为了视觉丰富，我们可以直接用 Radar 轴对应的“代表色”
-        # 简化处理：从 config.SPECTRUM 中找一个关联词
-        color = "#888888"
-        # 简单的映射表，把 7 轴映射到具体颜色
-        AXIS_COLOR = {
-            "Care": config.SPECTRUM["Empathy"],       # 粉红
-            "Agency": config.SPECTRUM["Vitality"],    # 橙红
-            "Structure": config.SPECTRUM["Structure"],# 灰白
-            "Coherence": config.SPECTRUM["Rationality"],# 蓝
-            "Curiosity": config.SPECTRUM["Curiosity"],# 绿
-            "Reflection": config.SPECTRUM["Melancholy"],# 蓝紫
-            "Aesthetic": config.SPECTRUM["Aesthetic"], # 紫
-            "Transcendence": config.SPECTRUM["Consciousness"] # 青绿
-        }
-        color = AXIS_COLOR.get(dim, "#FFFFFF")
-
-        particles["atmos"]["x"].append(mx)
-        particles["atmos"]["y"].append(my)
-        particles["atmos"]["z"].append(mz)
+        particles["atmos"]["x"].append(x)
+        particles["atmos"]["y"].append(y)
+        particles["atmos"]["z"].append(z)
         particles["atmos"]["c"].append(color)
-        particles["atmos"]["s"].append(random.uniform(1.5, 3.5)) # 粒子大小
+        particles["atmos"]["s"].append(random.uniform(1, 3)) # 细小的尘埃
 
-    # B. 生成思维恒星 (User Thoughts)
-    # 这些点应该更靠近核心，或者是结构中的“锚点”
+    # 2. 生成思想恒星 (Thoughts)
     for node in user_nodes:
-        # 颜色：尝试从 keywords 获取
+        # 思想的位置也在同样的形状力场中，但更向中心靠拢，作为骨架
+        tx, ty, tz = get_pos_by_shape(primary_attr)
+        
+        # 稍微收缩一点，保证核心有内容
+        scale_factor = 0.8
+        
+        # 获取颜色
         kw = node.get('keywords', [])
         if isinstance(kw, str):
             try: kw = json.loads(kw)
             except: kw = []
-        
-        color = "#FFFFFF" # 默认亮白
-        if kw and len(kw) > 0:
+        color = "#FFFFFF"
+        if kw:
             for k in kw:
-                if k in config.SPECTRUM:
-                    color = config.SPECTRUM[k]
-                    break
+                if k in config.SPECTRUM: color = config.SPECTRUM[k]; break
         
-        # 坐标：稍微均匀一点分布，避免重叠
-        # 使用 Fibonacci Sphere 分布或者随机分布但 r 较小
-        r = random.uniform(0.2, 0.8) # 核心区
-        theta = random.uniform(0, 2 * math.pi)
-        phi = random.uniform(0, math.pi)
-
-        mx = r * math.sin(phi) * math.cos(theta)
-        my = r * math.sin(phi) * math.sin(theta)
-        mz = r * math.cos(phi) * 0.7
-
-        particles["thoughts"]["x"].append(mx)
-        particles["thoughts"]["y"].append(my)
-        particles["thoughts"]["z"].append(mz)
+        particles["thoughts"]["x"].append(tx * scale_factor)
+        particles["thoughts"]["y"].append(ty * scale_factor)
+        particles["thoughts"]["z"].append(tz * scale_factor)
         particles["thoughts"]["c"].append(color)
-        particles["thoughts"]["s"].append(8) # 恒星大小
+        particles["thoughts"]["s"].append(6) # 较大的亮点
         
-        # Tooltip 内容
         insight = node.get('insight', '')
-        if len(insight) > 50: insight = insight[:50] + "..."
-        particles["thoughts"]["t"].append(f"<b>{node.get('care_point','?')}</b><br>{insight}")
+        if len(insight) > 60: insight = insight[:60] + "..."
+        particles["thoughts"]["t"].append(f"<b>{node.get('care_point','?')}</b><br><span style='font-size:0.8em;color:#CCC'>{insight}</span>")
 
     return particles, primary_attr, secondary_attr
