@@ -1,4 +1,4 @@
-### msc_page_auth.py ###
+### page_auth.py ###
 import streamlit as st
 import streamlit_antd_components as sac
 import msc_lib as msc
@@ -6,7 +6,7 @@ import time
 import msc_i18n as i18n 
 
 # ==========================================
-# 🔐 登录页 (Fixed: Centered Buttons)
+# 🔐 登录页
 # ==========================================
 def render_login_page():
     st.markdown("""
@@ -24,11 +24,10 @@ def render_login_page():
             margin-top: -10px; 
             font-weight: 300; 
         }
-        /* 移除之前强制 100% 宽度的 CSS，改用布局控制 */
         [data-testid="stFormSubmitButton"] button { 
             border-radius: 4px !important;
             font-family: 'JetBrains Mono', monospace !important;
-            background-color: #FF4B4B !important; /* 红色 */
+            background-color: #FF4B4B !important; 
             color: white !important;
             border: none !important;
             height: 45px !important;
@@ -46,7 +45,6 @@ def render_login_page():
     </style>
     """, unsafe_allow_html=True)
 
-    # 1. 语言记忆逻辑
     qp = st.query_params
     url_lang = qp.get("lang", "en")
     
@@ -58,7 +56,6 @@ def render_login_page():
     with c2:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
         
-        # 语言切换
         lang_options = ['English', '中文']
         current_idx = 0 if st.session_state.language == 'en' else 1
         
@@ -90,10 +87,8 @@ def render_login_page():
                     u = st.text_input(i18n.get_text('identity'), placeholder="Username", label_visibility="collapsed")
                     p = st.text_input(i18n.get_text('key'), type='password', placeholder="Password", label_visibility="collapsed")
                     st.write("")
-                    # 🔴 核心修复：使用列布局使按钮居中
                     fc1, fc2, fc3 = st.columns([1, 2, 1])
                     with fc2:
-                        # use_container_width=True 让按钮填满中间这一列
                         submit_clicked = st.form_submit_button(i18n.get_text('connect'), use_container_width=True)
                 
                 if submit_clicked:
@@ -120,7 +115,6 @@ def render_login_page():
                     nn = st.text_input(i18n.get_text('nick'), label_visibility="collapsed", placeholder="Display Name")
                     nc = st.selectbox(i18n.get_text('region'), ["China", "USA", "UK", "Other"], label_visibility="collapsed")
                     st.write("")
-                    # 🔴 核心修复：同样应用于注册按钮
                     fc1, fc2, fc3 = st.columns([1, 2, 1])
                     with fc2:
                         signup_clicked = st.form_submit_button(i18n.get_text('init'), use_container_width=True)
@@ -128,14 +122,14 @@ def render_login_page():
                 if signup_clicked:
                     if msc.add_user(nu, np, nn, nc): st.success(i18n.get_text('created'))
                     else: st.error("Initialization Failed")
+
 # ==========================================
-# 🚀 新手引导 (Complete Logic)
+# 🚀 新手引导 (v2.0 Poetic Edition)
 # ==========================================
 def render_onboarding(username):
-    # 引导页专用 CSS
     st.markdown("""
     <style>
-        [data-testid="stSidebar"] {display: none;} /* 隐藏侧边栏 */
+        [data-testid="stSidebar"] {display: none;}
         .stApp { background-color: #FAFAFA !important; color: #222 !important; }
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400&family=Noto+Serif+SC:wght@300;400;600&display=swap');
         
@@ -165,17 +159,8 @@ def render_onboarding(username):
             line-height: 2.4; 
             color: #333; 
             margin-bottom: 40px; 
-            white-space: pre-wrap; 
-        }
-        .highlight { 
-            background: #F0F0F0; 
-            padding: 2px 6px; 
-            font-family: 'JetBrains Mono', monospace; 
-            font-size: 0.9em; 
-            color: #000; 
         }
         
-        /* 引导页按钮：极简文字链风格 */
         .stButton button { 
             background-color: transparent !important; 
             border: 1px solid #CCC !important; 
@@ -201,70 +186,29 @@ def render_onboarding(username):
     if "onboarding_step" not in st.session_state: st.session_state.onboarding_step = 0
     step = st.session_state.onboarding_step
     
-    # 布局容器
     c_space, c_content, c_right = st.columns([1, 6, 3])
     
     with c_content:
-        # LOG 00: ARRIVAL
+        # PAGE 1: SPACE
         if step == 0:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 000 // ARRIVAL</div><div class='main-verse'>{i18n.get_text('s0_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='log-container'><div class='log-header'>MSC // SPACE</div><div class='main-verse'>{i18n.get_text('s1_main')}</div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s0_btn')}", use_container_width=False): 
+            if st.button(f"> {i18n.get_text('s1_btn')}", use_container_width=False): 
                 st.session_state.onboarding_step = 1; st.rerun()
         
-        # LOG 01: PROTOCOL
+        # PAGE 2: PEOPLE
         elif step == 1:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 001 // PROTOCOL</div><div class='main-verse'>{i18n.get_text('s1_main').replace('<br>', '\n')}<br><br><span class='highlight'>{i18n.get_text('s1_sub').replace('<br>', ' ')}</span></div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='log-container'><div class='log-header'>MSC // PEOPLE</div><div class='main-verse'>{i18n.get_text('s2_main')}</div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s1_btn')}", use_container_width=False): 
+            if st.button(f"> {i18n.get_text('s2_btn')}", use_container_width=False): 
                 st.session_state.onboarding_step = 2; st.rerun()
 
-        # LOG 02: FILTER
+        # PAGE 3: FUTURE (FINAL)
         elif step == 2:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 002 // FILTER</div><div class='main-verse'>{i18n.get_text('s2_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
-            col_a, col_b = st.columns([1, 2])
-            with col_a: 
-                if st.button(i18n.get_text('s2_btn1')): st.session_state.onboarding_step = 3; st.rerun()
-            with col_b: 
-                if st.button(i18n.get_text('s2_btn2')): st.session_state.onboarding_step = 3; st.rerun()
-        
-        # LOG 03: PARTNER
-        elif step == 3:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 003 // PARTNER</div><div class='main-verse'>{i18n.get_text('s3_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='log-container'><div class='log-header'>MSC // FUTURE</div><div class='main-verse'>{i18n.get_text('s3_main')}</div></div>", unsafe_allow_html=True)
             st.write("")
-            if st.button(f"/// {i18n.get_text('s3_btn')}", use_container_width=False): 
-                st.session_state.onboarding_step = 4; st.rerun()
-
-        # LOG 04: RECORD
-        elif step == 4:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 004 // RECORD</div><div class='main-verse'>{i18n.get_text('s4_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
-            col_a, col_b = st.columns([1, 2])
-            with col_a: 
-                if st.button(i18n.get_text('s4_btn1')): st.session_state.onboarding_step = 5; st.rerun()
-            with col_b: 
-                if st.button(i18n.get_text('s4_btn2')): st.session_state.onboarding_step = 5; st.rerun()
-
-        # LOG 05: CONNECT
-        elif step == 5:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 005 // CONNECT</div><div class='main-verse'>{i18n.get_text('s5_main').replace('<br>', '\n')}<br><br><span class='highlight'>{i18n.get_text('s5_sub').replace('<br>', ' ')}</span></div></div>", unsafe_allow_html=True)
-            st.write("")
-            if st.button(f"/// {i18n.get_text('s5_btn')}", use_container_width=False): 
-                st.session_state.onboarding_step = 6; st.rerun()
-
-        # LOG 06: FOREST
-        elif step == 6:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 006 // FOREST</div><div class='main-verse'>{i18n.get_text('s6_main').replace('<br>', '\n')}</div></div>", unsafe_allow_html=True)
-            st.write("")
-            if st.button(f"/// {i18n.get_text('s6_btn')}", use_container_width=False): 
-                st.session_state.onboarding_step = 7; st.rerun()
-
-        # LOG 07: TRANSMIT (FINAL)
-        elif step == 7:
-            st.markdown(f"<div class='log-container'><div class='log-header'>LOG: 007 // TRANSMIT</div><div class='main-verse'>{i18n.get_text('s7_main').replace('<br>', '\n')}<br>{i18n.get_text('s7_sub').replace('<br>', ' ')}</div></div>", unsafe_allow_html=True)
-            st.write("")
-            # 这里的 type="primary" 不会生效，因为上方 CSS 覆盖了 stButton
-            if st.button(f">>> {i18n.get_text('s7_btn')}", use_container_width=False):
-                # 初始化默认雷达数据 (7 Axis)
+            if st.button(f">> {i18n.get_text('s3_btn')}", use_container_width=False):
+                # 初始化默认雷达数据
                 msc.update_radar_score(username, {
                     "Reflection": 5.0, "Rationality": 5.0, "Curiosity": 5.0,
                     "Agency": 5.0, "Empathy": 5.0, "Care": 5.0, "Transcendence": 3.0
