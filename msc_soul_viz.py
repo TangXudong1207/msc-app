@@ -1,102 +1,21 @@
 ### msc_soul_viz.py ###
 import streamlit as st
-import plotly.graph_objects as go
-import numpy as np
+import streamlit.components.v1 as components
 import streamlit_antd_components as sac
 import msc_viz as viz
 import msc_soul_gen as gen
+import json
 
-# ==========================================
-# 🌌 物理引擎 (基于 Secondary Dimension)
-# ==========================================
-def calculate_physics_frame(particles, motion_mode, t, global_rot):
-    """
-    motion_mode: 次维度，决定动态行为 (Agency=躁动, Care=柔缓...)
-    """
-    X = np.array([p['x'] for p in particles])
-    Y = np.array([p['y'] for p in particles])
-    Z = np.array([p['z'] for p in particles])
-    P = np.array([p['phase'] for p in particles])
-    S = np.array([p['speed'] for p in particles])
-
-    # 🌟 核心逻辑：次维度动态映射
-    
-    # 1. Agency -> 躁动 (Volatile)
-    # 高频抖动 + 快速脉冲
-    if motion_mode == "Agency":
-        jitter = 0.08 * np.sin(t * 8 * S + P) # 高频震颤
-        pulse = 1.0 + 0.15 * np.sin(t * 3 * S) # 快速呼吸
-        X = (X + jitter) * pulse
-        Y = (Y + jitter) * pulse
-        Z = (Z + jitter) * pulse
-        
-    # 2. Care -> 柔缓 (Gentle)
-    # 极慢的呼吸，像沉睡
-    elif motion_mode == "Care":
-        pulse = 1.0 + 0.05 * np.sin(t * 1.0 * S + P) # 慢速呼吸
-        X *= pulse; Y *= pulse; Z *= pulse
-        
-    # 3. Curiosity -> 流转 (Flowing)
-    # 局部画圈 (李萨如轨迹)
-    elif motion_mode == "Curiosity":
-        orbit_r = 0.2
-        X += orbit_r * np.cos(t * 2 * S + P)
-        Y += orbit_r * np.sin(t * 2 * S + P)
-        
-    # 4. Coherence -> 冻结 (Frozen)
-    # 只有极微小的刚性整体移动，强调秩序
-    elif motion_mode == "Coherence":
-        # 几乎不动，只做极微小的整体浮动
-        Z += 0.05 * np.sin(t * 0.5)
-        
-    # 5. Reflection -> 深旋 (Swirling)
-    # 明显的自旋角速度
-    elif motion_mode == "Reflection":
-        R = np.sqrt(X**2 + Y**2 + 0.01)
-        # 内圈快，外圈慢
-        ang = t * (0.8 / R) * S 
-        X_new = X*np.cos(ang) - Y*np.sin(ang)
-        Y = X*np.sin(ang) + Y*np.cos(ang)
-        X = X_new
-        
-    # 6. Transcendence -> 漂浮 (Drifting)
-    # 持续向上的流体运动
-    elif motion_mode == "Transcendence":
-        flow_speed = 0.8
-        # Z轴循环流动
-        Z = ((Z + t * flow_speed * S + 3.0) % 6.0) - 3.0
-        
-    # 7. Aesthetic -> 优雅 (Elegant)
-    # 完美的简谐波浪
-    elif motion_mode == "Aesthetic":
-        wave = 0.1 * np.sin(X * 2 + t * 2) # 波动随位置变化
-        Z += wave
-        
-    # Default Fallback
-    else:
-        X += 0.05 * np.sin(t*2+P)
-
-    # 🌍 全局公转 (Global Rotation)
-    # 所有模式都会叠加这个缓慢的整体旋转，为了展示全貌
-    rot_speed = 0.5 # 0.5倍速
-    cos_g = np.cos(global_rot * rot_speed)
-    sin_g = np.sin(global_rot * rot_speed)
-    X_f = X * cos_g - Y * sin_g
-    Y_f = X * sin_g + Y * cos_g
-    
-    return X_f, Y_f, Z
-
-# ==========================================
-# 🎨 渲染主程序
-# ==========================================
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    # 1. 生成基础数据 (包含 Primary 和 Secondary 属性)
-    raw, p_attr, s_attr = gen.generate_nebula_data(radar_dict, user_nodes)
+    # 1. 准备数据
+    payload, p_attr, s_attr = gen.prepare_soul_data(radar_dict, user_nodes)
+    payload_json = json.dumps(payload)
+    
     lang = st.session_state.get('language', 'en')
     
-    # 文案映射
+    # 文案
     SHAPE_NAMES = {
         "Agency": "Starburst", "Care": "Cluster", "Curiosity": "Nebula",
         "Coherence": "Grid", "Reflection": "Vortex", "Transcendence": "Ascension", "Aesthetic": "Sphere"
@@ -106,72 +25,230 @@ def render_soul_scene(radar_dict, user_nodes=None):
         "Coherence": "Frozen", "Reflection": "Swirling", "Transcendence": "Drifting", "Aesthetic": "Harmonic"
     }
     
-    shape_name = SHAPE_NAMES.get(p_attr, "Nebula")
-    motion_name = MOTION_NAMES.get(s_attr, "Static")
+    shape_name = SHAPE_NAMES.get(p_attr, p_attr)
+    motion_name = MOTION_NAMES.get(s_attr, s_attr)
     
-    title = f"{shape_name}"
-    # 隐喻描述：形如[主维度]，动如[次维度]
-    desc = f"Form of {p_attr} · Rhythm of {s_attr}" if lang=='en' else f"以 [{p_attr}] 为形 · 以 [{s_attr}] 为律"
-
+    title = f"{shape_name} · {motion_name}"
+    # 彻底隐喻化，不解释
+    
     sac.divider(label="SOUL FORM", icon='layers', align='center', color='gray')
-    st.markdown(f"<div style='text-align:center; margin-bottom:15px;'><div style='font-size:1.1em;font-weight:600;'>{title}</div><div style='font-size:0.75em;color:#888;'>{desc}</div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center; margin-bottom:10px; font-family:serif; letter-spacing:2px; font-size:0.9em; color:#AAA;'>{title.upper()}</div>", unsafe_allow_html=True)
 
-    # 2. 预计算 30 帧 (Pre-calculate 30 Frames)
-    frames = []
-    n_frames = 30
+    # ==========================================
+    # 🧬 注入原生 JS 粒子引擎
+    # ==========================================
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body, html {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }}
+            canvas {{ display: block; }}
+            #info {{
+                position: absolute; bottom: 10px; left: 10px; color: rgba(255,255,255,0.5); 
+                font-family: monospace; font-size: 10px; pointer-events: none;
+            }}
+        </style>
+    </head>
+    <body>
+        <canvas id="soulCanvas"></canvas>
+        <div id="info">MSC GENERATIVE ENGINE v1.0</div>
+        <script>
+            // === 1. 数据接收 ===
+            const DATA = {payload_json};
+            const PRIMARY = DATA.primary;
+            const SECONDARY = DATA.secondary;
+            const THOUGHTS = DATA.thoughts;
+            const ATMOS_COLORS = DATA.atmos_colors;
+            
+            const canvas = document.getElementById('soulCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            let width, height, cx, cy;
+            let particles = [];
+            
+            // === 2. 3D 投影参数 ===
+            let fov = 400;
+            let globalAngle = 0;
+            
+            function resize() {{
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+                cx = width / 2;
+                cy = height / 2;
+            }}
+            window.addEventListener('resize', resize);
+            resize();
+
+            // === 3. 粒子类 ===
+            class Particle {{
+                constructor(isThought, thoughtData) {{
+                    this.isThought = isThought;
+                    this.init(thoughtData);
+                }}
+
+                init(thoughtData) {{
+                    // 初始位置生成 (基于 Primary Shape)
+                    let u = Math.random();
+                    let v = Math.random();
+                    let theta = 2 * Math.PI * u;
+                    let phi = Math.acos(2 * v - 1);
+                    let r = 0;
+                    
+                    if (PRIMARY === 'Agency') {{ r = Math.random() * 200 + 20; }}
+                    else if (PRIMARY === 'Care') {{ r = Math.random() * 80; }}
+                    else if (PRIMARY === 'Coherence') {{ 
+                        let step = 60; 
+                        this.baseX = Math.round((Math.random()-0.5)*400/step)*step;
+                        this.baseY = Math.round((Math.random()-0.5)*400/step)*step;
+                        this.baseZ = Math.round((Math.random()-0.5)*400/step)*step;
+                        r = 0; // coherence 使用网格坐标
+                    }}
+                    else if (PRIMARY === 'Transcendence') {{ 
+                        let w = (Math.random()-0.5)*100;
+                        this.x = w; this.y = (Math.random()-0.5)*100; this.z = (Math.random()-0.5)*400;
+                        r = 0; // 特殊处理
+                    }}
+                    else {{ r = (Math.random() - 0.5) * 300; }} // Default Cloud
+
+                    if (PRIMARY !== 'Coherence' && PRIMARY !== 'Transcendence') {{
+                        this.x = r * Math.sin(phi) * Math.cos(theta);
+                        this.y = r * Math.sin(phi) * Math.sin(theta);
+                        this.z = r * Math.cos(phi);
+                    }} else if (PRIMARY === 'Coherence') {{
+                        this.x = this.baseX; this.y = this.baseY; this.z = this.baseZ;
+                    }}
+
+                    // 属性
+                    if (this.isThought) {{
+                        this.color = thoughtData.color;
+                        this.sizeBase = 4;
+                        this.x *= 0.8; this.y *= 0.8; this.z *= 0.8; // 恒星内敛
+                    }} else {{
+                        this.color = ATMOS_COLORS[Math.floor(Math.random() * ATMOS_COLORS.length)];
+                        this.sizeBase = Math.random() * 2 + 0.5;
+                    }}
+
+                    this.phase = Math.random() * Math.PI * 2;
+                    this.speed = Math.random() * 0.5 + 0.5;
+                    
+                    // 备份初始坐标用于物理计算
+                    this.ox = this.x; this.oy = this.y; this.oz = this.z;
+                }}
+
+                update(t) {{
+                    // === 物理引擎核心 (基于 Secondary Motion) ===
+                    let x = this.ox;
+                    let y = this.oy;
+                    let z = this.oz;
+                    let p = this.phase;
+                    let s = this.speed;
+
+                    if (SECONDARY === 'Agency') {{ // 躁动：呼吸 + 抖动
+                        let pulse = 1 + 0.2 * Math.sin(t * 3 * s + p);
+                        let jitter = Math.sin(t * 10 + p) * 5;
+                        x = (x + jitter) * pulse;
+                        y = (y + jitter) * pulse;
+                        z = (z + jitter) * pulse;
+                    }} 
+                    else if (SECONDARY === 'Reflection') {{ // 漩涡
+                        let d = Math.sqrt(x*x + y*y);
+                        let ang = t * (500 / (d+10)) * s * 0.5;
+                        let nx = x * Math.cos(ang) - y * Math.sin(ang);
+                        let ny = x * Math.sin(ang) + y * Math.cos(ang);
+                        x = nx; y = ny;
+                    }}
+                    else if (SECONDARY === 'Transcendence') {{ // 升腾
+                        z = ((this.oz + t * 50 * s + 200) % 400) - 200;
+                    }}
+                    else if (SECONDARY === 'Curiosity') {{ // 流动
+                        x += Math.sin(t * 2 + p) * 20;
+                        y += Math.cos(t * 2 + p) * 20;
+                    }}
+                    else if (SECONDARY === 'Care') {{ // 柔缓
+                        let pulse = 1 + 0.05 * Math.sin(t * s + p);
+                        x *= pulse; y *= pulse; z *= pulse;
+                    }}
+                    
+                    // 全局旋转
+                    let cosG = Math.cos(globalAngle);
+                    let sinG = Math.sin(globalAngle);
+                    let xFinal = x * cosG - z * sinG;
+                    let zRot = x * sinG + z * cosG;
+                    
+                    // 3D 投影
+                    let scale = fov / (fov + zRot);
+                    let x2d = xFinal * scale + cx;
+                    let y2d = y * scale + cy;
+                    
+                    // 渲染
+                    if (scale > 0) {{
+                        ctx.beginPath();
+                        ctx.arc(x2d, y2d, this.sizeBase * scale, 0, Math.PI * 2);
+                        ctx.fillStyle = this.color;
+                        ctx.globalAlpha = this.isThought ? 1.0 : (0.4 * scale); // 远处理更淡
+                        ctx.fill();
+                        
+                        // 恒星发光
+                        if (this.isThought) {{
+                            ctx.strokeStyle = "rgba(255,255,255,0.5)";
+                            ctx.lineWidth = 1 * scale;
+                            ctx.stroke();
+                        }}
+                    }}
+                }}
+            }}
+
+            // === 4. 初始化 ===
+            function initWorld() {{
+                particles = [];
+                // 氛围粒子 (数量)
+                let atmosCount = Math.min(600, Math.max(200, DATA.node_count * 30));
+                for(let i=0; i<atmosCount; i++) {{
+                    particles.push(new Particle(false, null));
+                }}
+                // 思想粒子
+                THOUGHTS.forEach(t => {{
+                    particles.push(new Particle(true, t));
+                }});
+            }}
+
+            initWorld();
+
+            // === 5. 渲染循环 ===
+            let time = 0;
+            function animate() {{
+                ctx.fillStyle = "#000000";
+                ctx.fillRect(0, 0, width, height); // 清空画布
+                
+                time += 0.01;
+                globalAngle += 0.005; // 缓慢自旋
+                
+                // 简单的深度排序，解决遮挡问题
+                particles.sort((a, b) => b.z - a.z); // 实际上需要实时计算后的Z，这里简化处理不排序或根据索引
+                // 为了性能，JS粒子通常不每帧排序，或者只做简单混合
+                ctx.globalCompositeOperation = 'lighter'; // 叠加模式，增强发光感
+
+                particles.forEach(p => p.update(time));
+                
+                requestAnimationFrame(animate);
+            }}
+            animate();
+            
+            // 交互：点击重置
+            canvas.addEventListener('click', () => {{
+                globalAngle += 1.0; // 点击加速旋转一下
+            }});
+
+        </script>
+    </body>
+    </html>
+    """
+
+    # 渲染 HTML 组件
+    # height=350 保持正方形视窗
+    components.html(html_code, height=350, scrolling=False)
     
-    ac = [p['c'] for p in raw['atmos']]; as_ = [p['s'] for p in raw['atmos']]
-    tc = [p['c'] for p in raw['thoughts']]; ts = [p['s'] for p in raw['thoughts']]; tt = [p['t'] for p in raw['thoughts']]
-
-    for i in range(n_frames):
-        t = (i / n_frames) * 2 * np.pi # 0 -> 2PI
-        global_rot = t # 全局旋转周期同步
-        
-        # 🌟 关键：传入 s_attr (次维度) 控制物理动态
-        ax, ay, az = calculate_physics_frame(raw['atmos'], s_attr, t, global_rot)
-        tx, ty, tz = calculate_physics_frame(raw['thoughts'], s_attr, t, global_rot)
-        
-        frames.append(go.Frame(
-            data=[
-                go.Scatter3d(x=ax, y=ay, z=az),
-                go.Scatter3d(x=tx, y=ty, z=tz)
-            ],
-            traces=[0, 1]
-        ))
-
-    # 3. 初始帧
-    ax0, ay0, az0 = calculate_physics_frame(raw['atmos'], s_attr, 0, 0)
-    tx0, ty0, tz0 = calculate_physics_frame(raw['thoughts'], s_attr, 0, 0)
-
-    fig = go.Figure(
-        data=[
-            go.Scatter3d(x=ax0, y=ay0, z=az0, mode='markers', marker=dict(size=as_, color=ac, opacity=0.5, line=dict(width=0)), hoverinfo='none', name='Atmos'),
-            go.Scatter3d(x=tx0, y=ty0, z=tz0, mode='markers', marker=dict(size=ts, color=tc, opacity=1.0, line=dict(width=1, color='white')), text=tt, hoverinfo='text', name='Thoughts')
-        ],
-        frames=frames
-    )
-
-    # 4. 布局
-    fig.update_layout(
-        height=350, margin=dict(l=0, r=0, b=0, t=0),
-        paper_bgcolor='black', showlegend=False,
-        scene=dict(
-            xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
-            bgcolor='black', dragmode='orbit',
-            camera=dict(eye=dict(x=1.6, y=0, z=0.6))
-        ),
-        updatemenus=[dict(
-            type='buttons', showactive=False,
-            y=0, x=0.5, xanchor='center', yanchor='bottom',
-            pad=dict(t=10, r=10),
-            bgcolor='rgba(50,50,50,0.5)',
-            buttons=[dict(
-                label='▶ ACTIVATE',
-                method='animate',
-                args=[None, dict(frame=dict(duration=80, redraw=True), fromcurrent=True, mode='immediate', loop=True)]
-            )]
-        )]
-    )
-
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
     viz.render_spectrum_legend()
