@@ -99,12 +99,10 @@ def check_world_access(username):
 
 # 🟢 永久升空检查 (Fixed)
 def check_if_ascended_permanently(username):
-    # 这一行是对的，调用 db 检查
     return db.check_user_event_exists(username, "ASCENSION_EVENT")
 
+# 🟢 记录升空事件 (Fixed)
 def log_ascension_event(username):
-    # 🔴 修正：明确传递 user=username，确保日志归属于该用户
-    # 注意：msc_db.log_system_event(level, component, message, user)
     db.log_system_event("INFO", "ASCENSION_EVENT", "User unlocked world layer", user=username)
 
 # ==========================================
@@ -113,7 +111,6 @@ def log_ascension_event(username):
 def get_match_candidates(current_username):
     """
     返回: { 'near': [Top5 Users], 'far': [Top5 Users] }
-    🟢 修正：增加对方是否解锁阈值的判断
     """
     candidates = db.get_all_users(current_username)
     if not candidates: return {'near':[], 'far':[]}
@@ -127,8 +124,6 @@ def get_match_candidates(current_username):
     
     for user in candidates:
         # 🟢 核心修正：过滤掉未突破阈值的用户 (Node < 20)
-        # 注意：这里会产生 N 次 DB 查询，原型阶段可接受。
-        # 如果性能卡顿，建议在 users 表增加 node_count 字段。
         target_nodes = db.get_all_nodes_for_map(user['username'])
         if len(target_nodes) < config.WORLD_UNLOCK_THRESHOLD:
             continue
