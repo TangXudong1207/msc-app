@@ -18,12 +18,11 @@ except Exception as e:
     st.stop()
 
 def make_hashes(password):
-    # 新版加盐哈希
     raw = f"{SALT}{password}{SALT}"
     return hashlib.sha256(str.encode(raw)).hexdigest()
 
 # ==========================================
-# 📊 可观测性：系统日志 (带容错)
+# 📊 可观测性：系统日志
 # ==========================================
 def log_system_event(level, component, message, user="system"):
     try:
@@ -36,28 +35,23 @@ def log_system_event(level, component, message, user="system"):
     except: pass 
 
 # ==========================================
-# 👤 用户管理 (核心修复：兼容老密码)
+# 👤 用户管理
 # ==========================================
 def login_user(username, password):
     try:
-        # 1. 先尝试【新版加盐】密码
         hashed_new = make_hashes(password)
         res = supabase.table('users').select("*").eq('username', username).eq('password', hashed_new).execute()
-        
         if res.data:
             log_system_event("INFO", "Auth", f"User {username} logged in (Secure)", username)
             return res.data
-            
-        # 2. 如果失败，尝试【旧版无盐】密码 (兼容老用户)
+        
         hashed_old = hashlib.sha256(str.encode(password)).hexdigest()
         res_old = supabase.table('users').select("*").eq('username', username).eq('password', hashed_old).execute()
         
         if res_old.data:
-            # 💡 关键：如果是老密码登录成功，立刻自动升级数据库为新密码！
             supabase.table('users').update({"password": hashed_new}).eq("username", username).execute()
             log_system_event("WARN", "Auth", f"User {username} migrated to secure password", username)
             return res_old.data
-
         return []
     except Exception as e:
         log_system_event("ERROR", "Login", str(e)) 
@@ -171,11 +165,13 @@ def get_global_nodes():
     except: return []
 
 # ==========================================
-# 📡 社交 & 消息
+# 📡 社交 & 消息 & 🟢 好友请求 (新)
 # ==========================================
 @st.cache_data(ttl=60)
 def get_all_users(curr):
-    try: return supabase.table('users').select("username,nickname,last_seen,uid").neq('username',curr).execute().data
+    try: 
+        # 🟢 增加 radar_profile 字段
+        return supabase.table('users').select("username,nickname,last_seen,uid,radar_profile").neq('username',curr).execute().data
     except: return []
 
 def get_direct_messages(u1, u2):
@@ -203,6 +199,52 @@ def mark_read(s, r):
     try: supabase.table('direct_messages').update({"is_read":True}).eq('sender',s).eq('receiver',r).execute()
     except: pass
 
+# 🟢 新增：好友请求相关
+def send_friend_request(sender, receiver, match_type, metaphor):
+    try:
+        # 检查是否已存在请求或已经是好友(这里简化逻辑，暂不检查friends表，假设通过request判断)
+        existing = supabase.table('friend_requests').select("*").or_(f"and(sender.eq.{sender},receiver.eq.{receiver}),and(sender.eq.{receiver},receiver.eq.{sender})").execute()
+        if existing.data: return False, "Link already exists or pending."
+        
+        payload = {
+            "sender": sender, "receiver": receiver, 
+            "status": "pending", "match_type": match_type, 
+            "metaphor": metaphor,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        supabase.table('friend_requests').insert(payload).execute()
+        return True, "Signal Sent"
+    except Exception as e: return False, str(e)
+
+def get_pending_requests(receiver):
+    try:
+        res = supabase.table('friend_requests').select("*").eq('receiver', receiver).eq('status', 'pending').execute()
+        return res.data
+    except: return []
+
+def handle_friend_request(req_id, action): # action: 'accepted' or 'rejected'
+    try:
+        supabase.table('friend_requests').update({"status": action}).eq('id', req_id).execute()
+        return True
+    except: return False
+
+def get_my_friends(username):
+    # 获取所有 status='accepted' 的记录
+    try:
+        r1 = supabase.table('friend_requests').select("receiver, metaphor").eq('sender', username).eq('status', 'accepted').execute()
+        r2 = supabase.table('friend_requests').select("sender, metaphor").eq('receiver', username).eq('status', 'accepted').execute()
+        
+        friends = []
+        # 格式化输出: {'username': 'xxx', 'metaphor': 'xxx'}
+        for r in r1.data: friends.append({'username': r['receiver'], 'metaphor': r['metaphor']})
+        for r in r2.data: friends.append({'username': r['sender'], 'metaphor': r['metaphor']})
+        
+        return friends
+    except: return []
+
+# ==========================================
+# 🛠️ 系统维护
+# ==========================================
 def process_time_decay():
     try:
         res = supabase.table('nodes').select("*").neq('mode', 'Sediment').execute()
@@ -224,9 +266,6 @@ def get_system_logs(limit=50):
         return supabase.table('system_logs').select("*").order('created_at', desc=True).limit(limit).execute().data
     except: return []
 
-# ==========================================
-# 🧨 危险操作：核打击 (容错版)
-# ==========================================
 def nuke_user(target_username):
     try:
         try: supabase.table('system_logs').delete().eq('user_id', target_username).execute()
@@ -235,6 +274,8 @@ def nuke_user(target_username):
         supabase.table('direct_messages').delete().eq('receiver', target_username).execute()
         supabase.table('nodes').delete().eq('username', target_username).execute()
         supabase.table('chats').delete().eq('username', target_username).execute()
+        supabase.table('friend_requests').delete().eq('sender', target_username).execute() # 🟢 清理
+        supabase.table('friend_requests').delete().eq('receiver', target_username).execute() # 🟢 清理
         supabase.table('users').delete().eq('username', target_username).execute()
         
         get_active_nodes_map.clear()
