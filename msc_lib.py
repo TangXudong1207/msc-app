@@ -77,6 +77,7 @@ def calculate_rank(radar_data):
 # 消息与好友
 def save_chat(u, r, c): db.save_chat(u, r, c)
 def get_active_chats(u): return db.get_active_chats(u)
+def get_all_users(curr): return db.get_all_users(curr) 
 def get_direct_messages(u1, u2): return db.get_direct_messages(u1, u2)
 def send_direct_message(s, r, c): return db.send_direct_message(s, r, c)
 def get_unread_counts(c): return db.get_unread_counts(c)
