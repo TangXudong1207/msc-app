@@ -22,17 +22,18 @@ def clean_for_json(obj):
 
 def generate_nebula_data(radar_dict, user_nodes):
     """
-    基于灵魂形态（Archetype）的粒子生成器
+    物理引擎数据生成器
+    返回：初始位置(pos)，颜色(color)，大小(size)，以及物理属性(velocity/phase)
     """
     if not radar_dict: radar_dict = {"Care": 3.0, "Reflection": 3.0}
 
-    # 1. 确定主属性 (Archetype)
+    # 1. 确定主属性
     valid_keys = config.RADAR_AXES
     clean_radar = {k: float(v) for k, v in radar_dict.items() if k in valid_keys and float(v) > 0}
     if not clean_radar: clean_radar = {"Reflection": 5.0}
     
     sorted_dims = sorted(clean_radar.items(), key=lambda x: x[1], reverse=True)
-    primary_attr = sorted_dims[0][0] # 主属性决定形状
+    primary_attr = sorted_dims[0][0]
     
     # 颜色权重
     total_score = sum(clean_radar.values())
@@ -40,74 +41,46 @@ def generate_nebula_data(radar_dict, user_nodes):
     weights_list = [v/total_score for v in clean_radar.values()]
 
     # ---------------------------------------------------------
-    # 🌌 形状数学引擎
+    # 🌌 初始分布函数 (静态形态)
     # ---------------------------------------------------------
-    def get_pos_by_shape(shape_type):
-        """返回单个粒子的 (x, y, z)"""
-        u = random.random()
-        v = random.random()
-        theta = 2 * math.pi * u
-        phi = math.acos(2 * v - 1)
-
-        # 🟥 Agency -> Starburst (大爆炸，射线状)
-        if shape_type == "Agency":
-            r = random.uniform(0.1, 2.5) 
+    def get_initial_pos(shape_type):
+        u = random.random(); v = random.random()
+        theta = 2 * math.pi * u; phi = math.acos(2 * v - 1)
+        
+        # 针对不同类型的初始分布优化
+        if shape_type == "Agency": # 爆发
+            r = random.uniform(0.1, 2.0)
             return r * math.sin(phi) * math.cos(theta), r * math.sin(phi) * math.sin(theta), r * math.cos(phi)
-
-        # 🟦 Coherence -> Grid/Crystal (晶格，有序)
-        elif shape_type == "Coherence":
-            step = 0.5
-            x = round(random.gauss(0, 1.5) / step) * step
-            y = round(random.gauss(0, 1.5) / step) * step
-            z = round(random.gauss(0, 1.5) / step) * step
+        elif shape_type == "Coherence": # 晶格
+            step = 0.6
+            x = round(random.gauss(0, 1.5)/step)*step
+            y = round(random.gauss(0, 1.5)/step)*step
+            z = round(random.gauss(0, 1.5)/step)*step
             return x, y, z
-
-        # 🟪 Reflection -> Swirl (螺旋)
-        elif shape_type == "Reflection":
-            a = 0.5; b = 0.3
-            angle = random.uniform(0, 4 * math.pi)
-            dist = a * math.exp(b * angle) * random.uniform(0.8, 1.2)
-            x = dist * math.cos(angle)
-            y = dist * math.sin(angle)
-            z = random.gauss(0, 0.2) * (dist * 0.5)
-            return x, y, z
-
-        # 🟩 Transcendence -> Ascending (升腾)
-        elif shape_type == "Transcendence":
-            h = random.uniform(-1, 3)
-            w = random.gauss(0, 0.4 * (1 + h*0.2))
+        elif shape_type == "Reflection": # 漩涡
+            r_flat = random.uniform(0.2, 2.0)
+            angle = random.uniform(0, 2*math.pi)
+            return r_flat * math.cos(angle), r_flat * math.sin(angle), random.gauss(0, 0.2) * (2.0 - r_flat)
+        elif shape_type == "Transcendence": # 升腾柱
+            h = random.uniform(-2, 2)
+            w = random.gauss(0, 0.5)
             return w * math.cos(theta), w * math.sin(theta), h
-
-        # 🟨 Curiosity -> Web (发散，多核心)
-        elif shape_type == "Curiosity":
-            centers = [(1,0,0), (-0.5, 0.8, 0), (-0.5, -0.8, 0)]
-            cx, cy, cz = random.choice(centers)
-            return cx + random.gauss(0, 0.6), cy + random.gauss(0, 0.6), cz + random.gauss(0, 0.6)
-
-        # 🟧 Care -> Cluster (凝聚)
-        elif shape_type == "Care":
-            r = random.uniform(0, 1) ** 3 
-            return r * math.sin(phi) * math.cos(theta) * 2, r * math.sin(phi) * math.sin(theta) * 2, r * math.cos(phi) * 2
-
-        # 🟪 Aesthetic -> Sphere (球壳)
-        elif shape_type == "Aesthetic":
-            r = random.gauss(1.5, 0.1) 
+        elif shape_type == "Aesthetic": # 球壳
+            r = random.gauss(1.8, 0.1)
             return r * math.sin(phi) * math.cos(theta), r * math.sin(phi) * math.sin(theta), r * math.cos(phi)
-
-        else: # Default
-            r = random.gauss(0, 1)
+        else: # 默认云团
+            r = random.gauss(0, 1.2)
             return r * math.sin(phi) * math.cos(theta), r * math.sin(phi) * math.sin(theta), r * math.cos(phi)
 
     # ---------------------------------------------------------
-    # 🌌 生成数据
+    # 🧪 数据容器
     # ---------------------------------------------------------
-    particles = {
-        "thoughts": {"x":[], "y":[], "z":[], "c":[], "s":[], "t":[]}, 
-        "atmos":    {"x":[], "y":[], "z":[], "c":[], "s":[]}
-    }
+    # 使用 List 收集，最后转 NumPy
+    atmos_data = [] 
+    thoughts_data = []
 
-    # 1. 生成氛围 (Atmosphere)
-    num_atmos = int(min(600, max(300, len(user_nodes) * 30)))
+    # 1. 生成氛围 (Atmosphere) - 增加数量以增强体积感
+    num_atmos = int(min(800, max(400, len(user_nodes) * 40)))
     
     AXIS_COLOR = {
         "Care": config.SPECTRUM["Empathy"], "Agency": config.SPECTRUM["Vitality"],
@@ -117,20 +90,25 @@ def generate_nebula_data(radar_dict, user_nodes):
     }
 
     for _ in range(num_atmos):
-        x, y, z = get_pos_by_shape(primary_attr)
+        x, y, z = get_initial_pos(primary_attr)
         dim = random.choices(dims_list, weights=weights_list, k=1)[0]
         color = AXIS_COLOR.get(dim, "#888888")
         
-        particles["atmos"]["x"].append(x)
-        particles["atmos"]["y"].append(y)
-        particles["atmos"]["z"].append(z)
-        particles["atmos"]["c"].append(color)
-        particles["atmos"]["s"].append(random.uniform(1, 3)) 
+        # 随机相位和速度，用于物理计算
+        phase = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(0.5, 1.5)
+        
+        atmos_data.append({
+            "x": x, "y": y, "z": z, "c": color, 
+            "s": random.uniform(1.0, 3.5), 
+            "phase": phase, "speed": speed
+        })
 
     # 2. 生成思想恒星 (Thoughts)
     for node in user_nodes:
-        tx, ty, tz = get_pos_by_shape(primary_attr)
-        scale_factor = 0.8
+        x, y, z = get_initial_pos(primary_attr)
+        # 向中心收缩一点
+        x *= 0.8; y *= 0.8; z *= 0.8
         
         kw = node.get('keywords', [])
         if isinstance(kw, str):
@@ -138,17 +116,17 @@ def generate_nebula_data(radar_dict, user_nodes):
             except: kw = []
         color = "#FFFFFF"
         if kw:
-            for k in kw:
+            for k in kw: 
                 if k in config.SPECTRUM: color = config.SPECTRUM[k]; break
-        
-        particles["thoughts"]["x"].append(tx * scale_factor)
-        particles["thoughts"]["y"].append(ty * scale_factor)
-        particles["thoughts"]["z"].append(tz * scale_factor)
-        particles["thoughts"]["c"].append(color)
-        particles["thoughts"]["s"].append(6) 
         
         insight = node.get('insight', '')
         if len(insight) > 60: insight = insight[:60] + "..."
-        particles["thoughts"]["t"].append(f"<b>{node.get('care_point','?')}</b><br><span style='font-size:0.8em;color:#CCC'>{insight}</span>")
+        tooltip = f"<b>{node.get('care_point','?')}</b><br><span style='font-size:0.8em;color:#CCC'>{insight}</span>"
+        
+        thoughts_data.append({
+            "x": x, "y": y, "z": z, "c": color, 
+            "s": 7, "t": tooltip,
+            "phase": random.uniform(0, 2 * math.pi), "speed": random.uniform(0.8, 1.2)
+        })
 
-    return particles, primary_attr
+    return {"atmos": atmos_data, "thoughts": thoughts_data}, primary_attr
