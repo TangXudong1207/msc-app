@@ -14,30 +14,41 @@ def clean_for_json(obj):
     elif isinstance(obj, list): return [clean_for_json(v) for v in obj]
     else: return obj
 
-def get_dimension_color(dim):
-    # 查找颜色
-    for axis, target_dim in config.DIMENSION_MAP.items():
-        if target_dim == dim:
-            return config.SPECTRUM.get(axis, "#FFFFFF")
+# 内部辅助：通过雷达轴找到对应的颜色
+def get_color_from_axis(axis_name):
+    # 在 config.DIMENSION_MAP 中寻找属于该轴的第一个光谱关键词
+    for keyword, target_axis in config.DIMENSION_MAP.items():
+        if target_axis == axis_name:
+            return config.SPECTRUM.get(keyword, "#FFFFFF")
     return "#FFFFFF"
 
 def generate_soul_network(radar_dict, user_nodes):
-    if not radar_dict: radar_dict = {k: 3.0 for k in config.RADAR_AXES}
+    # 确保 radar_dict 有效
+    if not radar_dict: 
+        radar_dict = {k: 3.0 for k in config.RADAR_AXES}
     
-    # 1. 提取核心维度
+    # 1. 整理雷达数据
     valid_keys = config.RADAR_AXES
-    clean_radar = {k: float(v) for k, v in radar_dict.items() if k in valid_keys}
+    clean_radar = {}
+    for k in valid_keys:
+        try: clean_radar[k] = float(radar_dict.get(k, 3.0))
+        except: clean_radar[k] = 3.0
+        
+    # 排序找到主维度
     sorted_dims = sorted(clean_radar.items(), key=lambda x: x[1], reverse=True)
     primary_attr = sorted_dims[0][0]
     secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr
     
-    # 2. 构建图
+    # 2. 构建 NetworkX 图
     G = nx.Graph()
-    dim_weights = {d: s/sum(clean_radar.values()) for d, s in sorted_dims}
+    
+    # 计算每个维度的权重
+    total_val = sum(clean_radar.values())
+    dim_weights = {d: s/total_val for d, s in sorted_dims}
     dims_list = list(dim_weights.keys())
     weights_list = list(dim_weights.values())
 
-    # 添加思想节点 (核心粒子)
+    # --- 添加核心粒子 (思想节点) ---
     for i, user_node in enumerate(user_nodes):
         node_id = f"thought_{i}"
         kw = user_node.get('keywords', [])
@@ -45,7 +56,8 @@ def generate_soul_network(radar_dict, user_nodes):
             try: kw = json.loads(kw)
             except: kw = []
         
-        color = "#00E676" # 默认绿色
+        # 获取颜色
+        color = "#00E676" 
         if isinstance(kw, list) and len(kw) > 0:
             color = config.SPECTRUM.get(kw[0], "#00E676")
         
@@ -53,34 +65,33 @@ def generate_soul_network(radar_dict, user_nodes):
                    name=str(user_node.get('care_point', 'Thought')),
                    insight=str(user_node.get('insight', '')))
 
-    # 添加氛围粒子
-    num_atmosphere = 150 # 减小数量提升性能
+    # --- 添加背景氛围粒子 ---
+    num_atmosphere = 150 
     for i in range(num_atmosphere):
         node_id = f"atmos_{i}"
+        # 根据用户性格权重随机分配粒子类别
         target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
-        # 简单映射颜色
-        color = "#FFFFFF"
-        for k, v in config.DIMENSION_MAP.items():
-            if v == target_dim:
-                color = config.SPECTRUM.get(k, "#FFFFFF")
-                break
+        color = get_color_from_axis(target_dim)
         
         G.add_node(node_id, color=color, size=random.uniform(3, 6), type='atmos')
 
-    # 3. 计算 3D 布局
+    # 3. 计算 3D 布局 (Spring Layout)
+    # k 是点之间的排斥力，iterations 是计算次数
     pos_3d = nx.spring_layout(G, dim=3, k=0.6, iterations=30, seed=42)
 
-    # 🟢 核心修复：坐标归一化 (防止粒子飞出视野)
-    # 将所有坐标压缩到 [-1, 1] 之间
+    # 🟢 坐标归一化：将所有点强制约束在 [-1, 1] 的空间内
     all_coords = np.array(list(pos_3d.values()))
     min_vals = all_coords.min(axis=0)
     max_vals = all_coords.max(axis=0)
+    range_vals = max_vals - min_vals
+    # 防止除以 0
+    range_vals[range_vals == 0] = 1.0
     
     for node_id in pos_3d:
-        # 归一化公式： (x - min) / (max - min) * 2 - 1
-        pos_3d[node_id] = (pos_3d[node_id] - min_vals) / (max_vals - min_vals + 1e-6) * 2 - 1
+        # 强制归一化到 [-1, 1]
+        pos_3d[node_id] = (pos_3d[node_id] - min_vals) / range_vals * 2 - 1
 
-    # 4. 导出数据
+    # 4. 转换数据为 Plotly 格式
     plot_data = {
         "x": [], "y": [], "z": [],
         "color": [], "size": [], "text": [], "type": []
@@ -93,10 +104,10 @@ def generate_soul_network(radar_dict, user_nodes):
         plot_data["z"].append(coords[2])
         plot_data["color"].append(node_attrs['color'])
         plot_data["size"].append(node_attrs['size'])
-        if node_attrs['type'] == 'thought':
-            plot_data["text"].append(f"<b>{node_attrs['name']}</b><br>{node_attrs['insight']}")
+        if node_attrs.get('type') == 'thought':
+            plot_data["text"].append(f"<b>{node_attrs.get('name')}</b><br>{node_attrs.get('insight')}")
         else:
             plot_data["text"].append("")
-        plot_data["type"].append(node_attrs['type'])
+        plot_data["type"].append(node_attrs.get('type'))
         
     return plot_data, primary_attr, secondary_attr
