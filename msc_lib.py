@@ -97,12 +97,15 @@ def check_world_access(username):
     nodes = db.get_all_nodes_for_map(username)
     return len(nodes) >= config.WORLD_UNLOCK_THRESHOLD, len(nodes)
 
-# 🟢 永久升空检查
+# 🟢 永久升空检查 (Fixed)
 def check_if_ascended_permanently(username):
+    # 这一行是对的，调用 db 检查
     return db.check_user_event_exists(username, "ASCENSION_EVENT")
 
 def log_ascension_event(username):
-    db.log_system_event("INFO", "ASCENSION_EVENT", "User unlocked world layer", username)
+    # 🔴 修正：明确传递 user=username，确保日志归属于该用户
+    # 注意：msc_db.log_system_event(level, component, message, user)
+    db.log_system_event("INFO", "ASCENSION_EVENT", "User unlocked world layer", user=username)
 
 # ==========================================
 # 🟢 3. 社交匹配算法 (Top Near & Far)
