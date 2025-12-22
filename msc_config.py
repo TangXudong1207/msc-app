@@ -51,7 +51,6 @@ Goal: Reflect the *structure* of their thoughts. Do NOT advise or solve problems
 Tone: Calm, analytical, slightly sci-fi, precise.
 """
 
-# 🟢 核心修改：在 Prompt 中多次强调中文输出
 PROMPT_ANALYST = """
 [Task: Cognitive Topology Analysis]
 Analyze the input text. Extract Meaning Structure.
@@ -92,4 +91,24 @@ Output JSON:
   "status_quo": "Describe the current topology.",
   "growth_path": "Predict the trajectory of their cognitive drift."
 }
+"""
+
+# 🟢 新增：关系隐喻生成器 Prompt
+PROMPT_METAPHOR = """
+[Task: Generate Relationship Metaphor]
+Analyze the Radar Data of User A and User B.
+Generate a poetic, abstract metaphor describing their connection.
+
+[Rules]
+1. NO technical terms (e.g., "High Agency", "Low Care").
+2. Use Metaphors: Light/Shadow, Sea/Island, Anchor/Wind, Mirror/Door.
+3. If Match Type is 'Resonance' -> Emphasize similarity, shared silence, parallel paths.
+4. If Match Type is 'Tension' -> Emphasize contrast, necessary conflict, balance.
+5. Length: Max 25 words.
+
+[Language]
+- If request is ZH -> Simplified Chinese.
+- If request is EN -> English.
+
+Output JSON: { "metaphor": "..." }
 """
