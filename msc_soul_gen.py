@@ -3,201 +3,146 @@ import random
 import math
 import numpy as np
 import msc_config as config
+import json
 
-# ==========================================
-# 🧹 强力清洗工具
-# ==========================================
 def clean_for_json(obj):
-    if isinstance(obj, (np.integer, np.int64, np.int32)):
-        return int(obj)
-    elif isinstance(obj, (np.floating, np.float64, np.float32)):
-        return float(obj)
-    elif isinstance(obj, np.ndarray):
-        return clean_for_json(obj.tolist())
-    elif isinstance(obj, dict):
-        return {k: clean_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_for_json(v) for v in obj]
-    else:
-        return obj
+    if isinstance(obj, (np.integer, np.int64, np.int32)): return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)): return float(obj)
+    elif isinstance(obj, np.ndarray): return clean_for_json(obj.tolist())
+    elif isinstance(obj, dict): return {k: clean_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list): return [clean_for_json(v) for v in obj]
+    else: return obj
 
-# ==========================================
-# 🌌 1. 物理引擎参数映射
-# ==========================================
-def get_physics_config(primary_attr, secondary_attr):
-    base_configs = {
-        "Agency":        {"repulsion": 2500, "gravity": 0.01, "edgeLength": [50, 150]},
-        "Care":          {"repulsion": 100,  "gravity": 0.8,  "edgeLength": [10, 30]},
-        "Curiosity":     {"repulsion": 800,  "gravity": 0.05, "edgeLength": [100, 300]},
-        "Coherence":     {"repulsion": 1000, "gravity": 0.2,  "edgeLength": [30, 60]},
-        "Reflection":    {"repulsion": 600,  "gravity": 0.3,  "edgeLength": [40, 80]},
-        "Transcendence": {"repulsion": 1500, "gravity": 0.0,  "edgeLength": [80, 200]},
-        "Aesthetic":     {"repulsion": 500,  "gravity": 0.1,  "edgeLength": [50, 100]}
-    }
-    aspect_configs = {
-        "Agency":        {"friction": 0.1},
-        "Care":          {"friction": 0.8},
-        "Curiosity":     {"friction": 0.3},
-        "Coherence":     {"friction": 0.9},
-        "Reflection":    {"friction": 0.5},
-        "Transcendence": {"friction": 0.05},
-        "Aesthetic":     {"friction": 0.4}
-    }
-    p_conf = base_configs.get(primary_attr, base_configs["Aesthetic"])
-    s_conf = aspect_configs.get(secondary_attr, aspect_configs["Aesthetic"])
-    return {**p_conf, **s_conf}
-
-# ==========================================
-# 🕸️ 2. 网络构建器
-# ==========================================
-
-config.DIMENSION_MAP_REV = {v: k for k, v in config.DIMENSION_MAP.items()}
-
-def get_dimension_color(dim):
-    return config.SPECTRUM.get(config.DIMENSION_MAP_REV.get(dim, "Structure"), "#FFFFFF")
-
-def generate_soul_network(radar_dict, user_nodes):
-    # 1. 数据准备
+def generate_nebula_data(radar_dict, user_nodes):
+    """
+    生成粒子数据：
+    - 坐标基于 Primary Dimension (形态)
+    - 动态物理将基于 Secondary Dimension (行为)
+    """
     if not radar_dict: radar_dict = {"Care": 3.0, "Reflection": 3.0}
-    
-    valid_keys = ["Care", "Curiosity", "Reflection", "Coherence", "Agency", "Aesthetic", "Transcendence"]
-    clean_radar = {}
-    for k, v in radar_dict.items():
-        if k in valid_keys:
-            try:
-                val = float(v)
-                if val > 0: clean_radar[k] = val
-            except: pass
-            
-    if not clean_radar: clean_radar = {"Care": 3.0, "Reflection": 3.0}
+
+    # 1. 维度解析与排序
+    valid_keys = config.RADAR_AXES
+    clean_radar = {k: float(v) for k, v in radar_dict.items() if k in valid_keys and float(v) > 0}
+    if not clean_radar: clean_radar = {"Reflection": 5.0}
     
     sorted_dims = sorted(clean_radar.items(), key=lambda x: x[1], reverse=True)
-    primary_attr = sorted_dims[0][0]
-    secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr
     
-    total_score = sum([s for d, s in sorted_dims])
-    if total_score == 0: total_score = 1
+    # 🌟 核心逻辑：双维度提取
+    primary_attr = sorted_dims[0][0] # 决定形状 (Shape)
+    # 如果只有一个维度，次维度就是主维度本身
+    secondary_attr = sorted_dims[1][0] if len(sorted_dims) > 1 else primary_attr # 决定动态 (Motion)
+
+    dims_list = list(clean_radar.keys())
+    total_w = sum(clean_radar.values())
+    weights_list = [v/total_w for v in clean_radar.values()]
+
+    # 2. 形态生成器 (Primary Dimension -> XYZ)
+    # 基于您提供的物理参数隐喻：斥力(扩散度)、引力(向心度)
+    def get_base_pos(shape_type):
+        u = random.random(); v = random.random()
+        theta = 2 * math.pi * u; phi = math.acos(2 * v - 1)
+        
+        # 🟥 Agency: 大爆炸 (高斥力, 低引力)
+        if shape_type == "Agency":
+            r = random.uniform(0.5, 3.0) # 扩散极远
+            # 随机化方向，模拟无序爆炸
+            return r*math.sin(phi)*math.cos(theta), r*math.sin(phi)*math.sin(theta), r*math.cos(phi)
+            
+        # 🟧 Care: 高密核心 (低斥力, 高引力)
+        elif shape_type == "Care":
+            r = random.uniform(0, 0.8) # 极度致密
+            return r*math.sin(phi)*math.cos(theta), r*math.sin(phi)*math.sin(theta), r*math.cos(phi)
+            
+        # 🟨 Curiosity: 弥散星云 (中斥力, 不规则)
+        elif shape_type == "Curiosity":
+            # 多中心分布
+            centers = [(1.0,0,0), (-0.5, 0.8, 0), (-0.5, -0.8, 0)]
+            cx, cy, cz = random.choice(centers)
+            return cx + random.gauss(0, 0.8), cy + random.gauss(0, 0.8), cz + random.gauss(0, 0.8)
+            
+        # 🟦 Coherence: 晶格矩阵 (高斥力, 有序)
+        elif shape_type == "Coherence":
+            step = 0.6
+            x = round(random.gauss(0, 1.8)/step)*step
+            y = round(random.gauss(0, 1.8)/step)*step
+            z = round(random.gauss(0, 1.8)/step)*step
+            return x, y, z
+            
+        # 🟪 Reflection: 漩涡盘 (平衡)
+        elif shape_type == "Reflection":
+            r = random.uniform(0.4, 2.2)
+            angle = random.uniform(0, 2*math.pi)
+            # 扁平化，Z轴压缩
+            return r*math.cos(angle), r*math.sin(angle), random.gauss(0, 0.2)
+            
+        # 🟩 Transcendence: 升腾流 (高斥力, 零引力)
+        elif shape_type == "Transcendence":
+            h = random.uniform(-2.5, 2.5) # 垂直拉长
+            w = random.gauss(0, 0.5) # 水平收窄
+            return w*math.cos(theta), w*math.sin(theta), h
+            
+        # 🟪 Aesthetic: 和谐球壳 (平衡)
+        elif shape_type == "Aesthetic":
+            r = random.gauss(1.8, 0.15) # 空心球壳
+            return r*math.sin(phi)*math.cos(theta), r*math.sin(phi)*math.sin(theta), r*math.cos(phi)
+            
+        else:
+            r = random.gauss(0, 1.5)
+            return r*math.sin(phi)*math.cos(theta), r*math.sin(phi)*math.sin(theta), r*math.cos(phi)
+
+    # 3. 生成数据
+    atmos_data = []
+    thoughts_data = []
+
+    # 粒子数量控制 (保证性能)
+    num_atmos = int(min(450, max(250, len(user_nodes) * 25)))
     
-    dim_weights = {d: s/total_score for d, s in sorted_dims}
-    dims_list = list(dim_weights.keys())
-    weights_list = list(dim_weights.values())
+    AXIS_COLOR = {
+        "Care": config.SPECTRUM["Empathy"], "Agency": config.SPECTRUM["Vitality"],
+        "Structure": config.SPECTRUM["Structure"], "Coherence": config.SPECTRUM["Rationality"],
+        "Curiosity": config.SPECTRUM["Curiosity"], "Reflection": config.SPECTRUM["Melancholy"],
+        "Aesthetic": config.SPECTRUM["Aesthetic"], "Transcendence": config.SPECTRUM["Consciousness"]
+    }
 
-    nodes = []
-    edges = []
-    node_indices = {}
+    # 氛围粒子
+    for _ in range(num_atmos):
+        x, y, z = get_base_pos(primary_attr)
+        dim = random.choices(dims_list, weights=weights_list, k=1)[0]
+        color = AXIS_COLOR.get(dim, "#888888")
+        
+        atmos_data.append({
+            "x": x, "y": y, "z": z, "c": color,
+            "s": random.uniform(2.0, 4.5),
+            "phase": random.uniform(0, 2*math.pi), # 动态相位
+            "speed": random.uniform(0.8, 1.2)      # 个体速度差异
+        })
 
-    # 2. 生成【思想节点】
-    for i, user_node in enumerate(user_nodes):
-        node_id = f"thought_{i}"
-        kw = user_node.get('keywords', [])
+    # 思想粒子
+    for node in user_nodes:
+        x, y, z = get_base_pos(primary_attr)
+        # 思想粒子稍微向内收敛，作为骨架
+        scale = 0.8
+        x *= scale; y *= scale; z *= scale
+        
+        kw = node.get('keywords', [])
         if isinstance(kw, str):
             try: kw = json.loads(kw)
             except: kw = []
-            
-        # 🟢 [核心修改逻辑] --------------------------------
-        # 默认颜色：中性银白 (代表未定义的原始思想)
-        color = "#E0E0E0" 
-        found_match = False
+        color = "#FFFFFF"
+        if kw:
+            for k in kw: 
+                if k in config.SPECTRUM: color = config.SPECTRUM[k]; break
         
-        if kw and isinstance(kw, list):
-            for k in kw:
-                # 必须精确匹配 Spectrum 中的颜色，才上色
-                if k in config.SPECTRUM:
-                    color = config.SPECTRUM[k]
-                    found_match = True
-                    break # 找到第一个匹配色就停止
+        insight = node.get('insight', '')
+        if len(insight) > 60: insight = insight[:60] + "..."
         
-        # 如果没有找到匹配色，保持 #E0E0E0，不再强制使用 get_dimension_color(primary_attr)
-        # 这将避免因为你的主属性是“美学(紫)”导致所有老数据变紫
-        # ------------------------------------------------
-
-        nodes.append({
-            "id": node_id,
-            "name": str(user_node.get('care_point', 'Thought')),
-            "symbolSize": 25, # 保持刚才调整的小尺寸
-            "itemStyle": {
-                "color": color,
-                "borderColor": "#FFFFFF" if found_match else "#CCCCCC", # 有颜色的加白边，没颜色的加灰边
-                "borderWidth": 2,
-                "shadowBlur": 50, # 保持发光
-                "shadowColor": color,
-                "opacity": 1.0
-            },
-            "value": str(user_node.get('insight', '')),
-            "color_category": color
+        thoughts_data.append({
+            "x": x, "y": y, "z": z, "c": color,
+            "s": 7.0, 
+            "t": f"<b>{node.get('care_point','?')}</b><br><span style='font-size:0.8em;color:#CCC'>{insight}</span>",
+            "phase": random.uniform(0, 2*math.pi),
+            "speed": random.uniform(0.9, 1.1)
         })
-        node_indices[node_id] = len(nodes) - 1
 
-    # 3. 生成【氛围粒子】(这些粒子依然跟随你的主属性颜色，作为背景氛围)
-    num_atmosphere = max(500, len(user_nodes) * 100)
-    
-    for i in range(num_atmosphere):
-        node_id = f"atmos_{i}"
-        target_dim = random.choices(dims_list, weights=weights_list, k=1)[0]
-        color = get_dimension_color(target_dim)
-        
-        size = float(random.uniform(3, 8))
-        opacity = float(random.uniform(0.3, 0.7))
-
-        nodes.append({
-            "id": node_id,
-            "name": "",
-            "symbolSize": size,
-            "itemStyle": {
-                "color": color,
-                "borderColor": color,
-                "borderWidth": 0.5,
-                "opacity": opacity
-            },
-            "color_category": color
-        })
-        node_indices[node_id] = len(nodes) - 1
-
-    # 4. 建立连接
-    thought_node_ids = [n["id"] for n in nodes if n["id"].startswith("thought")]
-    atmos_node_ids = [n["id"] for n in nodes if n["id"].startswith("atmos")]
-    
-    for atmos_id in atmos_node_ids:
-        source_idx = node_indices[atmos_id]
-        source_color = nodes[source_idx]["color_category"]
-        
-        num_links = random.choices([1, 2], weights=[0.7, 0.3])[0]
-        
-        for _ in range(num_links):
-            if thought_node_ids and random.random() < 0.3:
-                 target_pool = thought_node_ids
-            else:
-                 target_pool = atmos_node_ids
-
-            if len(target_pool) > 50: sample_pool = random.sample(target_pool, 20)
-            else: sample_pool = target_pool
-
-            target_id = None
-            same = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]==source_color]
-            diff = [t for t in sample_pool if t!=atmos_id and nodes[node_indices[t]]["color_category"]!=source_color]
-
-            if random.random() < 0.8 and same: target_id = random.choice(same)
-            elif diff: target_id = random.choice(diff)
-            elif same: target_id = random.choice(same)
-
-            if target_id:
-                target_idx = node_indices[target_id]
-                edges.append({
-                    "source": int(source_idx),
-                    "target": int(target_idx),
-                    "lineStyle": {
-                        "color": source_color,
-                        "opacity": 0.1,
-                        "width": 0.5
-                    }
-                })
-
-    raw_physics = get_physics_config(primary_attr, secondary_attr)
-
-    return (
-        clean_for_json(nodes), 
-        clean_for_json(edges), 
-        clean_for_json(raw_physics), 
-        str(primary_attr), 
-        str(secondary_attr)
-    )
+    return {"atmos": atmos_data, "thoughts": thoughts_data}, primary_attr, secondary_attr
