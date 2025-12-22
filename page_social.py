@@ -47,8 +47,11 @@ def render_ascension_animation(username):
     </div>
     """, unsafe_allow_html=True)
     
-    # 🟢 关键：写入数据库日志，标记已播放
+    # 1. 写入数据库
     msc.log_ascension_event(username)
+    # 2. 🟢 增加 Session 标记，防止当前会话内重复弹
+    st.session_state.has_shown_ascension = True 
+    
     time.sleep(3.0)
     st.rerun()
 
@@ -144,10 +147,14 @@ def render_friends_page(username, unread_counts):
     
     # 🟢 阈值检查与升空动画 (利用数据库永久标记)
     if node_count >= config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
-        # 检查数据库是否已有记录
-        if not msc.check_if_ascended_permanently(username):
-            render_ascension_animation(username)
-            return 
+        # 🟢 双重检查：既查数据库，也查 Session State
+        if "has_shown_ascension" not in st.session_state:
+            if not msc.check_if_ascended_permanently(username):
+                render_ascension_animation(username)
+                return 
+            else:
+                # 数据库里有，说明以前看过了，标记 Session 跳过
+                st.session_state.has_shown_ascension = True
 
     if node_count < config.WORLD_UNLOCK_THRESHOLD and not st.session_state.is_admin:
         render_lock_screen(node_count, config.WORLD_UNLOCK_THRESHOLD, i18n.get_text('lock_title'), i18n.get_text('lock_msg'))
