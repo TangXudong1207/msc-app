@@ -2,12 +2,10 @@
 import streamlit as st
 import streamlit_antd_components as sac
 
-# 1. 导入核心算法
-from msc_viz_core import (
-    get_spectrum_color, 
-    get_cluster_color, 
-    compute_clusters
-)
+# 1. 导入新的核心算法库
+# 虽然 msc_viz_core 被删除了，但它的逻辑现在在 msc_transformer 里
+# 如果 msc_viz 本身有直接调用核心算法的需求，可以 import msc_transformer
+import msc_transformer as trans 
 
 # 2. 导入 3D 地球与星河 (Plotly)
 from msc_viz_3d import (
@@ -25,7 +23,6 @@ from msc_viz_graph import (
 
 import msc_config as config
 
-# 🟢 修复：补回被误删的图例函数
 def render_spectrum_legend():
     # 使用 sac 的 tag 组件来做极简图例
     legend_items = []
