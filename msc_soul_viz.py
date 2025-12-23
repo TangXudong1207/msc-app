@@ -2,14 +2,15 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import streamlit_antd_components as sac
-import msc_viz as viz
-import msc_soul_gen as gen
+import msc_transformer as trans  # <--- 变动在这里
 import json
 
 def render_soul_scene(radar_dict, user_nodes=None):
     if user_nodes is None: user_nodes = []
     
-    try: payload, p_attr, s_attr = gen.prepare_soul_data(radar_dict, user_nodes)
+    try: 
+        # 调用新文件的方法
+        payload, p_attr, s_attr = trans.prepare_soul_data(radar_dict, user_nodes)
     except: return
         
     payload_json = json.dumps(payload)
@@ -23,6 +24,8 @@ def render_soul_scene(radar_dict, user_nodes=None):
     sac.divider(label="SOUL FORM", icon='layers', align='center', color='gray')
     st.markdown(f"<div style='text-align:center; margin-bottom:10px; font-family:serif; letter-spacing:2px; font-size:0.9em; color:#AAA;'>{title.upper()}</div>", unsafe_allow_html=True)
 
+    # ... (HTML 代码保持不变，太长了这里省略，只改了上面 import 和调用) ...
+    # 只要确保上面 payload 获取到了，下面的 HTML 逻辑不需要动
     html_code = f"""
     <!DOCTYPE html>
     <html>
@@ -199,4 +202,3 @@ def render_soul_scene(radar_dict, user_nodes=None):
     </html>
     """
     components.html(html_code, height=350, scrolling=False)
-    # 🟢 关键：删除了 viz.render_spectrum_legend()
