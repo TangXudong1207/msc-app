@@ -2,13 +2,8 @@
 import streamlit as st
 from streamlit_echarts import st_echarts
 import json
-import numpy as np
-import msc_viz_core as core
+import msc_transformer as trans # <--- 变动在这里
 import msc_lib as msc 
-# 注意：这里需要延迟导入 viz 以避免循环引用，或者直接在函数内导入
-# 为了安全，我们不在这里 import msc_viz，而是手动实现或重构
-# 最佳实践：把 render_spectrum_legend 放在 main 或者独立的 UI 库里。
-# 但为了简单，我们在函数内部 import。
 
 # ==========================================
 # 🕸️ 1. 雷达图 (Radar)
@@ -42,7 +37,8 @@ def render_radar_chart(radar_dict, height="200px"):
 def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix="map"):
     if not nodes: return None
     
-    cluster_df = core.compute_clusters(nodes, n_clusters=5)
+    # 使用新文件的方法
+    cluster_df = trans.compute_clusters(nodes, n_clusters=5)
     id_to_color = {}
     default_color = "#00fff2"
     
@@ -104,7 +100,6 @@ def render_cyberpunk_map(nodes, height="250px", is_fullscreen=False, key_suffix=
 # ==========================================
 @st.dialog("🔭 小宇宙 (Microcosm)", width="large")
 def view_fullscreen_map(nodes, user_name):
-    # 延迟导入以避免循环引用
     import msc_viz as viz_facade
     
     lang = st.session_state.get('language', 'en')
@@ -124,7 +119,6 @@ def view_fullscreen_map(nodes, user_name):
             if st.button("📍 Locate", use_container_width=True): st.toast("Time travel initiated...", icon="⏳")
     
     st.divider()
-    # 添加图例
     viz_facade.render_spectrum_legend()
 
 @st.dialog("🧬 MSC 深度基因解码", width="large")
