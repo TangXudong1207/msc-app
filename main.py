@@ -252,73 +252,74 @@ def install_instructions_dialog():
 def render_account_page(username):
     lang = st.session_state.language
     
+    # 定义语言文本
+    TEXT = {
+        'zh': {
+            'title': '### 📋 账户信息',
+            'basic_info': '#### 基本信息',
+            'activity_info': '#### 活动信息',
+            'username': '**用户名**',
+            'nickname': '**昵称**',
+            'country': '**国家/地区**',
+            'cards': '**意义卡数量**',
+            'rank': '**等级**',
+            'last_active': '**最后活跃**',
+            'copilot_title': '#### 🎯 关于 Copilot 订阅',
+            'help_title': '#### 💡 需要帮助？',
+        },
+        'en': {
+            'title': '### 📋 Account Information',
+            'basic_info': '#### Basic Information',
+            'activity_info': '#### Activity Information',
+            'username': '**Username**',
+            'nickname': '**Nickname**',
+            'country': '**Country**',
+            'cards': '**Meaning Cards**',
+            'rank': '**Rank**',
+            'last_active': '**Last Active**',
+            'copilot_title': '#### 🎯 About Copilot Subscription',
+            'help_title': '#### 💡 Need Help?',
+        }
+    }
+    T = TEXT[lang]
+    
     # 获取用户信息
     user_profile = msc.get_user_profile(username)
     
+    # 预先计算需要的数据
+    nodes_count = len(msc.get_active_nodes_map(username))
+    raw_radar = user_profile.get('radar_profile')
+    radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
+    rank_name, rank_icon = msc.calculate_rank(radar_dict)
+    last_seen = user_profile.get('last_seen', '')
+    last_seen_str = last_seen[:16].replace('T', ' ') if last_seen else ''
+    
     # 标题
-    if lang == 'zh':
-        st.markdown("### 📋 账户信息")
-        st.markdown("---")
-    else:
-        st.markdown("### 📋 Account Information")
-        st.markdown("---")
+    st.markdown(T['title'])
+    st.markdown("---")
     
     # 用户基本信息
     col1, col2 = st.columns(2)
     
     with col1:
-        if lang == 'zh':
-            st.markdown("#### 基本信息")
-            st.markdown(f"**用户名**: `{username}`")
-            st.markdown(f"**昵称**: {user_profile.get('nickname', username)}")
-            st.markdown(f"**国家/地区**: {user_profile.get('country', 'Other')}")
-        else:
-            st.markdown("#### Basic Information")
-            st.markdown(f"**Username**: `{username}`")
-            st.markdown(f"**Nickname**: {user_profile.get('nickname', username)}")
-            st.markdown(f"**Country**: {user_profile.get('country', 'Other')}")
+        st.markdown(T['basic_info'])
+        st.markdown(f"{T['username']}: `{username}`")
+        st.markdown(f"{T['nickname']}: {user_profile.get('nickname', username)}")
+        st.markdown(f"{T['country']}: {user_profile.get('country', 'Other')}")
     
     with col2:
-        if lang == 'zh':
-            st.markdown("#### 活动信息")
-            # 获取统计数据
-            nodes_count = len(msc.get_active_nodes_map(username))
-            st.markdown(f"**意义卡数量**: {nodes_count}")
-            
-            # 等级信息
-            raw_radar = user_profile.get('radar_profile')
-            radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
-            rank_name, rank_icon = msc.calculate_rank(radar_dict)
-            st.markdown(f"**等级**: {rank_icon} {rank_name}")
-            
-            # 最后登录时间
-            last_seen = user_profile.get('last_seen', '')
-            if last_seen:
-                last_seen_str = last_seen[:16].replace('T', ' ')
-                st.markdown(f"**最后活跃**: {last_seen_str}")
-        else:
-            st.markdown("#### Activity Information")
-            # 获取统计数据
-            nodes_count = len(msc.get_active_nodes_map(username))
-            st.markdown(f"**Meaning Cards**: {nodes_count}")
-            
-            # 等级信息
-            raw_radar = user_profile.get('radar_profile')
-            radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
-            rank_name, rank_icon = msc.calculate_rank(radar_dict)
-            st.markdown(f"**Rank**: {rank_icon} {rank_name}")
-            
-            # 最后登录时间
-            last_seen = user_profile.get('last_seen', '')
-            if last_seen:
-                last_seen_str = last_seen[:16].replace('T', ' ')
-                st.markdown(f"**Last Active**: {last_seen_str}")
+        st.markdown(T['activity_info'])
+        st.markdown(f"{T['cards']}: {nodes_count}")
+        st.markdown(f"{T['rank']}: {rank_icon} {rank_name}")
+        if last_seen_str:
+            st.markdown(f"{T['last_active']}: {last_seen_str}")
     
     st.markdown("---")
     
     # 订阅信息部分
+    st.markdown(T['copilot_title'])
+    
     if lang == 'zh':
-        st.markdown("#### 🎯 关于 Copilot 订阅")
         st.info("""
         **MSC 应用使用说明**：
         
@@ -331,13 +332,12 @@ def render_account_page(username):
         如果您在寻找本应用相关的账户信息，所有信息都已在本页面显示。
         """)
         
-        st.markdown("#### 💡 需要帮助？")
+        st.markdown(T['help_title'])
         st.markdown("""
         - 查看 [GitHub 仓库](https://github.com/TangXudong1207/msc-app) 了解更多信息
         - 如有问题，请在仓库中提交 Issue
         """)
     else:
-        st.markdown("#### 🎯 About Copilot Subscription")
         st.info("""
         **MSC Application Notice**:
         
@@ -350,7 +350,7 @@ def render_account_page(username):
         If you are looking for account information related to this application, all information is displayed on this page.
         """)
         
-        st.markdown("#### 💡 Need Help?")
+        st.markdown(T['help_title'])
         st.markdown("""
         - Check the [GitHub Repository](https://github.com/TangXudong1207/msc-app) for more information
         - Submit an Issue in the repository if you have questions
