@@ -181,6 +181,11 @@ def get_fallback_insight():
     lang = st.session_state.language
     return random.choice(LOCAL_INSIGHTS.get(lang, LOCAL_INSIGHTS['en']))
 
+def parse_radar_profile(user_profile):
+    """Helper function to parse radar profile from user data"""
+    raw_radar = user_profile.get('radar_profile')
+    return json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
+
 @st.dialog("⚡ DAILY INSIGHT")
 def daily_insight_dialog(username, radar):
     if "daily_content" not in st.session_state or st.session_state.daily_content is None:
@@ -288,8 +293,7 @@ def render_account_page(username):
     
     # 预先计算需要的数据
     nodes_count = len(msc.get_active_nodes_map(username))
-    raw_radar = user_profile.get('radar_profile')
-    radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
+    radar_dict = parse_radar_profile(user_profile)
     rank_name, rank_icon = msc.calculate_rank(radar_dict)
     last_seen = user_profile.get('last_seen', '')
     last_seen_str = last_seen[:16].replace('T', ' ') if last_seen else ''
@@ -387,8 +391,7 @@ else:
         check_and_send_first_contact(st.session_state.username)
         
     user_profile = msc.get_user_profile(st.session_state.username)
-    raw_radar = user_profile.get('radar_profile')
-    radar_dict = json.loads(raw_radar) if isinstance(raw_radar, str) else (raw_radar or {k:3.0 for k in config.RADAR_AXES})
+    radar_dict = parse_radar_profile(user_profile)
     
     total_unread, unread_counts = msc.get_unread_counts(st.session_state.username)
     lang = st.session_state.language
